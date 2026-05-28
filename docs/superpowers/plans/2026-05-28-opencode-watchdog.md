@@ -21,8 +21,8 @@
 ```text
 master
   └── feat/0-1-devcontainer       (Phase 0)
-        └── feat/0-2-ci
-              └── feat/0-3-scaffold
+        └── feat/0-2-scaffold
+              └── feat/0-3-ci
                     └── feat/1-1-clock          (Phase 1 直列開始)
                           └── feat/1-2-config
                                 └── feat/1-3-pinger
@@ -264,116 +264,13 @@ gh pr create --draft --base master --head feat/0-1-devcontainer \
 
 ---
 
-## Task 0.2: CI ワークフロー
+## Task 0.2: Bun プロジェクトスキャフォールド
 
 - **派生元ブランチ**: `feat/0-1-devcontainer`
 - **実行モード**: 直列必須 (Wait for Task 0.1)
 - **前提条件**: Task 0.1 の Draft PR URL が存在すること
 
-**Files:**
-- Create: `.github/workflows/test.yml`
-
-### Step 1: ブランチ作成と検証 [devcontainer]
-
-- [ ] Step 1.1: 派生元ブランチへ切り替え後、新規ブランチを作成
-
-```bash
-# [host]
-git checkout feat/0-1-devcontainer
-git checkout -b feat/0-2-ci
-```
-
-- [ ] Step 1.2: **devcontainer 内** でポカヨケを実行
-
-```bash
-# [devcontainer]
-EXPECTED_BASE="feat/0-1-devcontainer"
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
-  || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
-echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
-```
-
-### Step 2: GitHub Actions ワークフローを作成 [host or devcontainer (ファイル作成のみ)]
-
-- [ ] Step 2.1: `.github/workflows/test.yml` を作成
-
-```yaml
-name: test
-
-on:
-  push:
-    branches:
-      - master
-      - 'feat/**'
-  pull_request:
-    branches:
-      - master
-      - 'feat/**'
-
-jobs:
-  bun-test:
-    runs-on: ubuntu-slim
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Run tests
-        run: bun test
-```
-
-> **NOTE on `ubuntu-slim`**: GitHub-hosted の最小 runner (single-CPU / minimal / unprivileged container) を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら `ubuntu-latest` への切替を再評価すること。
->
-> **NOTE on trigger 範囲**: `pull_request.branches` と `push.branches` の両方に `feat/**` を含めている。これはレビュー時に **stacked PR (feat/X → feat/Y) でも CI を走らせるため** に必須 (本計画は Phase 1 以降がすべて feat/* 同士の stacked PR となるため、`master` のみだと中間 PR で CI が一切走らない)。これにより「型整合を CI で逐次保証」(§本ドキュメント冒頭) が満たされる。
-
-### Step 3: ワークフロー構文検証 [devcontainer]
-
-- [ ] Step 3.1: YAML 構文を確認 (CI を動かす前のローカル検証)
-
-```bash
-# [devcontainer]
-bunx --bun js-yaml .github/workflows/test.yml > /dev/null && echo "YAML OK"
-```
-
-期待出力: `YAML OK`
-
-### Step 4: コミット [host]
-
-- [ ] Step 4.1: コミット
-
-```bash
-git add .github/workflows/test.yml
-git commit -m "feat(ci): add bun test workflow on master push/PR"
-```
-
-### Step 5: Draft PR 作成 [host]
-
-- [ ] Step 5.1: 派生元ブランチ向けに Draft PR を作成
-
-```bash
-git push -u origin feat/0-2-ci
-gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-ci \
-  --title "feat(ci): bun test on master push/PR" \
-  --body "Phase 0 stack #2. Triggers tests on master branch using ubuntu-slim runner."
-```
-
-- [ ] Step 5.2: PR URL を記録
-
----
-
-## Task 0.3: Bun プロジェクトスキャフォールド
-
-- **派生元ブランチ**: `feat/0-2-ci`
-- **実行モード**: 直列必須 (Wait for Task 0.2)
-- **前提条件**: Task 0.2 の Draft PR URL が存在すること
+> **順序の根拠**: 本タスクが先で、Task 0.3 (CI) が後。CI workflow が `bun install --frozen-lockfile` と `bun test` / `bun run typecheck` を実行する都合上、`package.json` / `bun.lockb` が **CI ワークフロー導入前に既に存在している** 必要があるため。逆順 (CI 先行) で導入すると初回 PR の CI が必ず失敗し、stacked PR の前提条件チェーンが壊れる。
 
 **Files:**
 - Create: `package.json`
@@ -389,15 +286,15 @@ gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-ci \
 
 ```bash
 # [host]
-git checkout feat/0-2-ci
-git checkout -b feat/0-3-scaffold
+git checkout feat/0-1-devcontainer
+git checkout -b feat/0-2-scaffold
 ```
 
 - [ ] Step 1.2: ポカヨケ実行
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/0-2-ci"
+EXPECTED_BASE="feat/0-1-devcontainer"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -587,13 +484,143 @@ git commit -m "feat(scaffold): bun + tsconfig strict + @opencode-ai/plugin + SDK
 - [ ] Step 9.1: Draft PR 作成
 
 ```bash
-git push -u origin feat/0-3-scaffold
-gh pr create --draft --base feat/0-2-ci --head feat/0-3-scaffold \
+git push -u origin feat/0-2-scaffold
+gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-scaffold \
   --title "feat(scaffold): bun + tsconfig + @opencode-ai/plugin baseline" \
-  --body "Phase 0 stack #3. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks."
+  --body "Phase 0 stack #2. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks. Predecessor of Task 0.3 (CI) — CI requires package.json/bun.lockb to be present, so scaffold lands first."
 ```
 
-- [ ] Step 9.2: PR URL を記録。**この URL は Task 1.1 の前提条件となる。**
+- [ ] Step 9.2: PR URL を記録。**この URL は Task 0.3 (CI) の前提条件となる。**
+
+---
+
+## Task 0.3: CI ワークフロー
+
+- **派生元ブランチ**: `feat/0-2-scaffold`
+- **実行モード**: 直列必須 (Wait for Task 0.2)
+- **前提条件**: Task 0.2 の Draft PR URL が存在すること (= `package.json` / `bun.lockb` が既に存在する)
+
+**Files:**
+- Create: `.github/workflows/test.yml`
+
+### Step 1: ブランチ作成と検証 [devcontainer]
+
+- [ ] Step 1.1: 派生元ブランチへ切り替え後、新規ブランチを作成
+
+```bash
+# [host]
+git checkout feat/0-2-scaffold
+git checkout -b feat/0-3-ci
+```
+
+- [ ] Step 1.2: **devcontainer 内** でポカヨケを実行
+
+```bash
+# [devcontainer]
+EXPECTED_BASE="feat/0-2-scaffold"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
+  || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
+echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
+```
+
+- [ ] Step 1.3: 派生元の健全性チェック (CI が install/test/typecheck を実行できる状態か確認)
+
+```bash
+# [devcontainer]
+test -f package.json && test -f bun.lockb \
+  && echo "OK: package.json と bun.lockb が存在" \
+  || { echo "ERROR: 派生元 (Task 0.2) で作成されているはずの package.json / bun.lockb が見つからない。CI を導入する前提が整っていない。"; exit 1; }
+```
+
+### Step 2: GitHub Actions ワークフローを作成 [host or devcontainer (ファイル作成のみ)]
+
+- [ ] Step 2.1: `.github/workflows/test.yml` を作成
+
+```yaml
+name: test
+
+on:
+  push:
+    branches:
+      - master
+      - 'feat/**'
+  pull_request:
+    branches:
+      - master
+      - 'feat/**'
+
+jobs:
+  bun-test:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run typecheck
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun test
+```
+
+> **NOTE on `ubuntu-slim`**: GitHub-hosted の最小 runner (single-CPU / minimal / unprivileged container) を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら `ubuntu-latest` への切替を再評価すること。
+>
+> **NOTE on trigger 範囲**: `pull_request.branches` と `push.branches` の両方に `feat/**` を含めている。これはレビュー時に **stacked PR (feat/X → feat/Y) でも CI を走らせるため** に必須 (本計画は Phase 1 以降がすべて feat/* 同士の stacked PR となるため、`master` のみだと中間 PR で CI が一切走らない)。これにより「型整合を CI で逐次保証」(§本ドキュメント冒頭) が満たされる。
+>
+> **NOTE on typecheck**: `bun run typecheck` を `bun test` の **前** に置く。型エラーは fail fast で検出した方が CI 時間が短く、テスト失敗と型エラーが混在しないためデバッグも容易。typecheck script は Task 0.2 の package.json で既に定義済み (`tsc --noEmit`)。
+
+### Step 3: ワークフロー構文検証 [devcontainer]
+
+- [ ] Step 3.1: YAML 構文を確認 (CI を動かす前のローカル検証)
+
+```bash
+# [devcontainer]
+bunx --bun js-yaml .github/workflows/test.yml > /dev/null && echo "YAML OK"
+```
+
+期待出力: `YAML OK`
+
+- [ ] Step 3.2: ローカルで `bun run typecheck` と `bun test` が両方通ることを確認 (CI と同じステップを再現)
+
+```bash
+# [devcontainer]
+bun install --frozen-lockfile
+bun run typecheck
+bun test
+```
+
+期待出力: typecheck エラーなし、`0 pass, 0 fail` (Phase 0 時点でテストファイルなし)。
+
+### Step 4: コミット [host]
+
+- [ ] Step 4.1: コミット
+
+```bash
+git add .github/workflows/test.yml
+git commit -m "feat(ci): add bun test + typecheck workflow with feat/** trigger"
+```
+
+### Step 5: Draft PR 作成 [host]
+
+- [ ] Step 5.1: 派生元ブランチ向けに Draft PR を作成
+
+```bash
+git push -u origin feat/0-3-ci
+gh pr create --draft --base feat/0-2-scaffold --head feat/0-3-ci \
+  --title "feat(ci): bun typecheck + test on master/feat stacked PRs" \
+  --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-slim runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lockb already exist."
+```
+
+- [ ] Step 5.2: PR URL を記録。**この URL は Task 1.1 (Phase 1 起点) の前提条件となる。**
 
 ---
 
@@ -604,9 +631,9 @@ gh pr create --draft --base feat/0-2-ci --head feat/0-3-scaffold \
 
 ## Task 1.1: Clock モジュール (DI 用時計抽象)
 
-- **派生元ブランチ**: `feat/0-3-scaffold`
+- **派生元ブランチ**: `feat/0-3-ci`
 - **実行モード**: 直列必須 (Phase 1 起点 / Wait for Task 0.3)
-- **前提条件**: Task 0.3 の Draft PR URL が存在すること
+- **前提条件**: Task 0.3 (CI) の Draft PR URL が存在すること
 
 **Files:**
 - Create: `src/clock.ts`
@@ -618,7 +645,7 @@ gh pr create --draft --base feat/0-2-ci --head feat/0-3-scaffold \
 
 ```bash
 # [host]
-git checkout feat/0-3-scaffold
+git checkout feat/0-3-ci
 git checkout -b feat/1-1-clock
 ```
 
@@ -626,7 +653,7 @@ git checkout -b feat/1-1-clock
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/0-3-scaffold"
+EXPECTED_BASE="feat/0-3-ci"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -830,7 +857,7 @@ git commit -m "feat(clock): add DI-friendly Clock with RealClock and FakeClock"
 
 ```bash
 git push -u origin feat/1-1-clock
-gh pr create --draft --base feat/0-3-scaffold --head feat/1-1-clock \
+gh pr create --draft --base feat/0-3-ci --head feat/1-1-clock \
   --title "feat(clock): DI clock with FakeClock for unit tests" \
   --body "Phase 1 stack #1 (serial). Pure DI abstraction over setTimeout/clearTimeout."
 ```
@@ -2876,13 +2903,15 @@ cat package.json | grep '"main"'
 ```bash
 # [host]
 mkdir -p "$HOME/.config/opencode/plugins/opencode-watchdog"
-cp -r src package.json tsconfig.json "$HOME/.config/opencode/plugins/opencode-watchdog/"
+cp -r src package.json tsconfig.json bun.lockb "$HOME/.config/opencode/plugins/opencode-watchdog/"
 ( cd "$HOME/.config/opencode/plugins/opencode-watchdog" && bun install --frozen-lockfile )
 ```
 
 期待出力: エラーなく完了し、`$HOME/.config/opencode/plugins/opencode-watchdog/node_modules/@opencode-ai/plugin/` が存在する。
 
-- [ ] Step 5.3: 短いタイムアウトで OpenCode を起動し挙動を確認
+- [ ] Step 5.3: 短いタイムアウトで OpenCode を起動
+
+> **重要**: Step 5.4 でネットワーク切断を行う。**ネットワーク切断の影響を受けない端末で本手順を実行する** こと (例: 有線 + 無線併用機での無線切断、もしくは仮想ネットワーク切断)。SSH 越しに OpenCode を動かしている場合、SSH 接続自体が切れるので不可。
 
 ```bash
 # [host]
@@ -2892,12 +2921,39 @@ opencode &  # Or whatever invocation matches the local install
 OPENCODE_PID=$!
 ```
 
-- [ ] Step 5.4: 受け入れ条件 §10 をマニュアル走査
-  - [ ] §10.1: 上記 `cp` だけでプラグインが読み込まれた (OpenCode の plugin loader ログに `opencode-watchdog` が出る)
-  - [ ] §10.3: ユーザープロンプトを 1 つ送信し 3 秒間放置 → tmux ウィンドウが黄色になり `[Watchdog] Agent ... idle for 3000ms` が表示される
-  - [ ] §10.4: さらに 3 秒放置 → tmux ウィンドウが赤色になり `[Watchdog] Ping injected to ...` が表示され、エージェント側に Ping メッセージが届く
-  - [ ] §10.5: `maxPings=1` (デフォルト) のまま続けて放置 → 二度目の Ping は注入されず `Max pings reached. Manual intervention required.` だけが表示される
-  - [ ] §10.6: tmux の外でも同手順を試行 → プロセスは落ちず、`[watchdog]` ログのみが出力される
+- [ ] Step 5.4: 応答ストリームを意図的に停止して受け入れ条件 §10.3-10.6 を検証
+
+> **設計意図**: 通常運用では、ユーザープロンプト送信 → アシスタントが応答チャンクを返す → `message.part.updated` がストリーミング → タイマーが連続リセット、となるため stage1 はそのままでは発火しない。Watchdog の発火条件 (= ストリーム停止) を **ネットワーク切断** で確実に再現する。代替手段は使わず、本手順で再現条件を固定する。
+
+- [ ] Step 5.4.1: §10.1 配置確認 — OpenCode 起動ログに `opencode-watchdog` plugin が読み込まれた旨が出ることを確認
+
+- [ ] Step 5.4.2: §10.3 stage1 通知の確認
+
+  1. tmux 内で OpenCode の TUI が起動している状態にする
+  2. ユーザープロンプトを 1 つ送信 (例: "Please write a long detailed explanation of TCP congestion control.")
+  3. アシスタント応答チャンクが画面に流れ始めたら **即座にネットワーク切断**:
+     - **Linux**: `nmcli networking off`
+     - **macOS**: `networksetup -setairportpower en0 off` (Wi-Fi の場合)
+  4. 切断後そのまま 3 秒放置 → tmux ウィンドウが **黄色** に変わり、画面下部に `[Watchdog] Agent <sessionId> idle for 3000ms` が表示されることを確認
+
+- [ ] Step 5.4.3: §10.4 stage2 (Ping 注入) の確認
+
+  1. ネットワーク切断状態を維持したまま、さらに 3 秒放置
+  2. tmux ウィンドウが **赤色** に変わり、`[Watchdog] Ping injected to <sessionId>` が表示されることを確認
+  3. Ping API 呼び出しはネットワーク切断下のため即時には届かない (`pinger.inject` 内の try/catch で握り潰されログのみ)。**tmux 表示が出れば Ping 試行は成立** とみなす
+
+- [ ] Step 5.4.4: §10.5 maxPings=1 の確認
+
+  1. さらに 3 秒放置
+  2. tmux ウィンドウは **赤色のまま**、`[Watchdog] Max pings reached. Manual intervention required.` が表示されることを確認
+  3. **二度目の `Ping injected to ...` 表示は出ない** ことを確認 (1 回だけで打ち切られる)
+
+- [ ] Step 5.4.5: §10.6 tmux 外でのフォールバック
+
+  1. ネットワーク復旧: `nmcli networking on` / `networksetup -setairportpower en0 on`
+  2. OpenCode を一度終了し、**tmux セッション外** で再起動 (素のターミナル)
+  3. Step 5.4.2 〜 5.4.4 と同手順を実行 → tmux 関連の API は呼ばれず `[watchdog] tmux not detected` の info ログのみが残ることを確認
+  4. プロセスがクラッシュしないことを確認
 
 - [ ] Step 5.5: 後始末
 
@@ -2906,11 +2962,13 @@ OPENCODE_PID=$!
 kill $OPENCODE_PID 2>/dev/null || true
 rm -rf "$HOME/.config/opencode/plugins/opencode-watchdog"
 unset OPENCODE_WATCHDOG_STAGE1_MS OPENCODE_WATCHDOG_STAGE2_MS
+# ネットワークを切断したまま終わっていないか念のため確認
+nmcli networking on 2>/dev/null || networksetup -setairportpower en0 on 2>/dev/null || true
 ```
 
-- [ ] Step 5.6: PR の本文に **マニュアル検証ログ** を貼り付け、いつ・どの環境で確認したかを記録する (例: `Manually verified on host <hostname> with opencode <version> at <YYYY-MM-DD HH:MM JST>: §10.1, 10.3-10.6 all PASS`)
+- [ ] Step 5.6: PR の本文に **マニュアル検証ログ** を貼り付け、いつ・どの環境で確認したかを記録する (例: `Manually verified on host <hostname> (Linux/macOS) with opencode <version>, network-cut method nmcli/networksetup, at <YYYY-MM-DD HH:MM JST>: §10.1, 10.3-10.6 all PASS`)
 
-> **マニュアル検証なしで Ready for review に昇格させてはいけない**。§10.1 は smoke test ではカバー不能で、本ステップ以外に充足手段がない。
+> **マニュアル検証なしで Ready for review に昇格させてはいけない**。§10.1, 10.3-10.6 は smoke test ではカバー不能 (実 OpenCode + 実ネットワーク切断が必要) で、本ステップ以外に充足手段がない。手順は **代替不可**、ネットワーク切断で再現条件を固定する。
 
 ### Step 6: コミット [host]
 
@@ -2977,3 +3035,11 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 - ✅ **`docs/SDK_NOTES.md` をファイル構造一覧と Task 0.3 Files に明記**: 後続タスクの前提となる成果物の所在が一覧から特定できる状態にした。
 - ✅ **設計書 §3.3 の `notifier.escalate` を `notifier.notify` に統一**: 計画書の単一 API 設計と整合。設計書には Notifier インタフェース統一の判断を §3.3 直前に短く明記。
 - ✅ **設計書 §7.1 の dev 依存方針文言を緩和**: 「追加のテストランナー依存は導入しない (jest/mocha/vitest 等不可)」と意図を明確化し、SDK 型整合のための `@opencode-ai/plugin` 追加が方針外であることを明示。
+
+## 第4次レビューを受けた追加修正 (v4)
+
+- ✅ **Phase 0 順序を入れ替え (Task 0.2 = scaffold、Task 0.3 = CI)**: 旧計画では CI 導入 (Task 0.2) が package.json 不在のブランチで `bun install --frozen-lockfile` を実行して必ず失敗していた。順序入れ替えにより CI 導入時点で package.json/bun.lockb が既に存在し、初回 CI が pass する。Task 0.3 (CI) Step 1.3 に **派生元健全性チェック** (`test -f package.json && test -f bun.lockb`) を追加し、構造が壊れていれば即時 abort。ブランチ名も `feat/0-2-scaffold` / `feat/0-3-ci` に統一。
+- ✅ **CI workflow に `bun run typecheck` を追加**: `bun test` の前に typecheck を実行 (fail fast)。冒頭で謳う「型整合 CI 逐次保証」が真に実効化。Step 3.2 にローカル等価検証 (`bun install --frozen-lockfile && bun run typecheck && bun test`) も追加。
+- ✅ **設計書 §3.3 を `onUserMessage` 経由に更新**: `message.updated (role=user)` のフローを `watchdog.onActivity` から `watchdog.onUserMessage` へ書き換え、tombstone 解除責務を明示。`message.part.updated` 側にも tombstone 抑止と pingCount リセットを明記。設計と実装の乖離を解消。
+- ✅ **手動配置検証で `bun.lockb` を cp 対象に追加**: 旧手順は cp に lockb を含めず、直後の `bun install --frozen-lockfile` が必ず失敗していた。1 単語追加で解消。
+- ✅ **手動検証 §10.3-10.6 をネットワーク切断による決定的手順へ書き換え**: 「3 秒放置」では通常応答が返り stage1 が発火しないため検証が成立しない問題を解消。`nmcli networking off` (Linux) / `networksetup -setairportpower en0 off` (macOS) でストリーム停止を確実に再現する手順に固定。代替不可。SSH 越し実行禁止、復旧 `nmcli networking on` を Step 5.5 に追加、ネットワーク切断中の Ping 試行は tmux 表示で観測 (実送信は復旧後)、PR ログに切断方式 (nmcli/networksetup) も記録。

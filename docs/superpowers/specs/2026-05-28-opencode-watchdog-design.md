@@ -92,14 +92,16 @@ src/
 ### 3.3 イベントフロー
 
 ```text
-message.updated (role=user)   ◀── 初期タイマー起動トリガ
-    └─► watchdog.onActivity(sessionId)
-            └─ (以下、message.part.updated と同一経路)
+message.updated (role=user)   ◀── 初期タイマー起動 / post-stop 再アームトリガ
+    └─► watchdog.onUserMessage(sessionId)
+            ├─ tombstone セットから sessionId を削除 (post-stop 再アーム用)
+            └─ 以降は onActivity と同一経路 (Map のエントリを WATCHING にリセット、stage1 タイマー setTimeout)
 
 message.part.updated
     └─► watchdog.onActivity(sessionId)
+            ├─ tombstone セットに sessionId が含まれる場合は即 return (stale event 抑止)
             ├─ Map<sessionId, TimerHandle> から既存タイマーを clearTimeout
-            ├─ state を WATCHING にリセット (PINGED/SILENCED からも復帰可)
+            ├─ state を WATCHING にリセット、pingCount を 0 へリセット (PINGED/SILENCED からも復帰可)
             └─ stage1 タイマーを setTimeout (default 180s)
 
 stage1 expire
