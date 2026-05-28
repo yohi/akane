@@ -90,7 +90,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 │   └── workflows/
 │       └── test.yml
 ├── docs/
-│   └── SDK_NOTES.md       # Task 0.3 Step 7 で記録する SDK 実測形 (Pinger/event の前提)
+│   └── SDK_NOTES.md       # Task 0.2 Step 7 で記録する SDK 実測形 (Pinger/event の前提)
 ├── src/
 │   ├── clock.ts
 │   ├── config.ts
@@ -1146,7 +1146,7 @@ gh pr create --draft --base feat/1-1-clock --head feat/1-2-config \
 - **実行モード**: 直列必須 (Wait for Task 1.2)
 - **前提条件**:
   - Task 1.2 の Draft PR URL が存在すること
-  - Task 0.3 の Step 7 で作成した `docs/SDK_NOTES.md` が **最新で埋まっている** こと (Plugin / client.session.* の実測形が記録済み)
+  - Task 0.2 の Step 7 で作成した `docs/SDK_NOTES.md` が **最新で埋まっている** こと (Plugin / client.session.* の実測形が記録済み)
 
 **Files:**
 - Create: `src/pinger.ts`
@@ -1299,7 +1299,7 @@ export class OpenCodeAdapter implements Pinger {
 }
 ```
 
-> **NOTE**: 引数形は `docs/SDK_NOTES.md` (Task 0.3 Step 7 で記録) を出典とする。実 SDK 型がレコードと異なる場合、SDK_NOTES を最新化したうえで本実装と上のテストの両方を差し替えること。Pinger インタフェース (`inject(sessionId, message)`) は SDK 形にかかわらず不変。
+> **NOTE**: 引数形は `docs/SDK_NOTES.md` (Task 0.2 Step 7 で記録) を出典とする。実 SDK 型がレコードと異なる場合、SDK_NOTES を最新化したうえで本実装と上のテストの両方を差し替えること。Pinger インタフェース (`inject(sessionId, message)`) は SDK 形にかかわらず不変。
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
@@ -2461,7 +2461,7 @@ bun test tests/index.smoke.test.ts
 
 ### Step 4: プラグインエントリ実装 [devcontainer]
 
-> **前提**: `docs/SDK_NOTES.md` (Task 0.3 Step 7 で記録) を参照し、Plugin 型および event payload の sessionID/role 抽出パスを **実 SDK 型に合わせて確定** すること。本ベースラインでは:
+> **前提**: `docs/SDK_NOTES.md` (Task 0.2 Step 7 で記録) を参照し、Plugin 型および event payload の sessionID/role 抽出パスを **実 SDK 型に合わせて確定** すること。本ベースラインでは:
 > - `message.updated` → `event.properties.info.role === "user"` / `event.properties.info.sessionID`
 > - `message.part.updated` → `event.properties.part.sessionID`
 > - `session.*` → `event.properties.info.id`
@@ -3020,7 +3020,7 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 レビューを受けて以下の方針変更を計画書全体に反映済み:
 
 - ✅ **Phase 1 直列化**: 並列+統合ブランチ案を撤回。`0-3-scaffold → 1-1-clock → 1-2-config → 1-3-pinger → 1-4-notifier` の単一直列スタックに変更。Phase 1.5 (統合タスク) は削除。
-- ✅ **`@opencode-ai/plugin` を Phase 0 devDeps に追加**: Task 0.3 の package.json に追加。Task 0.3 Step 7 で `docs/SDK_NOTES.md` に SDK 型情報 (Plugin 型 / client.session.prompt の呼び出し形 / event payload の sessionID·role 抽出パス) を実測記録するゲートを追加。
+- ✅ **`@opencode-ai/plugin` を Phase 0 devDeps に追加**: Task 0.2 (scaffold) の package.json に追加。Task 0.2 Step 7 で `docs/SDK_NOTES.md` に SDK 型情報 (Plugin 型 / client.session.prompt の呼び出し形 / event payload の sessionID·role 抽出パス) を実測記録するゲートを追加。 (※ v4 で旧 Task 0.3 → 新 Task 0.2 へ番号繰り上げ)
 - ✅ **Pinger SDK 形を SDK_NOTES 出典に**: `client.session.prompt({ path: { id }, body: { parts } })` 形をベースラインとし、テスト/実装ともこの形に統一。Pinger インタフェース (`inject(sessionId, message)`) は SDK 形にかかわらず不変。
 - ✅ **event payload 抽出形を SDK_NOTES 出典に**: `message.updated` → `properties.info.role` / `properties.info.sessionID`、`message.part.updated` → `properties.part.sessionID`、`session.*` → `properties.info.id` をベースラインに採用。smoke test の fake event payload も同形に揃え、`import type { Plugin } from "@opencode-ai/plugin"` を採用。
 - ✅ **pingCount リセット**: `armOrReset` 内で常に `pingCount: 0` を新エントリに設定。SILENCED → activity 復帰時の Ping 再注入余地を再確保 (design §3.4)。
