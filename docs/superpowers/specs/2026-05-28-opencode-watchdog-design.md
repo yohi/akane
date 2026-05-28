@@ -89,7 +89,7 @@ src/
 
 ### 3.3 イベントフロー
 
-```
+```text
 message.updated (role=user)   ◀── 初期タイマー起動トリガ
     └─► watchdog.onActivity(sessionId)
             └─ (以下、message.part.updated と同一経路)
@@ -127,7 +127,7 @@ session.idle / session.error / session.deleted
 
 ### 3.4 状態マシン
 
-```
+```text
         ┌──────┐
         │ IDLE │  ← 初期状態 (Map にエントリ無し / タイマー無し)
         └──┬───┘
@@ -327,7 +327,7 @@ export class MockPinger implements Pinger {
 
 ### 8.2 構成
 
-```
+```text
 .devcontainer/
 ├── devcontainer.json
 ├── Dockerfile

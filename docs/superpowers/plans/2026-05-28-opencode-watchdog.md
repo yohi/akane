@@ -18,7 +18,7 @@
 
 ### スタック構造図
 
-```
+```text
 master
   └── feat/0-1-devcontainer        (Phase 0 直列)
         └── feat/0-2-ci
@@ -80,7 +80,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ## ファイル構造 (最終形)
 
-```
+```text
 .
 ├── .devcontainer/
 │   ├── devcontainer.json
