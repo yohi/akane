@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build and output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+
+# Local/Tool state (Observed in workspace)
+.nexus/
+.omo/
+.claude/settings.local.json
+
+# Environment variables
+.env
+.env.*
