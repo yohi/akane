@@ -87,6 +87,8 @@ src/
 | `clock` | `setTimeout` / `clearTimeout` の DI 化 | なし |
 | `index` | プラグインエントリ。`event` を `watchdog` に委譲 | 上記すべて |
 
+**Notifier インタフェース統一**: `Notifier` は `notify(sessionId, stage, message)` と `clear(sessionId)` の 2 メソッドのみを公開する。stage1 は `stage="warn"`、stage2 (Ping 注入) は `stage="critical"`、SILENCED 突入は `stage="silenced"` で区別する (`escalate` メソッドは設けない)。stage 値は §5.2 で表色を一意に決定する。
+
 ### 3.3 イベントフロー
 
 ```text
@@ -110,12 +112,12 @@ stage2 expire
     │    state = PINGED
     │    pinger.inject(sessionId, config.pingMessage)
     │    pingCount += 1
-    │    notifier.escalate(sessionId, stage="critical")
+    │    notifier.notify(sessionId, "critical", message)
     │    stage2 タイマーを再セット (Ping への応答待ち)
     │
     └─ pingCount >= maxPings:
          state = SILENCED
-         notifier.escalate(sessionId, stage="silenced")
+         notifier.notify(sessionId, "silenced", message)
          以降は通知のみ。Ping は発火しない。
 
 session.idle / session.error / session.deleted
@@ -158,7 +160,7 @@ session.idle / session.error / session.deleted
 
 **IDLE 状態の意味**: `Map<sessionId, ...>` にエントリが存在しない状態。タイマーは存在しない。`message.updated (role=user)` を初回受信した時点で WATCHING へ遷移し、エントリと stage1 タイマーが生成される。これにより、**初回チャンクを一度も受信せずにハングするケース (初期ハング) が stage1 タイマーの満了で検知可能** となる。
 
-**IDLE への post-stop 抑止 (§7.3 の補足)**: `session.idle / session.error / session.deleted` を受信して IDLE へ遷移した sessionId は、後続の `message.part.updated` (遅延配信された stale event) では **再アームしない**。再アームは `message.updated (role=user)` (= 新規ユーザー入力) を受信した場合に限る。これは §7.3 の必須アサーション「`session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない」を satisfy するための制約で、実装上は stop された sessionId を tombstone セットに記録して `message.part.updated` 側で抑止し、`message.updated (role=user)` 側で tombstone を解除する。
+**IDLE への post-stop 抑止 (§7.3 の補足)**: `session.idle / session.error / session.deleted` を受信して IDLE へ遷移した sessionId は、後続の `message.part.updated` (遅延配信された stale event) では **再アームしない**。再アームは `message.updated (role=user)` (= 新規ユーザー入力) を受信した場合に限る。これは §7.3 の必須アサーション「`session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない」を satisfy するための制約で、実装上は stop された sessionId を **FIFO 上限 10,000 件の tombstone セット** に記録して `message.part.updated` 側で抑止し、`message.updated (role=user)` 側で tombstone を解除する。**上限を超えた場合は最古の sessionId から FIFO evict** され、退避済みエントリへの遅延 event は新規セッション扱いになる (長期稼働プロセスでのメモリ無制限増加を回避するためのトレードオフ)。
 
 ---
 
@@ -267,10 +269,15 @@ export class OpenCodeAdapter implements Pinger {
   constructor(private client: unknown /* OpenCode SDK */) {}
 
   async inject(sessionId: string, message: string): Promise<void> {
-    // 実装フェーズで SDK の正式メソッド名に差し替え。候補:
+    // ベースライン: 現行 @opencode-ai/plugin の SDK 形に従う。
+    //   client.session.prompt({
+    //     path: { id: sessionId },
+    //     body: { parts: [{ type: "text", text: message }] }
+    //   })
+    // 正式形は実装フェーズで `docs/SDK_NOTES.md` に記録される実測値に従う。
+    // 旧候補 (履歴。SDK 形状不確定時の検討メモ):
     //   client.session.promptAsync({ sessionId, parts: [...] })
     //   client.session.message({ sessionId, parts: [...] })
-    // いずれも HTTP POST /session/:id/prompt_async または /message に解決される想定。
   }
 }
 
@@ -293,7 +300,7 @@ export class MockPinger implements Pinger {
 
 ### 7.1 テストランナー
 
-`bun test` (組み込み)。追加の dev 依存は導入しない。
+`bun test` (組み込み) のみを使用する。**追加のテストランナー依存は導入しない** (jest / mocha / vitest / chai 等を持ち込まず、Bun 組み込みアサーションで完結させる方針)。SDK 型整合のために `@opencode-ai/plugin` を `devDependencies` へ追加するのは本方針に反しない (テストランナーではなく被テスト対象の SDK であるため)。
 
 ### 7.2 テストレイヤ
 
@@ -308,7 +315,7 @@ export class MockPinger implements Pinger {
 ### 7.3 必須アサーション
 
 - `message.part.updated` を N 回連続で受け取っても、Map 内のタイマーは常に 1 つだけ。
-- `session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない (stop 時に sessionId を tombstone セットへ登録し、後続の `message.part.updated` 側で抑止するため。Map 削除だけでは `onActivity` 経由で再エントリが生成されるため不十分。詳細は §3.4 「IDLE への post-stop 抑止」を参照)。
+- `session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない (stop 時に sessionId を **FIFO 上限 10,000 件の tombstone セット** へ登録し、それ以内に到着した `message.part.updated` 側で抑止するため。Map 削除だけでは `onActivity` 経由で再エントリが生成されるため不十分。**上限超過時は最古から FIFO evict** され、退避済み sessionId への遅延 event は新規セッション扱いとなる。詳細は §3.4 「IDLE への post-stop 抑止」を参照)。
 - `maxPings = 1` の設定で stage2 を 2 度連続発火させても、`pinger.inject` の呼び出しは 1 回のみ。
 - Tmux 検出失敗時に notifier を呼んでもプロセスが落ちない。
 - **初期ハング検知**: `message.updated (role=user)` のみを受信し、その後一切 `message.part.updated` が来ない状態で stage1Ms が経過した場合、`notifier.notify` が呼ばれること。さらに stage2Ms 経過で `pinger.inject` が 1 回呼ばれること。

@@ -89,6 +89,8 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 ├── .github/
 │   └── workflows/
 │       └── test.yml
+├── docs/
+│   └── SDK_NOTES.md       # Task 0.3 Step 7 で記録する SDK 実測形 (Pinger/event の前提)
 ├── src/
 │   ├── clock.ts
 │   ├── config.ts
@@ -99,6 +101,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 ├── tests/
 │   ├── clock.test.ts
 │   ├── config.test.ts
+│   ├── index.smoke.test.ts
 │   ├── notifier.test.ts
 │   ├── pinger.test.ts
 │   ├── watchdog.test.ts
@@ -302,9 +305,11 @@ on:
   push:
     branches:
       - master
+      - 'feat/**'
   pull_request:
     branches:
       - master
+      - 'feat/**'
 
 jobs:
   bun-test:
@@ -326,6 +331,8 @@ jobs:
 ```
 
 > **NOTE on `ubuntu-slim`**: GitHub-hosted の最小 runner (single-CPU / minimal / unprivileged container) を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら `ubuntu-latest` への切替を再評価すること。
+>
+> **NOTE on trigger 範囲**: `pull_request.branches` と `push.branches` の両方に `feat/**` を含めている。これはレビュー時に **stacked PR (feat/X → feat/Y) でも CI を走らせるため** に必須 (本計画は Phase 1 以降がすべて feat/* 同士の stacked PR となるため、`master` のみだと中間 PR で CI が一切走らない)。これにより「型整合を CI で逐次保証」(§本ドキュメント冒頭) が満たされる。
 
 ### Step 3: ワークフロー構文検証 [devcontainer]
 
@@ -374,6 +381,7 @@ gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-ci \
 - Create: `.gitignore`
 - Create: `src/.gitkeep`
 - Create: `tests/.gitkeep`
+- Create: `docs/SDK_NOTES.md` (Step 7 で実 SDK 形を記録する成果物)
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
@@ -527,7 +535,9 @@ mkdir -p docs
 
 `docs/SDK_NOTES.md` に以下のテンプレートで記入する。**「実測」欄が空のまま後続タスクへ進むことを禁止**。
 
-```markdown
+> **注**: 下のテンプレートは外側を **四連バッククォート (` ```` `)** で囲んでいる。これにより内側の三連バッククォート (` ``` `) を fence として保存できる。SDK_NOTES.md を実際に書く際は、外側のフェンスを取り除いて本文だけ抜き出すこと。
+
+````markdown
 # @opencode-ai/plugin SDK Notes
 
 - 確認日: <YYYY-MM-DD>
@@ -557,7 +567,7 @@ mkdir -p docs
 // message.updated  → event.properties.info.role === "user", event.properties.info.sessionID
 // message.part.updated → event.properties.part.sessionID
 ```
-```
+````
 
 - [ ] Step 7.4: 記録内容と本プラン (Task 1.3 / Task 3.1) のベースライン記述に **差異があれば本プランを更新** すること。差異がなければプラン通りに進める。
 
@@ -688,6 +698,21 @@ describe("FakeClock", () => {
     clock.advance(300);
     expect(order).toEqual([1, 2]);
   });
+
+  test("pendingTimerCount tracks scheduled, fired, and cancelled timers", () => {
+    const clock = new FakeClock();
+    expect(clock.pendingTimerCount()).toBe(0);
+
+    const h1 = clock.setTimeout(() => {}, 100);
+    clock.setTimeout(() => {}, 200);
+    expect(clock.pendingTimerCount()).toBe(2);
+
+    clock.clearTimeout(h1);
+    expect(clock.pendingTimerCount()).toBe(1);
+
+    clock.advance(300); // fires the remaining timer
+    expect(clock.pendingTimerCount()).toBe(0);
+  });
 });
 ```
 
@@ -761,6 +786,12 @@ export class FakeClock implements Clock {
     }
     this.now = targetTime;
   }
+
+  /** Number of timers scheduled but not yet fired or cancelled. Used by stress
+   * tests to detect timer leaks (design §7.4). */
+  pendingTimerCount(): number {
+    return this.timers.filter((t) => !t.cancelled).length;
+  }
 }
 ```
 
@@ -773,7 +804,7 @@ export class FakeClock implements Clock {
 bun test tests/clock.test.ts
 ```
 
-期待出力: `5 pass, 0 fail`
+期待出力: `6 pass, 0 fail`
 
 - [ ] Step 5.2: 型チェック
 
@@ -801,7 +832,7 @@ git commit -m "feat(clock): add DI-friendly Clock with RealClock and FakeClock"
 git push -u origin feat/1-1-clock
 gh pr create --draft --base feat/0-3-scaffold --head feat/1-1-clock \
   --title "feat(clock): DI clock with FakeClock for unit tests" \
-  --body "Phase 1 parallel #1. Pure DI abstraction over setTimeout/clearTimeout."
+  --body "Phase 1 stack #1 (serial). Pure DI abstraction over setTimeout/clearTimeout."
 ```
 
 - [ ] Step 7.2: PR URL を記録
@@ -1830,8 +1861,9 @@ describe("Watchdog - lifecycle cleanup", () => {
 
   test("late message.part.updated after stop() is ignored (no timer rearm)", () => {
     // Per design §7.3: "session.idle 後に message.part.updated を受信しても
-    // 新規タイマーが作られない (stop 時に sessionId を tombstone セットへ登録し、
-    // 後続の message.part.updated 側で抑止するため)".
+    // 新規タイマーが作られない (stop 時に sessionId を FIFO 上限 10,000 件の
+    // tombstone セットへ登録し、それ以内に到着した message.part.updated 側で
+    // 抑止するため)".
     // Stale events from a stopped session must not produce false positives.
     const { watchdog, clock, notifier } = setup();
     watchdog.onActivity("s1");
@@ -1972,6 +2004,18 @@ export class Watchdog {
 
   activeSessionCount(): number {
     return this.sessions.size;
+  }
+
+  /** Number of sessions currently holding a non-null timer reference. Distinct
+   * from activeSessionCount — a session in SILENCED state has an entry but no
+   * scheduled timer. Used by stress tests to detect timer leaks (design §7.4).
+   */
+  activeTimerCount(): number {
+    let count = 0;
+    for (const entry of this.sessions.values()) {
+      if (entry.timer !== null) count += 1;
+    }
+    return count;
   }
 
   /** Session created event — informational only. Do not arm timers. */
@@ -2206,10 +2250,14 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ```typescript
 import { describe, test, expect } from "bun:test";
-import plugin from "../src/index";
+import plugin, {
+  extractSessionId,
+  isUserMessage,
+  type OpenCodeEvent,
+} from "../src/index";
 
 describe("plugin entry smoke", () => {
-  test("default export is an OpenCode plugin object with event hook", () => {
+  test("default export is a Plugin function", () => {
     expect(typeof plugin).toBe("function");
   });
 
@@ -2227,7 +2275,7 @@ describe("plugin entry smoke", () => {
     expect(typeof instance.event).toBe("function");
   });
 
-  test("event hook routes message.part.updated as activity", async () => {
+  test("event handler does not throw on typical payloads", async () => {
     const fakeContext = {
       client: {
         app: { log: async () => undefined },
@@ -2240,9 +2288,6 @@ describe("plugin entry smoke", () => {
     const instance = await (plugin as (ctx: unknown) => Promise<{
       event: (e: { event: unknown }) => Promise<void>;
     }>)(fakeContext);
-    // Should not throw on typical event payloads.
-    // Shapes follow docs/SDK_NOTES.md: message.part.updated nests sessionID
-    // inside `properties.part`, session.* events expose `properties.info`.
     await instance.event({
       event: {
         type: "message.part.updated",
@@ -2256,38 +2301,122 @@ describe("plugin entry smoke", () => {
       },
     });
   });
+});
 
-  test("message.updated with role=user triggers onUserMessage (initial hang trigger)", async () => {
-    let armed: { sessionId?: string; isUser?: boolean } = {};
-    const fakeContext = {
-      client: {
-        app: { log: async () => undefined },
-        session: { prompt: async () => undefined },
-      },
-      $: () => undefined,
-      directory: process.cwd(),
-      worktree: process.cwd(),
+describe("extractSessionId (event routing)", () => {
+  test("message.updated reads sessionID from properties.info", () => {
+    const e: OpenCodeEvent = {
+      type: "message.updated",
+      properties: { info: { sessionID: "s-msg-upd", role: "user" } },
     };
-    const instance = await (plugin as (ctx: unknown) => Promise<{
-      event: (e: { event: unknown }) => Promise<void>;
-    }>)(fakeContext);
+    expect(extractSessionId(e)).toBe("s-msg-upd");
+  });
 
-    // Shape derived from SDK_NOTES: message.updated payload nests `info` with
-    // `role` and `sessionID` (or equivalent — adapt to SDK_NOTES if differs).
-    await instance.event({
-      event: {
-        type: "message.updated",
-        properties: { info: { role: "user", sessionID: "s-user" } },
-      },
-    });
+  test("message.part.updated reads sessionID from properties.part", () => {
+    const e: OpenCodeEvent = {
+      type: "message.part.updated",
+      properties: { part: { sessionID: "s-msg-part" } },
+    };
+    expect(extractSessionId(e)).toBe("s-msg-part");
+  });
 
-    // Non-user role MUST NOT trigger (assistant streaming is not initial input).
-    await instance.event({
-      event: {
+  test("session.created / session.idle / session.error / session.deleted read id from properties.info", () => {
+    const types = ["session.created", "session.idle", "session.error", "session.deleted"] as const;
+    for (const t of types) {
+      const e: OpenCodeEvent = {
+        type: t,
+        properties: { info: { id: `s-${t}` } },
+      };
+      expect(extractSessionId(e)).toBe(`s-${t}`);
+    }
+  });
+
+  test("returns undefined for unknown event types", () => {
+    const e: OpenCodeEvent = {
+      type: "tool.completed",
+      properties: { info: { sessionID: "ignored" } },
+    };
+    expect(extractSessionId(e)).toBeUndefined();
+  });
+
+  test("returns undefined when the expected nested field is missing", () => {
+    expect(
+      extractSessionId({ type: "message.updated", properties: {} }),
+    ).toBeUndefined();
+    expect(
+      extractSessionId({
+        type: "message.part.updated",
+        properties: { info: { sessionID: "ignored" } } as never,
+      }),
+    ).toBeUndefined();
+    expect(
+      extractSessionId({ type: "session.idle", properties: {} }),
+    ).toBeUndefined();
+  });
+
+  test("message.updated and message.part.updated read DIFFERENT paths (silent-failure regression guard)", () => {
+    // If a future change accidentally unifies both paths to `properties.sessionID`,
+    // this test catches it. Originally regressed in v1 of the plan.
+    const partEvent: OpenCodeEvent = {
+      type: "message.part.updated",
+      properties: { info: { sessionID: "wrong-path" } } as never,
+    };
+    expect(extractSessionId(partEvent)).toBeUndefined();
+
+    const updEvent: OpenCodeEvent = {
+      type: "message.updated",
+      properties: { part: { sessionID: "wrong-path" } } as never,
+    };
+    expect(extractSessionId(updEvent)).toBeUndefined();
+  });
+});
+
+describe("isUserMessage (initial-trigger role determination)", () => {
+  test("true only for message.updated with role=user", () => {
+    expect(
+      isUserMessage({
         type: "message.updated",
-        properties: { info: { role: "assistant", sessionID: "s-assistant" } },
-      },
-    });
+        properties: { info: { role: "user", sessionID: "s" } },
+      }),
+    ).toBe(true);
+  });
+
+  test("false for message.updated with role=assistant", () => {
+    expect(
+      isUserMessage({
+        type: "message.updated",
+        properties: { info: { role: "assistant", sessionID: "s" } },
+      }),
+    ).toBe(false);
+  });
+
+  test("false for message.updated with role missing", () => {
+    expect(
+      isUserMessage({
+        type: "message.updated",
+        properties: { info: { sessionID: "s" } },
+      }),
+    ).toBe(false);
+  });
+
+  test("false for message.part.updated even if role=user is present (different event type)", () => {
+    expect(
+      isUserMessage({
+        type: "message.part.updated",
+        properties: { info: { role: "user" } } as never,
+      }),
+    ).toBe(false);
+  });
+
+  test("false for session.* events", () => {
+    for (const t of ["session.created", "session.idle", "session.error", "session.deleted"]) {
+      expect(
+        isUserMessage({
+          type: t,
+          properties: { info: { role: "user", id: "s" } },
+        }),
+      ).toBe(false);
+    }
   });
 });
 ```
@@ -2329,17 +2458,17 @@ import { Watchdog } from "./watchdog";
 // 実 SDK 型をそのまま import して使う。
 import type { Plugin } from "@opencode-ai/plugin";
 
-interface OpenCodeEventPropertiesInfo {
+export interface OpenCodeEventPropertiesInfo {
   id?: string;
   sessionID?: string;
   role?: string;
 }
 
-interface OpenCodeEventPropertiesPart {
+export interface OpenCodeEventPropertiesPart {
   sessionID?: string;
 }
 
-interface OpenCodeEvent {
+export interface OpenCodeEvent {
   type: string;
   properties: {
     info?: OpenCodeEventPropertiesInfo;
@@ -2366,7 +2495,13 @@ function logFactory(client: { app?: { log?: (args: { level: "info" | "warn" | "e
   };
 }
 
-function extractSessionId(event: OpenCodeEvent): string | undefined {
+/**
+ * Pure routing helper. Exported so the smoke test can verify event-payload
+ * field extraction without spinning up a Watchdog. Keep this function
+ * dependency-free: it must not import Bun, the SDK, or any side-effectful
+ * module.
+ */
+export function extractSessionId(event: OpenCodeEvent): string | undefined {
   switch (event.type) {
     case "message.updated":
       return event.properties.info?.sessionID;
@@ -2380,6 +2515,17 @@ function extractSessionId(event: OpenCodeEvent): string | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * Pure role-determination helper. Returns true iff `event` is the
+ * "user input confirmed" initial-trigger event (design §3.4 IDLE → WATCHING
+ * re-entry point). Exported for smoke test verification.
+ */
+export function isUserMessage(event: OpenCodeEvent): boolean {
+  return (
+    event.type === "message.updated" && event.properties.info?.role === "user"
+  );
 }
 
 const plugin: Plugin = async (ctx) => {
@@ -2416,7 +2562,7 @@ const plugin: Plugin = async (ctx) => {
 
         switch (event.type) {
           case "message.updated":
-            if (event.properties.info?.role === "user") {
+            if (isUserMessage(event)) {
               watchdog.onUserMessage(sessionId);
             }
             break;
@@ -2455,7 +2601,7 @@ export default plugin;
 bun test tests/index.smoke.test.ts
 ```
 
-期待出力: 4 テストパス
+期待出力: 14 テストパス (smoke 3 + extractSessionId 6 + isUserMessage 5)
 
 - [ ] Step 5.2: 全テスト走行 (リグレッションチェック)
 
@@ -2554,8 +2700,8 @@ const cfg: WatchdogConfig = {
   agents: {},
 };
 
-describe("Watchdog - memory & timer leak", () => {
-  test("1000 sessions x 100 chunks: map empty after all sessions idle", () => {
+describe("Watchdog - memory & timer leak (design §7.4)", () => {
+  test("1000 sessions x 100 chunks: Map empty AND active timers 0 after all sessions idle", () => {
     const clock = new FakeClock();
     const watchdog = new Watchdog({
       config: cfg,
@@ -2570,12 +2716,21 @@ describe("Watchdog - memory & timer leak", () => {
         watchdog.onActivity(sid);
       }
     }
+    // Mid-state: Map populated, every session has exactly one armed stage1 timer.
     expect(watchdog.activeSessionCount()).toBe(1000);
+    expect(watchdog.activeTimerCount()).toBe(1000);
+    // FakeClock-side: Watchdog reset overwrites the prior timer reference, so
+    // the cancelled tombstones accumulate inside FakeClock but the live count
+    // (non-cancelled) must match Watchdog's view.
+    expect(clock.pendingTimerCount()).toBe(1000);
 
     for (let s = 0; s < 1000; s++) {
       watchdog.stop(`sess-${s}`);
     }
+    // After cleanup: zero on every leak surface.
     expect(watchdog.activeSessionCount()).toBe(0);
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(clock.pendingTimerCount()).toBe(0);
   });
 
   test("session.idle then later activity does not leak old timers", () => {
@@ -2592,6 +2747,26 @@ describe("Watchdog - memory & timer leak", () => {
       watchdog.stop("s1");
     }
     expect(watchdog.activeSessionCount()).toBe(0);
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(clock.pendingTimerCount()).toBe(0);
+  });
+
+  test("repeated onActivity for the same session keeps exactly one live timer", () => {
+    const clock = new FakeClock();
+    const watchdog = new Watchdog({
+      config: cfg,
+      clock,
+      pinger: new MockPinger(),
+      notifier: new NoopNotifier(),
+    });
+    for (let i = 0; i < 500; i++) {
+      watchdog.onActivity("s-single");
+    }
+    // Watchdog-side: one entry, one live timer. Setting design §7.3:
+    // "Map 内のタイマーは常に 1 つだけ".
+    expect(watchdog.activeSessionCount()).toBe(1);
+    expect(watchdog.activeTimerCount()).toBe(1);
+    expect(clock.pendingTimerCount()).toBe(1);
   });
 });
 
@@ -2646,7 +2821,7 @@ describe("Acceptance §10 - empty session no false trigger", () => {
 bun test tests/stress.test.ts
 ```
 
-期待出力: 全 4 テストがパス
+期待出力: 全 5 テストがパス (memory & timer leak 3 + initial hang detection 1 + empty session 1)
 
 - [ ] Step 3.2: 全テスト走行 (受け入れ条件 §10 を含む全シナリオの最終確認)
 
@@ -2669,46 +2844,103 @@ bun run typecheck
 - [ ] Step 4.1: 設計書 §10 の 10 項目をテスト結果に照らして確認
 
 確認項目 (設計書 §10 から転記):
-- [ ] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → smoke test で default export が plugin object
+- [ ] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → **Step 5 の手動配置検証で確認** (smoke test だけでは未充足)
 - [ ] (2) `OPENCODE_WATCHDOG_STAGE1_MS=1000` 等の環境変数で挙動が変わる → config 単体テストでカバー
 - [ ] (3) 180秒のストリーム停止で Tmux 黄色ハイライトと display-message が出る → notifier 単体テスト + watchdog stage1 テストでカバー
 - [ ] (4) さらに 180 秒経過で Ping が 1 回注入され Tmux が赤色に切り替わる → watchdog stage2 テスト
 - [ ] (5) `maxPings: 1` で 2 度目の stage2 でも Ping は再注入されない → watchdog `maxPings ceiling` テスト
 - [ ] (6) Tmux 非起動環境でプラグインを動かしてもプロセスが落ちず、ログのみ残る → notifier detection テスト
 - [ ] (7) `bun test` がすべて pass する → Step 3.2 確認
-- [ ] (8) Map 内タイマー数が `session.idle` 後に 0 になる → stress test で確認
+- [ ] (8) Map 内タイマー数が `session.idle` 後に 0 になる → stress test で `activeSessionCount()` / `activeTimerCount()` / FakeClock の `pendingTimerCount()` の三層検証で確認
 - [ ] (9) 初期ハング検知 (onUserMessage のみ → stage1/stage2) → stress test "initial hang detection"
 - [ ] (10) 空セッション誤検知なし → stress test "empty session no false trigger"
 
-### Step 5: コミット [host]
+### Step 5: 受け入れ条件 §10.1 の手動配置検証 [host]
 
-- [ ] Step 5.1: コミット
+> **目的**: 設計書 §10.1 「プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される」を充足する。**自動テスト化はできない** (実 OpenCode プロセスを起動して検証する必要があり、CI でカバー不能)。本ステップは人間オペレータが Task 3.2 の Draft PR を Ready for review に昇格する **直前** に必ず実行する。
+>
+> **前提**: ホストに OpenCode CLI がインストールされていること。tmux セッション内で実行する (§10.3-4 を併せて確認するため)。
+
+- [ ] Step 5.1: バンドル成果物の整合性を確認 (Step 1〜3 のテストが pass している前提)
+
+```bash
+# [host]
+ls -la src/index.ts package.json
+cat package.json | grep '"main"'
+```
+
+期待出力: `package.json` の `main` が `src/index.ts` を指す。
+
+- [ ] Step 5.2: プラグインを所定ディレクトリへ配置
+
+```bash
+# [host]
+mkdir -p "$HOME/.config/opencode/plugins/opencode-watchdog"
+cp -r src package.json tsconfig.json "$HOME/.config/opencode/plugins/opencode-watchdog/"
+( cd "$HOME/.config/opencode/plugins/opencode-watchdog" && bun install --frozen-lockfile )
+```
+
+期待出力: エラーなく完了し、`$HOME/.config/opencode/plugins/opencode-watchdog/node_modules/@opencode-ai/plugin/` が存在する。
+
+- [ ] Step 5.3: 短いタイムアウトで OpenCode を起動し挙動を確認
+
+```bash
+# [host]
+export OPENCODE_WATCHDOG_STAGE1_MS=3000
+export OPENCODE_WATCHDOG_STAGE2_MS=3000
+opencode &  # Or whatever invocation matches the local install
+OPENCODE_PID=$!
+```
+
+- [ ] Step 5.4: 受け入れ条件 §10 をマニュアル走査
+  - [ ] §10.1: 上記 `cp` だけでプラグインが読み込まれた (OpenCode の plugin loader ログに `opencode-watchdog` が出る)
+  - [ ] §10.3: ユーザープロンプトを 1 つ送信し 3 秒間放置 → tmux ウィンドウが黄色になり `[Watchdog] Agent ... idle for 3000ms` が表示される
+  - [ ] §10.4: さらに 3 秒放置 → tmux ウィンドウが赤色になり `[Watchdog] Ping injected to ...` が表示され、エージェント側に Ping メッセージが届く
+  - [ ] §10.5: `maxPings=1` (デフォルト) のまま続けて放置 → 二度目の Ping は注入されず `Max pings reached. Manual intervention required.` だけが表示される
+  - [ ] §10.6: tmux の外でも同手順を試行 → プロセスは落ちず、`[watchdog]` ログのみが出力される
+
+- [ ] Step 5.5: 後始末
+
+```bash
+# [host]
+kill $OPENCODE_PID 2>/dev/null || true
+rm -rf "$HOME/.config/opencode/plugins/opencode-watchdog"
+unset OPENCODE_WATCHDOG_STAGE1_MS OPENCODE_WATCHDOG_STAGE2_MS
+```
+
+- [ ] Step 5.6: PR の本文に **マニュアル検証ログ** を貼り付け、いつ・どの環境で確認したかを記録する (例: `Manually verified on host <hostname> with opencode <version> at <YYYY-MM-DD HH:MM JST>: §10.1, 10.3-10.6 all PASS`)
+
+> **マニュアル検証なしで Ready for review に昇格させてはいけない**。§10.1 は smoke test ではカバー不能で、本ステップ以外に充足手段がない。
+
+### Step 6: コミット [host]
+
+- [ ] Step 6.1: コミット
 
 ```bash
 git add tests/stress.test.ts
 git commit -m "test(stress): 1000-session leak check + initial-hang + empty-session acceptance"
 ```
 
-### Step 6: Draft PR 作成 [host]
+### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 6.1: Draft PR 作成
+- [ ] Step 7.1: Draft PR 作成
 
 ```bash
 git push -u origin feat/3-2-stress-test
 gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
   --title "test(stress): leak check + acceptance §10 (initial hang + empty session)" \
-  --body "Phase 3 stack #2. Stress test for memory/timer leaks and acceptance criteria §10."
+  --body "Phase 3 stack #2. Stress test for memory/timer leaks and acceptance criteria §10. Manual deployment verification (§10.1) results to be appended to this PR body before promotion to Ready for review."
 ```
 
-- [ ] Step 6.2: PR URL を記録
+- [ ] Step 7.2: PR URL を記録
 
 ---
 
 # 完了後アクション (Post-Implementation)
 
-すべてのタスクの Draft PR が作成され、上記の Step 4.1 チェックリストが全項目クリアされたら、`superpowers:finishing-a-development-branch` スキルを起動し、人間オペレータに以下の選択肢を提示する:
+すべてのタスクの Draft PR が作成され、上記の Step 4.1 チェックリストが全項目クリアされ、**かつ Task 3.2 Step 5 の手動配置検証ログが Task 3.2 PR 本文に貼り付けられたら**、`superpowers:finishing-a-development-branch` スキルを起動し、人間オペレータに以下の選択肢を提示する:
 
-1. **Ready for Review に昇格**: 各 Draft PR の状態を `Ready for review` に切替え、レビュワーへ通知。
+1. **Ready for Review に昇格**: 各 Draft PR の状態を `Ready for review` に切替え、レビュワーへ通知。**Task 3.2 のマニュアル検証ログが空の場合は昇格を許可しない**。
 2. **Stack のリベース**: master が進んでいた場合、底辺ブランチ (`feat/0-1-devcontainer`) を最新 master にリベースし、スタック全体を順次リベース。
 3. **マージ順序**: 必ず底辺 (`feat/0-1-devcontainer`) → 上位 (`feat/3-2-stress-test`) の順でマージする。途中で順序を破ると履歴が壊れる。AGENT は merge を **実行しない** (人間オペレータの責務)。
 
@@ -2736,3 +2968,12 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 - ✅ **pingCount リセット**: `armOrReset` 内で常に `pingCount: 0` を新エントリに設定。SILENCED → activity 復帰時の Ping 再注入余地を再確保 (design §3.4)。
 - ✅ **stop 後の遅延 message.part.updated は無視**: FIFO 上限 10,000 の `stoppedSessions` tombstone を追加。`onActivity` は tombstone にヒットしたら即 return。`onUserMessage` は tombstone を明示的にクリアして再アーム (design §3.4 IDLE → WATCHING re-entry)。テストも「再作成しない」「user message で再アーム」の 2 本に書き換え。
 - ✅ **`ubuntu-slim` 注記更新**: 「組織カスタムランナー想定」を削除し「GitHub-hosted の最小 runner。実 tmux 結合テスト追加時は `ubuntu-latest` 再評価」へ書き換え。
+
+## 第3次レビューを受けた追加修正 (v3)
+
+- ✅ **CI trigger を stacked PR にも拡張**: `.github/workflows/test.yml` の `pull_request.branches` / `push.branches` に `feat/**` を追加。Phase 1 以降の中間 PR でも CI が走り、計画冒頭で謳う「型整合の逐次 CI 保証」が実効化された。
+- ✅ **受け入れ条件 §10.1 のマニュアル配置検証ステップを Task 3.2 に新設**: Step 5 として `~/.config/opencode/plugins/opencode-watchdog/` への配置 → 環境変数で stage1Ms/stage2Ms を 3 秒に短縮 → 実 OpenCode 起動 → §10.1, 10.3-10.6 のマニュアル走査 → PR 本文へ検証ログ貼付、を必須ゲート化。完了後アクションも「マニュアル検証ログが無い場合は Ready for review 昇格を許可しない」に強化。
+- ✅ **timer leak 検出の三層化**: FakeClock に `pendingTimerCount()`、Watchdog に `activeTimerCount()` を追加。stress test を「`activeSessionCount`/`activeTimerCount`/`pendingTimerCount` の三層検証」に強化し、新規 1 件「同一セッション 500 回 onActivity → live timer 1 のみ」も追加。設計書 §7.4 の「Map と active timer 数の両方が 0」要件を完全に充足。
+- ✅ **`docs/SDK_NOTES.md` をファイル構造一覧と Task 0.3 Files に明記**: 後続タスクの前提となる成果物の所在が一覧から特定できる状態にした。
+- ✅ **設計書 §3.3 の `notifier.escalate` を `notifier.notify` に統一**: 計画書の単一 API 設計と整合。設計書には Notifier インタフェース統一の判断を §3.3 直前に短く明記。
+- ✅ **設計書 §7.1 の dev 依存方針文言を緩和**: 「追加のテストランナー依存は導入しない (jest/mocha/vitest 等不可)」と意図を明確化し、SDK 型整合のための `@opencode-ai/plugin` 追加が方針外であることを明示。
