@@ -20,25 +20,25 @@
 
 ```text
 master
-  └── feat/0-1-devcontainer        (Phase 0 直列)
+  └── feat/0-1-devcontainer       (Phase 0)
         └── feat/0-2-ci
-              └── feat/0-3-scaffold   ◀── Phase 1 共通 Base
-                    ├── feat/1-1-clock        (並列)
-                    ├── feat/1-2-config       (並列)
-                    ├── feat/1-3-pinger       (並列)
-                    ├── feat/1-4-notifier     (並列)
-                    └── feat/1-5-integration  (直列: 1.1〜1.4 の Draft PR 全存在後)
-                          └── feat/2-1-watchdog       (直列)
-                                └── feat/3-1-plugin-entry  (直列)
-                                      └── feat/3-2-stress-test (直列)
+              └── feat/0-3-scaffold
+                    └── feat/1-1-clock          (Phase 1 直列開始)
+                          └── feat/1-2-config
+                                └── feat/1-3-pinger
+                                      └── feat/1-4-notifier
+                                            └── feat/2-1-watchdog        (Phase 2)
+                                                  └── feat/3-1-plugin-entry  (Phase 3)
+                                                        └── feat/3-2-stress-test
 ```
+
+> **本計画は全タスクが直列スタック構成**。レビュー単位を細かく保ちつつ型整合を CI で逐次保証するため Phase 1 並列化は採用しない (初版レビューで並列+統合ブランチ案から直列に切替)。
 
 ### 実行モード規約
 
-各タスクヘッダの `実行モード` は以下のいずれか:
+各タスクヘッダの `実行モード` は **直列必須** に統一。
 
 - **直列必須 (Wait for Task X)**: 直前タスクのブランチから派生。先行タスクの Draft PR が **作成済み (URL 取得済み)** であることを開始条件とする。マージ完了は不要。
-- **並列可能 (独立)**: 共通 Base ブランチから派生。対象ファイルが他並列タスクと競合しないことを必須条件とする。
 
 ### ブランチ命名規約
 
@@ -325,7 +325,7 @@ jobs:
         run: bun test
 ```
 
-> **NOTE on `ubuntu-slim`**: 本要件に従い `runs-on: ubuntu-slim` を指定。組織カスタムランナー想定。GitHub 標準ランナーで動作させる場合は `ubuntu-latest` に切り替える運用判断を後続で行う。
+> **NOTE on `ubuntu-slim`**: GitHub-hosted の最小 runner (single-CPU / minimal / unprivileged container) を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら `ubuntu-latest` への切替を再評価すること。
 
 ### Step 3: ワークフロー構文検証 [devcontainer]
 
@@ -412,6 +412,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@opencode-ai/plugin": "latest",
     "@types/bun": "latest",
     "typescript": "^5.6.0"
   },
@@ -495,41 +496,107 @@ bun test
 
 期待出力: `0 pass, 0 fail` (テストファイルなしのため正常)
 
-### Step 7: コミット [host]
+### Step 7: `@opencode-ai/plugin` の型形状を確認し記録する [devcontainer]
 
-- [ ] Step 7.1: コミット
+> **目的**: 後続の Task 1.3 (Pinger) と Task 3.1 (Plugin Entry) のテスト/実装で **実 SDK 型に基づいた呼び出し形** を採用するため、ここで一度だけ調査して結果を `docs/SDK_NOTES.md` に固定する。
+
+- [ ] Step 7.1: SDK の型定義ファイル位置を特定
 
 ```bash
-git add package.json tsconfig.json .gitignore src/.gitkeep tests/.gitkeep bun.lockb
-git commit -m "feat(scaffold): bun + typescript strict project skeleton"
+# [devcontainer]
+find node_modules/@opencode-ai -name "*.d.ts" | head -50
 ```
 
-### Step 8: Draft PR 作成 [host]
+期待出力: `node_modules/@opencode-ai/plugin/dist/*.d.ts` などのパスが列挙される。
 
-- [ ] Step 8.1: Draft PR 作成
+- [ ] Step 7.2: Plugin 型と client.session.* の呼び出し形を抽出
+
+```bash
+# [devcontainer]
+grep -RnE "export (type|interface) Plugin\b|session\s*:\s*\{|prompt\s*\(" node_modules/@opencode-ai/plugin/dist/ | head -80
+```
+
+期待出力: `Plugin` 型 / `event` フックのシグネチャ / `client.session.prompt` (もしくは相当メソッド) の引数・戻り値型が確認できる。
+
+- [ ] Step 7.3: 抽出結果を `docs/SDK_NOTES.md` に記録
+
+```bash
+# [devcontainer]
+mkdir -p docs
+```
+
+`docs/SDK_NOTES.md` に以下のテンプレートで記入する。**「実測」欄が空のまま後続タスクへ進むことを禁止**。
+
+```markdown
+# @opencode-ai/plugin SDK Notes
+
+- 確認日: <YYYY-MM-DD>
+- 確認バージョン: <package.json の installed version>
+
+## Plugin エントリ型
+
+実測 (`grep` で得た定義をそのまま貼る):
+```ts
+// 例:
+// export type Plugin = (ctx: PluginContext) => Promise<PluginInstance>;
+// export interface PluginInstance { event?: (e: { event: OpenCodeEvent }) => Promise<void>; ... }
+```
+
+## client.session.prompt の呼び出し形
+
+実測:
+```ts
+// 例: client.session.prompt({ path: { id }, body: { parts } })
+```
+
+## イベント payload の sessionID / role 抽出パス
+
+実測 (message.updated / message.part.updated それぞれ):
+```ts
+// 例:
+// message.updated  → event.properties.info.role === "user", event.properties.info.sessionID
+// message.part.updated → event.properties.part.sessionID
+```
+```
+
+- [ ] Step 7.4: 記録内容と本プラン (Task 1.3 / Task 3.1) のベースライン記述に **差異があれば本プランを更新** すること。差異がなければプラン通りに進める。
+
+> **重要**: 本ステップは「型を見ずに書いたコードを CI 任せにしない」ためのゲート。後続タスクで SDK 形状起因の silent failure が発生した場合、ここをサボったことが原因。
+
+### Step 8: コミット [host]
+
+- [ ] Step 8.1: コミット
+
+```bash
+git add package.json tsconfig.json .gitignore src/.gitkeep tests/.gitkeep bun.lockb docs/SDK_NOTES.md
+git commit -m "feat(scaffold): bun + tsconfig strict + @opencode-ai/plugin + SDK notes"
+```
+
+### Step 9: Draft PR 作成 [host]
+
+- [ ] Step 9.1: Draft PR 作成
 
 ```bash
 git push -u origin feat/0-3-scaffold
 gh pr create --draft --base feat/0-2-ci --head feat/0-3-scaffold \
-  --title "feat(scaffold): bun + tsconfig strict skeleton" \
-  --body "Phase 0 stack #3. Sets up package.json, strict tsconfig, .gitignore. Common base branch for Phase 1 parallel tasks."
+  --title "feat(scaffold): bun + tsconfig + @opencode-ai/plugin baseline" \
+  --body "Phase 0 stack #3. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks."
 ```
 
-- [ ] Step 8.2: PR URL を記録。**この URL は Phase 1 の 4 タスクすべての前提条件となる。**
+- [ ] Step 9.2: PR URL を記録。**この URL は Task 1.1 の前提条件となる。**
 
 ---
 
-# Phase 1: Independent Modules (Parallel)
+# Phase 1: Independent Modules (Serial Stack)
 
-> **重要**: Phase 1 の Task 1.1 ～ 1.4 はすべて `feat/0-3-scaffold` から派生する **並列実行可能** タスク。各タスクは異なるファイルのみを作成するため衝突しない。
-> エージェントが並列で実行する場合は別々の git worktree (もしくは別 devcontainer 内チェックアウト) で作業すること。
+> **重要**: Phase 1 の Task 1.1 → 1.2 → 1.3 → 1.4 は **直列スタック** で実行する。各タスクは前タスクのブランチから派生し、Draft PR のスタックを形成する。
+> 並列化は採用しない (初版設計から方針変更)。理由は (a) 型レベルの整合を逐次タスクで担保しやすい、(b) Phase 2 Watchdog のために統合ブランチを別途用意する必要がない、(c) レビュアーが上流から順に確認できる。
 
 ## Task 1.1: Clock モジュール (DI 用時計抽象)
 
 - **派生元ブランチ**: `feat/0-3-scaffold`
-- **実行モード**: 並列可能 (独立)
+- **実行モード**: 直列必須 (Phase 1 起点 / Wait for Task 0.3)
 - **前提条件**: Task 0.3 の Draft PR URL が存在すること
-- **競合チェック**: 本タスクが触るファイルは `src/clock.ts` と `tests/clock.test.ts` のみ。Task 1.2〜1.4 と競合しない。
 
 **Files:**
 - Create: `src/clock.ts`
@@ -743,10 +810,9 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-1-clock \
 
 ## Task 1.2: Config モジュール
 
-- **派生元ブランチ**: `feat/0-3-scaffold`
-- **実行モード**: 並列可能 (独立)
-- **前提条件**: Task 0.3 の Draft PR URL が存在すること
-- **競合チェック**: 本タスクは `src/config.ts` / `tests/config.test.ts` のみを作成。Task 1.1/1.3/1.4 と競合しない。
+- **派生元ブランチ**: `feat/1-1-clock`
+- **実行モード**: 直列必須 (Wait for Task 1.1)
+- **前提条件**: Task 1.1 の Draft PR URL が存在すること
 
 **Files:**
 - Create: `src/config.ts`
@@ -758,7 +824,7 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-1-clock \
 
 ```bash
 # [host]
-git checkout feat/0-3-scaffold
+git checkout feat/1-1-clock
 git checkout -b feat/1-2-config
 ```
 
@@ -766,7 +832,7 @@ git checkout -b feat/1-2-config
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/0-3-scaffold"
+EXPECTED_BASE="feat/1-1-clock"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -1007,9 +1073,9 @@ git commit -m "feat(config): add env > project > defaults resolution with valida
 
 ```bash
 git push -u origin feat/1-2-config
-gh pr create --draft --base feat/0-3-scaffold --head feat/1-2-config \
+gh pr create --draft --base feat/1-1-clock --head feat/1-2-config \
   --title "feat(config): env > project > defaults with safe fallback" \
-  --body "Phase 1 parallel #2. Pure function config resolver per design §4."
+  --body "Phase 1 stack #2 (serial). Pure function config resolver per design §4."
 ```
 
 - [ ] Step 7.2: PR URL を記録
@@ -1018,10 +1084,11 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-2-config \
 
 ## Task 1.3: Pinger モジュール
 
-- **派生元ブランチ**: `feat/0-3-scaffold`
-- **実行モード**: 並列可能 (独立)
-- **前提条件**: Task 0.3 の Draft PR URL が存在すること
-- **競合チェック**: 本タスクは `src/pinger.ts` / `tests/pinger.test.ts` のみを作成。
+- **派生元ブランチ**: `feat/1-2-config`
+- **実行モード**: 直列必須 (Wait for Task 1.2)
+- **前提条件**:
+  - Task 1.2 の Draft PR URL が存在すること
+  - Task 0.3 の Step 7 で作成した `docs/SDK_NOTES.md` が **最新で埋まっている** こと (Plugin / client.session.* の実測形が記録済み)
 
 **Files:**
 - Create: `src/pinger.ts`
@@ -1033,7 +1100,7 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-2-config \
 
 ```bash
 # [host]
-git checkout feat/0-3-scaffold
+git checkout feat/1-2-config
 git checkout -b feat/1-3-pinger
 ```
 
@@ -1041,7 +1108,7 @@ git checkout -b feat/1-3-pinger
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/0-3-scaffold"
+EXPECTED_BASE="feat/1-2-config"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -1049,6 +1116,8 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 ```
 
 ### Step 2: 失敗するテストを書く [devcontainer]
+
+> **前提**: `docs/SDK_NOTES.md` に記録した `client.session.prompt` の引数形 (本プランのベースラインは `{ path: { id }, body: { parts } }`) に従ってテストを書く。実 SDK 型と差異があった場合は **SDK_NOTES の実測形を正** とし、本ステップのテスト/実装を併せて書き換える。
 
 - [ ] Step 2.1: `tests/pinger.test.ts` を作成
 
@@ -1074,21 +1143,24 @@ describe("MockPinger", () => {
 });
 
 describe("OpenCodeAdapter", () => {
-  test("delegates to client.session.prompt with sessionId and message parts", async () => {
-    const calls: Array<{ sessionId: string; parts: unknown }> = [];
+  test("delegates to client.session.prompt with { path: { id }, body: { parts } } shape", async () => {
+    const calls: Array<{ path: { id: string }; body: { parts: unknown[] } }> = [];
     const fakeClient = {
       session: {
-        prompt: async ({ sessionId, parts }: { sessionId: string; parts: unknown }) => {
-          calls.push({ sessionId, parts });
+        prompt: async (args: { path: { id: string }; body: { parts: unknown[] } }) => {
+          calls.push(args);
         },
       },
     };
     const adapter = new OpenCodeAdapter(fakeClient);
     await adapter.inject("sess-abc", "ping?");
     expect(calls.length).toBe(1);
-    expect(calls[0]!.sessionId).toBe("sess-abc");
-    // parts should be an array containing the message in some text-part shape
-    expect(Array.isArray(calls[0]!.parts)).toBe(true);
+    expect(calls[0]!.path.id).toBe("sess-abc");
+    expect(Array.isArray(calls[0]!.body.parts)).toBe(true);
+    // Each part should be a text part carrying the message
+    const firstPart = calls[0]!.body.parts[0] as { type: string; text: string };
+    expect(firstPart.type).toBe("text");
+    expect(firstPart.text).toBe("ping?");
   });
 
   test("does not throw when client method is missing (logs only)", async () => {
@@ -1137,11 +1209,11 @@ export class MockPinger implements Pinger {
   }
 }
 
-// Minimal shape we depend on. Replace with actual SDK type once @opencode-ai/plugin's
-// type definitions are inspected at integration time.
+// Shape derived from docs/SDK_NOTES.md. If the real SDK type from @opencode-ai/plugin
+// diverges, update SDK_NOTES first, then adjust here. The Pinger interface above is fixed.
 interface OpenCodeClientLike {
   session?: {
-    prompt?: (args: { sessionId: string; parts: unknown[] }) => Promise<unknown>;
+    prompt?: (args: { path: { id: string }; body: { parts: unknown[] } }) => Promise<unknown>;
   };
 }
 
@@ -1152,7 +1224,6 @@ export class OpenCodeAdapter implements Pinger {
     const client = this.client as OpenCodeClientLike;
     const prompt = client?.session?.prompt;
     if (typeof prompt !== "function") {
-      // SDK shape mismatch — log and swallow. Never throw across the boundary.
       console.warn(
         `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${sessionId}.`,
       );
@@ -1160,8 +1231,8 @@ export class OpenCodeAdapter implements Pinger {
     }
     try {
       await prompt({
-        sessionId,
-        parts: [{ type: "text", text: message }],
+        path: { id: sessionId },
+        body: { parts: [{ type: "text", text: message }] },
       });
     } catch (err) {
       console.warn(`[watchdog] Failed to inject ping to ${sessionId}:`, err);
@@ -1170,7 +1241,7 @@ export class OpenCodeAdapter implements Pinger {
 }
 ```
 
-> **NOTE**: 実 SDK メソッド名は `@opencode-ai/plugin` の型定義確認時に確定する。本実装は `client.session.prompt({ sessionId, parts })` 形式を暫定採用。実 API が `promptAsync` や `message` だった場合は `OpenCodeAdapter.inject` 内部のみ差し替える (インタフェースは変えない)。
+> **NOTE**: 引数形は `docs/SDK_NOTES.md` (Task 0.3 Step 7 で記録) を出典とする。実 SDK 型がレコードと異なる場合、SDK_NOTES を最新化したうえで本実装と上のテストの両方を差し替えること。Pinger インタフェース (`inject(sessionId, message)`) は SDK 形にかかわらず不変。
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
@@ -1205,9 +1276,9 @@ git commit -m "feat(pinger): add Pinger interface with MockPinger and OpenCodeAd
 
 ```bash
 git push -u origin feat/1-3-pinger
-gh pr create --draft --base feat/0-3-scaffold --head feat/1-3-pinger \
+gh pr create --draft --base feat/1-2-config --head feat/1-3-pinger \
   --title "feat(pinger): Pinger interface + MockPinger + OpenCodeAdapter" \
-  --body "Phase 1 parallel #3. Abstracts ping injection so watchdog core has no SDK dependency."
+  --body "Phase 1 stack #3 (serial). Abstracts ping injection so watchdog core has no SDK dependency. Uses SDK shape recorded in docs/SDK_NOTES.md."
 ```
 
 - [ ] Step 7.2: PR URL を記録
@@ -1216,10 +1287,9 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-3-pinger \
 
 ## Task 1.4: Notifier モジュール
 
-- **派生元ブランチ**: `feat/0-3-scaffold`
-- **実行モード**: 並列可能 (独立)
-- **前提条件**: Task 0.3 の Draft PR URL が存在すること
-- **競合チェック**: 本タスクは `src/notifier.ts` / `tests/notifier.test.ts` のみを作成。
+- **派生元ブランチ**: `feat/1-3-pinger`
+- **実行モード**: 直列必須 (Wait for Task 1.3)
+- **前提条件**: Task 1.3 の Draft PR URL が存在すること
 
 **Files:**
 - Create: `src/notifier.ts`
@@ -1231,7 +1301,7 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-3-pinger \
 
 ```bash
 # [host]
-git checkout feat/0-3-scaffold
+git checkout feat/1-3-pinger
 git checkout -b feat/1-4-notifier
 ```
 
@@ -1239,7 +1309,7 @@ git checkout -b feat/1-4-notifier
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/0-3-scaffold"
+EXPECTED_BASE="feat/1-3-pinger"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -1328,34 +1398,64 @@ describe("TmuxNotifier - actions", () => {
     notifier = new TmuxNotifier({ env: buildEnv(), spawn, which });
   });
 
-  test("notify(warn) calls display-message and yellow highlight", async () => {
-    await notifier.notify("sess-1", "warn", "idle 3 min");
-    const cmds = calls.map((c) => c.cmd);
-    expect(cmds).toContainEqual(["tmux", "display-message", expect.stringContaining("sess-1") as unknown as string]);
-    expect(cmds.some((c) => c.includes("set-window-option") && c.some((t) => t.includes("yellow")))).toBe(true);
+  // Notifier passes `message` verbatim. The watchdog caller is responsible for
+  // building design §5.2 mandated text; these tests assert verbatim pass-through
+  // with exact match (no implicit prefix or formatting by the notifier).
+
+  test("notify(warn) passes message verbatim and applies yellow highlight", async () => {
+    const exact = "[Watchdog] Agent sess-1 idle for 180000ms";
+    await notifier.notify("sess-1", "warn", exact);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    expect(displayCall).toBeDefined();
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(
+      calls.some(
+        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=yellow"),
+      ),
+    ).toBe(true);
   });
 
-  test("notify(critical) sets red highlight", async () => {
-    await notifier.notify("sess-1", "critical", "ping injected");
-    const cmds = calls.map((c) => c.cmd.join(" "));
-    expect(cmds.some((c) => c.includes("red"))).toBe(true);
+  test("notify(critical) passes message verbatim and applies red highlight", async () => {
+    const exact = "[Watchdog] Ping injected to sess-1";
+    await notifier.notify("sess-1", "critical", exact);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(
+      calls.some(
+        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
+      ),
+    ).toBe(true);
   });
 
-  test("notify(silenced) keeps red and shows max pings message", async () => {
-    await notifier.notify("sess-1", "silenced", "max pings");
-    const cmds = calls.map((c) => c.cmd.join(" "));
-    expect(cmds.some((c) => c.includes("max pings"))).toBe(true);
+  test("notify(silenced) passes message verbatim and keeps red highlight", async () => {
+    const exact = "[Watchdog] Max pings reached. Manual intervention required.";
+    await notifier.notify("sess-1", "silenced", exact);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(
+      calls.some(
+        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
+      ),
+    ).toBe(true);
   });
 
   test("clear() restores default window-status-current-style", async () => {
     await notifier.clear("sess-1");
-    const cmds = calls.map((c) => c.cmd.join(" "));
-    expect(cmds.some((c) => c.includes("set-window-option") && c.includes("default"))).toBe(true);
+    expect(
+      calls.some(
+        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("default"),
+      ),
+    ).toBe(true);
   });
 
   test("passes args as array (no shell injection risk)", async () => {
-    await notifier.notify("sess-1; rm -rf /", "warn", "danger");
-    // All cmd entries are arrays, sessionId stays in a single element
+    // sessionId-shaped attack surface must not be split into multiple shell tokens.
+    const malicious = "sess-1; rm -rf /";
+    const message = `[Watchdog] Agent ${malicious} idle for 180000ms`;
+    await notifier.notify(malicious, "warn", message);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    expect(displayCall!.cmd.length).toBe(3);
+    expect(displayCall!.cmd[2]).toBe(message);
     for (const c of calls) {
       expect(Array.isArray(c.cmd)).toBe(true);
     }
@@ -1422,10 +1522,15 @@ export class TmuxNotifier implements Notifier {
     this.log = deps.log ?? ((level, message) => console[level](`[watchdog] ${message}`));
   }
 
+  /**
+   * Renders `message` verbatim to tmux display-message and applies the stage-specific
+   * window highlight color. The caller is responsible for producing the design §5.2
+   * mandated text (e.g. "[Watchdog] Agent <sessionId> idle for <stage1Ms>ms").
+   * Notifier never prefixes or reformats the message.
+   */
   async notify(sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
-    const text = `[Watchdog/${stage}] ${sessionId}: ${message}`;
-    await this.safeSpawn(["tmux", "display-message", text]);
+    await this.safeSpawn(["tmux", "display-message", message]);
     await this.safeSpawn([
       "tmux",
       "set-window-option",
@@ -1528,110 +1633,12 @@ git commit -m "feat(notifier): add TmuxNotifier with 3-stage detection and color
 
 ```bash
 git push -u origin feat/1-4-notifier
-gh pr create --draft --base feat/0-3-scaffold --head feat/1-4-notifier \
+gh pr create --draft --base feat/1-3-pinger --head feat/1-4-notifier \
   --title "feat(notifier): TmuxNotifier with detect-then-cache and safe spawn" \
-  --body "Phase 1 parallel #4. tmux display-message + window highlight per design §5."
+  --body "Phase 1 stack #4 (serial). tmux display-message + window highlight per design §5."
 ```
 
 - [ ] Step 7.2: PR URL を記録
-
----
-
-# Phase 1.5: Integration Merge
-
-## Task 1.5: Phase 1 統合ブランチ
-
-- **派生元ブランチ**: `feat/0-3-scaffold`
-- **実行モード**: 直列必須 (Wait for Tasks 1.1, 1.2, 1.3, 1.4 のすべての Draft PR が存在すること)
-- **前提条件**:
-  - Task 1.1 の Draft PR URL が存在すること
-  - Task 1.2 の Draft PR URL が存在すること
-  - Task 1.3 の Draft PR URL が存在すること
-  - Task 1.4 の Draft PR URL が存在すること
-- **目的**: 並列で進めた Phase 1 の 4 ブランチを 1 本にまとめ、Phase 2 (Watchdog) の派生元を確定する。
-
-**Files:**
-- Modify: (マージのみ — 新規ファイル作成なし)
-
-### Step 1: ブランチ作成と検証 [devcontainer]
-
-- [ ] Step 1.1: 統合ブランチを作成
-
-```bash
-# [host]
-git fetch origin
-git checkout feat/0-3-scaffold
-git pull --ff-only origin feat/0-3-scaffold || true
-git checkout -b feat/1-5-integration
-```
-
-- [ ] Step 1.2: ポカヨケ実行 (派生元検証)
-
-```bash
-# [devcontainer]
-EXPECTED_BASE="feat/0-3-scaffold"
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
-  || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
-echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
-```
-
-### Step 2: Phase 1 の 4 ブランチを順次マージ [host]
-
-- [ ] Step 2.1: 各ブランチをマージ (順序は依存なしのため任意。コンフリクトは想定なし)
-
-```bash
-# [host]
-git merge --no-ff origin/feat/1-1-clock    -m "merge: integrate feat/1-1-clock"
-git merge --no-ff origin/feat/1-2-config   -m "merge: integrate feat/1-2-config"
-git merge --no-ff origin/feat/1-3-pinger   -m "merge: integrate feat/1-3-pinger"
-git merge --no-ff origin/feat/1-4-notifier -m "merge: integrate feat/1-4-notifier"
-```
-
-- [ ] Step 2.2: マージ後、各モジュールのファイルが揃っていることを確認
-
-```bash
-# [host]
-ls src/clock.ts src/config.ts src/pinger.ts src/notifier.ts
-ls tests/clock.test.ts tests/config.test.ts tests/pinger.test.ts tests/notifier.test.ts
-```
-
-期待出力: 全 8 ファイルが存在
-
-> **コンフリクト発生時**: いずれかのブランチが同じファイルを編集していた場合、人間オペレータに即座にエスカレートして手動解決。AI が自動で `git checkout --theirs`/`--ours` を実行することを **禁止**。
-
-### Step 3: 統合後の全テスト実行 [devcontainer]
-
-- [ ] Step 3.1: 全テスト走行
-
-```bash
-# [devcontainer]
-bun test
-```
-
-期待出力: Phase 1 全テスト (約 25-30 件) がパス、failure 0
-
-- [ ] Step 3.2: 型チェック全体
-
-```bash
-# [devcontainer]
-bun run typecheck
-```
-
-期待出力: エラーなし
-
-### Step 4: Draft PR 作成 [host]
-
-- [ ] Step 4.1: 統合ブランチを push し Draft PR を作成
-
-```bash
-git push -u origin feat/1-5-integration
-gh pr create --draft --base feat/0-3-scaffold --head feat/1-5-integration \
-  --title "chore(integration): merge phase 1 (clock/config/pinger/notifier)" \
-  --body "Stack manager branch. Combines all Phase 1 parallel work into a single base for Phase 2 watchdog."
-```
-
-- [ ] Step 4.2: PR URL を記録。**この URL は Task 2.1 の前提条件となる。**
 
 ---
 
@@ -1639,9 +1646,9 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-5-integration \
 
 ## Task 2.1: Watchdog 状態マシン + タイマー
 
-- **派生元ブランチ**: `feat/1-5-integration`
-- **実行モード**: 直列必須 (Wait for Task 1.5)
-- **前提条件**: Task 1.5 の Draft PR URL が存在すること
+- **派生元ブランチ**: `feat/1-4-notifier`
+- **実行モード**: 直列必須 (Wait for Task 1.4)
+- **前提条件**: Task 1.4 の Draft PR URL が存在すること
 
 **Files:**
 - Create: `src/watchdog.ts`
@@ -1653,7 +1660,7 @@ gh pr create --draft --base feat/0-3-scaffold --head feat/1-5-integration \
 
 ```bash
 # [host]
-git checkout feat/1-5-integration
+git checkout feat/1-4-notifier
 git checkout -b feat/2-1-watchdog
 ```
 
@@ -1661,7 +1668,7 @@ git checkout -b feat/2-1-watchdog
 
 ```bash
 # [devcontainer]
-EXPECTED_BASE="feat/1-5-integration"
+EXPECTED_BASE="feat/1-4-notifier"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
   || { echo "ERROR: 派生元ブランチが $EXPECTED_BASE ではありません。スタック構造が壊れています。"; exit 1; }
@@ -1821,15 +1828,30 @@ describe("Watchdog - lifecycle cleanup", () => {
     expect(notifier.notifies.length).toBe(0);
   });
 
-  test("activity after stop() does not auto-recreate timer for stale session", () => {
-    // stop() means lifecycle terminated. Subsequent activity SHOULD recreate
-    // (session is just a new burst). This validates onActivity is idempotent post-stop.
+  test("late message.part.updated after stop() is ignored (no timer rearm)", () => {
+    // Per design §7.3: "session.idle 後に message.part.updated を受信しても
+    // 新規タイマーが作られない (stop 時に sessionId を tombstone セットへ登録し、
+    // 後続の message.part.updated 側で抑止するため)".
+    // Stale events from a stopped session must not produce false positives.
     const { watchdog, clock, notifier } = setup();
     watchdog.onActivity("s1");
     watchdog.stop("s1");
-    watchdog.onActivity("s1"); // new burst
+    watchdog.onActivity("s1"); // simulated late part event
+    clock.advance(10_000);
+    expect(notifier.notifies.length).toBe(0);
+    expect(watchdog.activeSessionCount()).toBe(0);
+  });
+
+  test("onUserMessage after stop() re-arms (new burst is allowed via user input only)", () => {
+    // A fresh user prompt on a previously stopped session is legitimately a new burst.
+    // This is the documented re-entry point in design §3.4 (IDLE → message.updated role=user).
+    const { watchdog, clock, notifier } = setup();
+    watchdog.onActivity("s1");
+    watchdog.stop("s1");
+    watchdog.onUserMessage("s1"); // explicit user-driven re-entry
     clock.advance(1000);
     expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies[0]!.stage).toBe("warn");
   });
 });
 
@@ -1924,8 +1946,16 @@ export interface ActivityMeta {
   agentName?: string;
 }
 
+// FIFO-bounded tombstone set. Used to suppress late `message.part.updated`
+// events arriving after `session.idle/error/deleted` per design §7.3.
+// `onUserMessage` (fresh user input) explicitly clears the tombstone — that is
+// the documented re-entry point from IDLE → WATCHING in §3.4.
+const STOPPED_TOMBSTONE_CAPACITY = 10_000;
+
 export class Watchdog {
   private readonly sessions = new Map<string, SessionEntry>();
+  private readonly stoppedSessions = new Set<string>();
+  private readonly stoppedOrder: string[] = [];
   private readonly config: WatchdogConfig;
   private readonly clock: Clock;
   private readonly notifier: Notifier;
@@ -1950,15 +1980,37 @@ export class Watchdog {
   }
 
   /**
-   * User message confirmed — initial trigger.
-   * Treated identically to onActivity for state machine purposes.
+   * User message confirmed — initial trigger (design §3.4 IDLE → WATCHING).
+   * Clears any tombstone so a previously stopped session can be re-armed on
+   * fresh user input, then delegates to the same WATCHING entry creation as
+   * onActivity.
    */
   onUserMessage(sessionId: string, meta: ActivityMeta = {}): void {
-    this.onActivity(sessionId, meta);
+    this.clearTombstone(sessionId);
+    this.armOrReset(sessionId, meta);
   }
 
-  /** Any activity (message.part.updated or initial user message). */
+  /**
+   * Activity from `message.part.updated`. If the session is in the stopped
+   * tombstone set, the event is treated as stale and ignored (design §7.3).
+   */
   onActivity(sessionId: string, meta: ActivityMeta = {}): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    this.armOrReset(sessionId, meta);
+  }
+
+  /** Session terminated normally or with error. Tombstones the sessionId. */
+  stop(sessionId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (entry && entry.timer !== null) this.clock.clearTimeout(entry.timer);
+    this.sessions.delete(sessionId);
+    this.recordTombstone(sessionId);
+    this.notifier.clear(sessionId).catch((err) =>
+      this.log("warn", `notifier.clear failed: ${String(err)}`),
+    );
+  }
+
+  private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
     if (!this.isAgentMonitored(meta.agentName)) return;
 
@@ -1966,9 +2018,14 @@ export class Watchdog {
     if (existing && existing.timer !== null) {
       this.clock.clearTimeout(existing.timer);
     }
-    const entry: SessionEntry = existing
-      ? { ...existing, state: "WATCHING", timer: null }
-      : { state: "WATCHING", timer: null, pingCount: 0, agentName: meta.agentName };
+    // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
+    // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
+    const entry: SessionEntry = {
+      state: "WATCHING",
+      timer: null,
+      pingCount: 0,
+      agentName: meta.agentName ?? existing?.agentName,
+    };
 
     entry.timer = this.clock.setTimeout(() => {
       this.onStage1Expire(sessionId).catch((err) =>
@@ -1979,15 +2036,21 @@ export class Watchdog {
     this.sessions.set(sessionId, entry);
   }
 
-  /** Session terminated normally or with error. */
-  stop(sessionId: string): void {
-    const entry = this.sessions.get(sessionId);
-    if (!entry) return;
-    if (entry.timer !== null) this.clock.clearTimeout(entry.timer);
-    this.sessions.delete(sessionId);
-    this.notifier.clear(sessionId).catch((err) =>
-      this.log("warn", `notifier.clear failed: ${String(err)}`),
-    );
+  private recordTombstone(sessionId: string): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    this.stoppedSessions.add(sessionId);
+    this.stoppedOrder.push(sessionId);
+    while (this.stoppedOrder.length > STOPPED_TOMBSTONE_CAPACITY) {
+      const evicted = this.stoppedOrder.shift();
+      if (evicted !== undefined) this.stoppedSessions.delete(evicted);
+    }
+  }
+
+  private clearTombstone(sessionId: string): void {
+    if (!this.stoppedSessions.has(sessionId)) return;
+    this.stoppedSessions.delete(sessionId);
+    const idx = this.stoppedOrder.indexOf(sessionId);
+    if (idx >= 0) this.stoppedOrder.splice(idx, 1);
   }
 
   private async onStage1Expire(sessionId: string): Promise<void> {
@@ -1999,10 +2062,11 @@ export class Watchdog {
         this.log("warn", `stage2 handler failed: ${String(err)}`),
       );
     }, this.config.stage2Ms);
+    // Message text per design §5.2 (stage1 row).
     await this.notifier.notify(
       sessionId,
       "warn",
-      `idle for ${this.config.stage1Ms}ms`,
+      `[Watchdog] Agent ${sessionId} idle for ${this.config.stage1Ms}ms`,
     );
   }
 
@@ -2020,14 +2084,20 @@ export class Watchdog {
         );
       }, this.config.stage2Ms);
       await this.pinger.inject(sessionId, this.config.pingMessage);
-      await this.notifier.notify(sessionId, "critical", "ping injected");
+      // Message text per design §5.2 (stage2 row).
+      await this.notifier.notify(
+        sessionId,
+        "critical",
+        `[Watchdog] Ping injected to ${sessionId}`,
+      );
     } else {
       entry.state = "SILENCED";
       entry.timer = null;
+      // Message text per design §5.2 (SILENCED row).
       await this.notifier.notify(
         sessionId,
         "silenced",
-        "max pings reached. manual intervention required.",
+        "[Watchdog] Max pings reached. Manual intervention required.",
       );
     }
   }
@@ -2088,9 +2158,9 @@ git commit -m "feat(watchdog): add state machine with stage1/stage2 timers and m
 
 ```bash
 git push -u origin feat/2-1-watchdog
-gh pr create --draft --base feat/1-5-integration --head feat/2-1-watchdog \
-  --title "feat(watchdog): state machine + 2-stage timers + ping ceiling" \
-  --body "Phase 2. Core watchdog per design §3. Includes initial hang detection and empty session no-trigger guard."
+gh pr create --draft --base feat/1-4-notifier --head feat/2-1-watchdog \
+  --title "feat(watchdog): state machine + 2-stage timers + ping ceiling + tombstone" \
+  --body "Phase 2. Core watchdog per design §3. Includes initial hang detection, empty session no-trigger guard, pingCount reset on activity, and stoppedSessions tombstone for late events."
 ```
 
 - [ ] Step 7.2: PR URL を記録
@@ -2170,17 +2240,52 @@ describe("plugin entry smoke", () => {
     const instance = await (plugin as (ctx: unknown) => Promise<{
       event: (e: { event: unknown }) => Promise<void>;
     }>)(fakeContext);
-    // Should not throw on a typical event payload
+    // Should not throw on typical event payloads.
+    // Shapes follow docs/SDK_NOTES.md: message.part.updated nests sessionID
+    // inside `properties.part`, session.* events expose `properties.info`.
     await instance.event({
       event: {
         type: "message.part.updated",
-        properties: { sessionID: "s1" },
+        properties: { part: { sessionID: "s1" } },
       },
     });
     await instance.event({
       event: {
         type: "session.idle",
-        properties: { sessionID: "s1" },
+        properties: { info: { id: "s1" } },
+      },
+    });
+  });
+
+  test("message.updated with role=user triggers onUserMessage (initial hang trigger)", async () => {
+    let armed: { sessionId?: string; isUser?: boolean } = {};
+    const fakeContext = {
+      client: {
+        app: { log: async () => undefined },
+        session: { prompt: async () => undefined },
+      },
+      $: () => undefined,
+      directory: process.cwd(),
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin as (ctx: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+    }>)(fakeContext);
+
+    // Shape derived from SDK_NOTES: message.updated payload nests `info` with
+    // `role` and `sessionID` (or equivalent — adapt to SDK_NOTES if differs).
+    await instance.event({
+      event: {
+        type: "message.updated",
+        properties: { info: { role: "user", sessionID: "s-user" } },
+      },
+    });
+
+    // Non-user role MUST NOT trigger (assistant streaming is not initial input).
+    await instance.event({
+      event: {
+        type: "message.updated",
+        properties: { info: { role: "assistant", sessionID: "s-assistant" } },
       },
     });
   });
@@ -2200,6 +2305,13 @@ bun test tests/index.smoke.test.ts
 
 ### Step 4: プラグインエントリ実装 [devcontainer]
 
+> **前提**: `docs/SDK_NOTES.md` (Task 0.3 Step 7 で記録) を参照し、Plugin 型および event payload の sessionID/role 抽出パスを **実 SDK 型に合わせて確定** すること。本ベースラインでは:
+> - `message.updated` → `event.properties.info.role === "user"` / `event.properties.info.sessionID`
+> - `message.part.updated` → `event.properties.part.sessionID`
+> - `session.*` → `event.properties.info.id`
+>
+> SDK_NOTES と差異があった場合は SDK_NOTES の実測形を正として本実装と上の smoke test を併せて書き換える。
+
 - [ ] Step 4.1: `src/index.ts` を作成
 
 ```typescript
@@ -2209,26 +2321,30 @@ import { TmuxNotifier, bunSpawn, bunWhich, type Notifier } from "./notifier";
 import { OpenCodeAdapter, type Pinger } from "./pinger";
 import { Watchdog } from "./watchdog";
 
-interface OpenCodePluginContext {
-  client: {
-    app?: {
-      log?: (args: { level: "info" | "warn" | "error"; message: string }) => Promise<unknown>;
-    };
-    session?: {
-      prompt?: (args: { sessionId: string; parts: unknown[] }) => Promise<unknown>;
-    };
-  };
-  directory: string;
-  worktree: string;
+// Plugin 型は @opencode-ai/plugin の export を使うのが望ましい。
+// SDK_NOTES で確認した実 export 名に合わせて、以下のいずれかへ差し替える:
+//   import type { Plugin } from "@opencode-ai/plugin";
+//   import type { PluginContext, PluginInstance } from "@opencode-ai/plugin";
+// 実 SDK の Plugin 型が分かっている場合は下の local interface を削除し、
+// 実 SDK 型をそのまま import して使う。
+import type { Plugin } from "@opencode-ai/plugin";
+
+interface OpenCodeEventPropertiesInfo {
+  id?: string;
+  sessionID?: string;
+  role?: string;
+}
+
+interface OpenCodeEventPropertiesPart {
+  sessionID?: string;
 }
 
 interface OpenCodeEvent {
   type: string;
-  properties: Record<string, unknown> & { sessionID?: string };
-}
-
-interface PluginInstance {
-  event: (args: { event: OpenCodeEvent }) => Promise<void>;
+  properties: {
+    info?: OpenCodeEventPropertiesInfo;
+    part?: OpenCodeEventPropertiesPart;
+  };
 }
 
 async function loadProjectConfig(directory: string): Promise<Partial<WatchdogConfig>> {
@@ -2243,21 +2359,37 @@ async function loadProjectConfig(directory: string): Promise<Partial<WatchdogCon
   }
 }
 
-function logFactory(client: OpenCodePluginContext["client"]) {
+function logFactory(client: { app?: { log?: (args: { level: "info" | "warn" | "error"; message: string }) => Promise<unknown> } }) {
   return (level: "info" | "warn", message: string) => {
     client.app?.log?.({ level, message }).catch(() => undefined);
     console[level](`[watchdog] ${message}`);
   };
 }
 
-const plugin = async (ctx: OpenCodePluginContext): Promise<PluginInstance> => {
+function extractSessionId(event: OpenCodeEvent): string | undefined {
+  switch (event.type) {
+    case "message.updated":
+      return event.properties.info?.sessionID;
+    case "message.part.updated":
+      return event.properties.part?.sessionID;
+    case "session.created":
+    case "session.idle":
+    case "session.error":
+    case "session.deleted":
+      return event.properties.info?.id;
+    default:
+      return undefined;
+  }
+}
+
+const plugin: Plugin = async (ctx) => {
   const projectConfig = await loadProjectConfig(ctx.directory);
   const config = resolveConfig({
     project: projectConfig,
     env: process.env,
   });
 
-  const log = logFactory(ctx.client);
+  const log = logFactory(ctx.client as { app?: { log?: (args: { level: "info" | "warn" | "error"; message: string }) => Promise<unknown> } });
 
   if (!config.enabled) {
     log("info", "watchdog disabled via config; events will be ignored.");
@@ -2277,15 +2409,14 @@ const plugin = async (ctx: OpenCodePluginContext): Promise<PluginInstance> => {
   const watchdog = new Watchdog({ config, clock, notifier, pinger, log });
 
   return {
-    event: async ({ event }) => {
+    event: async ({ event }: { event: OpenCodeEvent }) => {
       try {
-        const sessionId = event.properties.sessionID;
-        if (!sessionId || typeof sessionId !== "string") return;
+        const sessionId = extractSessionId(event);
+        if (!sessionId) return;
 
         switch (event.type) {
           case "message.updated":
-            // role=user gating — payload shape inspected at integration time.
-            if ((event.properties.role ?? event.properties.message_role) === "user") {
+            if (event.properties.info?.role === "user") {
               watchdog.onUserMessage(sessionId);
             }
             break;
@@ -2301,7 +2432,6 @@ const plugin = async (ctx: OpenCodePluginContext): Promise<PluginInstance> => {
             watchdog.stop(sessionId);
             break;
           default:
-            // ignore other events
             break;
         }
       } catch (err) {
@@ -2314,6 +2444,8 @@ const plugin = async (ctx: OpenCodePluginContext): Promise<PluginInstance> => {
 export default plugin;
 ```
 
+> **NOTE**: `import type { Plugin } from "@opencode-ai/plugin"` が型エラーになる場合、SDK_NOTES の実測 export 名 (例: `PluginFactory` / `PluginEntry` 等) に差し替える。同様に `event` ハンドラの引数型も SDK 確定型に揃える。
+
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
 - [ ] Step 5.1: スモークテスト走行
@@ -2323,7 +2455,7 @@ export default plugin;
 bun test tests/index.smoke.test.ts
 ```
 
-期待出力: 3 テストパス
+期待出力: 4 テストパス
 
 - [ ] Step 5.2: 全テスト走行 (リグレッションチェック)
 
@@ -2592,3 +2724,15 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 - ✅ **ポカヨケ完全装着**: Task 0.1 ～ 3.2 すべての Step 1 に `git merge-base --is-ancestor` 検証スクリプトを変数展開済みで埋め込み
 - ✅ **Devcontainer 実行強制**: テスト・型チェック・ブランチ検証はすべて `[devcontainer]` でマーク (Task 0.1 のみ例外と明記)
 - ✅ **Draft PR チェーン**: 各 Task の最終ステップで Draft PR 作成、PR URL を後続タスクの前提条件として参照
+
+## 初版レビューを受けた追加修正 (v2)
+
+レビューを受けて以下の方針変更を計画書全体に反映済み:
+
+- ✅ **Phase 1 直列化**: 並列+統合ブランチ案を撤回。`0-3-scaffold → 1-1-clock → 1-2-config → 1-3-pinger → 1-4-notifier` の単一直列スタックに変更。Phase 1.5 (統合タスク) は削除。
+- ✅ **`@opencode-ai/plugin` を Phase 0 devDeps に追加**: Task 0.3 の package.json に追加。Task 0.3 Step 7 で `docs/SDK_NOTES.md` に SDK 型情報 (Plugin 型 / client.session.prompt の呼び出し形 / event payload の sessionID·role 抽出パス) を実測記録するゲートを追加。
+- ✅ **Pinger SDK 形を SDK_NOTES 出典に**: `client.session.prompt({ path: { id }, body: { parts } })` 形をベースラインとし、テスト/実装ともこの形に統一。Pinger インタフェース (`inject(sessionId, message)`) は SDK 形にかかわらず不変。
+- ✅ **event payload 抽出形を SDK_NOTES 出典に**: `message.updated` → `properties.info.role` / `properties.info.sessionID`、`message.part.updated` → `properties.part.sessionID`、`session.*` → `properties.info.id` をベースラインに採用。smoke test の fake event payload も同形に揃え、`import type { Plugin } from "@opencode-ai/plugin"` を採用。
+- ✅ **pingCount リセット**: `armOrReset` 内で常に `pingCount: 0` を新エントリに設定。SILENCED → activity 復帰時の Ping 再注入余地を再確保 (design §3.4)。
+- ✅ **stop 後の遅延 message.part.updated は無視**: FIFO 上限 10,000 の `stoppedSessions` tombstone を追加。`onActivity` は tombstone にヒットしたら即 return。`onUserMessage` は tombstone を明示的にクリアして再アーム (design §3.4 IDLE → WATCHING re-entry)。テストも「再作成しない」「user message で再アーム」の 2 本に書き換え。
+- ✅ **`ubuntu-slim` 注記更新**: 「組織カスタムランナー想定」を削除し「GitHub-hosted の最小 runner。実 tmux 結合テスト追加時は `ubuntu-latest` 再評価」へ書き換え。

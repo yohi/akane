@@ -131,8 +131,8 @@ session.idle / session.error / session.deleted
         ┌──────┐
         │ IDLE │  ← 初期状態 (Map にエントリ無し / タイマー無し)
         └──┬───┘
-           │ message.updated (role=user)   ※初期タイマー起動トリガ
-           │ または message.part.updated   ※既存セッションでの再活性
+           │ message.updated (role=user)   ※初期タイマー起動トリガ / post-stop の再アーム
+           │ または message.part.updated   ※未停止セッションでの再活性のみ (post-stop は抑止)
            ▼
                     activity
         ┌──────────────────────────────────────┐
@@ -157,6 +157,8 @@ session.idle / session.error / session.deleted
 ```
 
 **IDLE 状態の意味**: `Map<sessionId, ...>` にエントリが存在しない状態。タイマーは存在しない。`message.updated (role=user)` を初回受信した時点で WATCHING へ遷移し、エントリと stage1 タイマーが生成される。これにより、**初回チャンクを一度も受信せずにハングするケース (初期ハング) が stage1 タイマーの満了で検知可能** となる。
+
+**IDLE への post-stop 抑止 (§7.3 の補足)**: `session.idle / session.error / session.deleted` を受信して IDLE へ遷移した sessionId は、後続の `message.part.updated` (遅延配信された stale event) では **再アームしない**。再アームは `message.updated (role=user)` (= 新規ユーザー入力) を受信した場合に限る。これは §7.3 の必須アサーション「`session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない」を satisfy するための制約で、実装上は stop された sessionId を tombstone セットに記録して `message.part.updated` 側で抑止し、`message.updated (role=user)` 側で tombstone を解除する。
 
 ---
 
@@ -306,7 +308,7 @@ export class MockPinger implements Pinger {
 ### 7.3 必須アサーション
 
 - `message.part.updated` を N 回連続で受け取っても、Map 内のタイマーは常に 1 つだけ。
-- `session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない (Map から削除済みのため)。
+- `session.idle` 後に `message.part.updated` を受信しても新規タイマーが作られない (stop 時に sessionId を tombstone セットへ登録し、後続の `message.part.updated` 側で抑止するため。Map 削除だけでは `onActivity` 経由で再エントリが生成されるため不十分。詳細は §3.4 「IDLE への post-stop 抑止」を参照)。
 - `maxPings = 1` の設定で stage2 を 2 度連続発火させても、`pinger.inject` の呼び出しは 1 回のみ。
 - Tmux 検出失敗時に notifier を呼んでもプロセスが落ちない。
 - **初期ハング検知**: `message.updated (role=user)` のみを受信し、その後一切 `message.part.updated` が来ない状態で stage1Ms が経過した場合、`notifier.notify` が呼ばれること。さらに stage2Ms 経過で `pinger.inject` が 1 回呼ばれること。
