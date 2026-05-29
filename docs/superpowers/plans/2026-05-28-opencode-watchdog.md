@@ -2972,7 +2972,7 @@ nmcli networking on 2>/dev/null || networksetup -setairportpower en0 on 2>/dev/n
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add tests/stress.test.ts
@@ -2981,7 +2981,7 @@ git commit -m "test(stress): 1000-session leak check + initial-hang + empty-sess
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/12)
 
 ```bash
 git push -u origin feat/3-2-stress-test
@@ -2990,7 +2990,7 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
   --body "Phase 3 stack #2. Stress test for memory/timer leaks and acceptance criteria §10. Manual deployment verification (§10.1) results to be appended to this PR body before promotion to Ready for review."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #12 (https://github.com/yohi/akane/pull/12)
 
 ---
 
