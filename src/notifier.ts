@@ -38,9 +38,9 @@ export class TmuxNotifier implements Notifier {
    */
   async notify(sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
-    await this.safeSpawn(["tmux", "display-message", message]);
+    await this.safeSpawn([this.tmuxPath, "display-message", message]);
     await this.safeSpawn([
-      "tmux",
+      this.tmuxPath,
       "set-window-option",
       "window-status-current-style",
       STYLE_BY_STAGE[stage],
@@ -50,7 +50,7 @@ export class TmuxNotifier implements Notifier {
   async clear(sessionId: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
     await this.safeSpawn([
-      "tmux",
+      this.tmuxPath,
       "set-window-option",
       "window-status-current-style",
       "default",
@@ -73,7 +73,8 @@ export class TmuxNotifier implements Notifier {
       this.log("info", "tmux binary not found in PATH.");
       return false;
     }
-    const probe = await this.safeSpawn(["tmux", "display-message", "-p", "#{session_name}"]);
+    this.tmuxPath = path;
+    const probe = await this.safeSpawn([this.tmuxPath, "display-message", "-p", "#{session_name}"]);
     if (!probe || probe.exitCode !== 0) {
       this.detection = "disabled";
       this.log("info", "tmux probe failed; disabling tmux integration.");

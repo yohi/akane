@@ -988,7 +988,7 @@ bun test tests/config.test.ts
 
 - [x] Step 4.1: `src/config.ts` を作成
 
-> **Note**: This snippet reflects the final implementation. `parsePositiveInt` and `validateNumber` reject zero and non-integers (where applicable), `parseBool` accepts a `warn` parameter and emits warnings, and `ConfigSources` correctly uses `Omit` to handle partial overrides for nested objects.
+> **Note**: This snippet shows the target implementation including validation improvements. `parsePositiveInt` and `validateNumber` reject zero and non-integers (where applicable), `parseBool` accepts a `warn` parameter and emits warnings, and `ConfigSources` correctly uses `Omit` to handle partial overrides for nested objects.
 
 ```typescript
 export interface WatchdogConfig {

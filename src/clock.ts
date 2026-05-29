@@ -27,6 +27,11 @@ export class FakeClock implements Clock {
   private timers: FakeTimer[] = [];
 
   setTimeout(callback: () => void, ms: number): TimerHandle {
+    ms = Number(ms);
+    if (!isFinite(ms)) {
+      throw new RangeError(`FakeClock.setTimeout: ms must be finite, got ${ms}`);
+    }
+    ms = Math.max(0, ms);
     const timer: FakeTimer = { fireAt: this.now + ms, callback, cancelled: false };
     this.timers.push(timer);
     return timer;

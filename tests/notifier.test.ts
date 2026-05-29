@@ -48,7 +48,7 @@ describe("TmuxNotifier - detection", () => {
 
   test("disables tmux when dry-run probe fails", async () => {
     const { spawn, calls } = buildSpawn({
-      "tmux display-message -p #{session_name}": { exitCode: 1 },
+      "/usr/bin/tmux display-message -p #{session_name}": { exitCode: 1 },
     });
     const which: WhichFn = () => "/usr/bin/tmux";
     const n = new TmuxNotifier({ env: buildEnv(), spawn, which });
@@ -66,7 +66,7 @@ describe("TmuxNotifier - actions", () => {
 
   beforeEach(() => {
     plan = {
-      "tmux display-message -p #{session_name}": { exitCode: 0, stdout: "main" },
+      "/usr/bin/tmux display-message -p #{session_name}": { exitCode: 0, stdout: "main" },
     };
     const built = buildSpawn(plan);
     spawn = built.spawn;
@@ -84,7 +84,7 @@ describe("TmuxNotifier - actions", () => {
     await notifier.notify("sess-1", "warn", exact);
     const displayCall = calls.find((c) => c.cmd.length === 3 && c.cmd[1] === "display-message");
     expect(displayCall).toBeDefined();
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(displayCall!.cmd).toEqual(["/usr/bin/tmux", "display-message", exact]);
     expect(
       calls.some(
         (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=yellow"),
@@ -96,7 +96,7 @@ describe("TmuxNotifier - actions", () => {
     const exact = "[Watchdog] Ping injected to sess-1";
     await notifier.notify("sess-1", "critical", exact);
     const displayCall = calls.find((c) => c.cmd.length === 3 && c.cmd[1] === "display-message");
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(displayCall!.cmd).toEqual(["/usr/bin/tmux", "display-message", exact]);
     expect(
       calls.some(
         (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
@@ -108,7 +108,7 @@ describe("TmuxNotifier - actions", () => {
     const exact = "[Watchdog] Max pings reached. Manual intervention required.";
     await notifier.notify("sess-1", "silenced", exact);
     const displayCall = calls.find((c) => c.cmd.length === 3 && c.cmd[1] === "display-message");
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(displayCall!.cmd).toEqual(["/usr/bin/tmux", "display-message", exact]);
     expect(
       calls.some(
         (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
