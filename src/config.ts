@@ -44,7 +44,7 @@ function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn):
   if (value === undefined) return undefined;
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
-    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
+    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
     return undefined;
   }
   return n;
@@ -55,7 +55,7 @@ function parseBool(value: string | undefined, key: string, warn: WarnFn): boolea
   const lower = value.toLowerCase();
   if (lower === "true" || lower === "yes" || lower === "1") return true;
   if (lower === "false" || lower === "no" || lower === "0") return false;
-  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
 
@@ -63,10 +63,15 @@ function validateNumber(
   value: number | undefined,
   key: string,
   warn: WarnFn,
+  requireInteger = false,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value <= 0) {
-    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to default.`);
+  if (
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    (requireInteger && !Number.isInteger(value))
+  ) {
+    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to lower-priority source.`);
     return undefined;
   }
   return value;
@@ -84,9 +89,9 @@ export function resolveConfig(
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
 
-  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn);
-  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn);
-  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn);
+  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
+  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
+  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
   return {
     enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,
