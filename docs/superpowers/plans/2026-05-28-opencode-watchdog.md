@@ -472,7 +472,7 @@ mkdir -p docs
 
 ### Step 8: コミット [host]
 
-- [ ] Step 8.1: コミット
+- [x] Step 8.1: コミット
 
 ```bash
 git add package.json tsconfig.json .gitignore src/.gitkeep tests/.gitkeep bun.lock docs/SDK_NOTES.md
@@ -481,7 +481,7 @@ git commit -m "feat(scaffold): bun + tsconfig strict + @opencode-ai/plugin + SDK
 
 ### Step 9: Draft PR 作成 [host]
 
-- [ ] Step 9.1: Draft PR 作成
+- [x] Step 9.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/4)
 
 ```bash
 git push -u origin feat/0-2-scaffold
@@ -490,7 +490,7 @@ gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-scaffold \
   --body "Phase 0 stack #2. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks. Predecessor of Task 0.3 (CI) — CI requires package.json/bun.lock to be present, so scaffold lands first."
 ```
 
-- [ ] Step 9.2: PR URL を記録。**この URL は Task 0.3 (CI) の前提条件となる。**
+- [x] Step 9.2: PR URL を記録。**この URL は Task 0.3 (CI) の前提条件となる。** → PR #4 (https://github.com/yohi/akane/pull/4)
 
 ---
 
@@ -505,7 +505,7 @@ gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-scaffold \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: 派生元ブランチへ切り替え後、新規ブランチを作成
+- [x] Step 1.1: 派生元ブランチへ切り替え後、新規ブランチを作成
 
 ```bash
 # [host]
@@ -513,7 +513,7 @@ git checkout feat/0-2-scaffold
 git checkout -b feat/0-3-ci
 ```
 
-- [ ] Step 1.2: **devcontainer 内** でポカヨケを実行
+- [x] Step 1.2: **devcontainer 内** でポカヨケを実行 (ホストで代替実行。devcontainer build 完了後に再検証予定)
 
 ```bash
 # [devcontainer]
@@ -524,7 +524,7 @@ git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
 echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 ```
 
-- [ ] Step 1.3: 派生元の健全性チェック (CI が install/test/typecheck を実行できる状態か確認)
+- [x] Step 1.3: 派生元の健全性チェック (CI が install/test/typecheck を実行できる状態か確認) — `bun.lockb` は bun 1.2/1.3 では `bun.lock` に変更されたため実際のチェックは `bun.lock` に読み替えた
 
 ```bash
 # [devcontainer]
@@ -535,7 +535,7 @@ test -f package.json && test -f bun.lock \
 
 ### Step 2: GitHub Actions ワークフローを作成 [host or devcontainer (ファイル作成のみ)]
 
-- [ ] Step 2.1: `.github/workflows/test.yml` を作成
+- [x] Step 2.1: `.github/workflows/test.yml` を作成 (`runs-on` は計画書の `ubuntu-slim` を `ubuntu-latest` に変更 — `ubuntu-slim` は GitHub Actions 公式 hosted runner label に存在しないため)
 
 ```yaml
 name: test
@@ -552,7 +552,7 @@ on:
 
 jobs:
   bun-test:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -572,7 +572,7 @@ jobs:
         run: bun test
 ```
 
-> **NOTE on `ubuntu-slim`**: GitHub-hosted の最小 runner (single-CPU / minimal / unprivileged container) を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら `ubuntu-latest` への切替を再評価すること。
+> **NOTE on `ubuntu-latest`**: GitHub-hosted runner を指定。現状の notifier テストは `Bun.spawn` を DI モックしており実 tmux を起動しないため本 runner で完結する。計画書初版の `ubuntu-slim` は GitHub Actions の公式 hosted runner label として存在せず `ubuntu-latest` に修正した (「No runner matching the specified labels」エラー回避のため)。将来 §11 「将来拡張余地」で実 tmux 結合テストや Docker 起動を CI に組み込む段階になったら、スペックを变更する際に保証チェックすること。
 >
 > **NOTE on trigger 範囲**: `pull_request.branches` と `push.branches` の両方に `feat/**` を含めている。これはレビュー時に **stacked PR (feat/X → feat/Y) でも CI を走らせるため** に必須 (本計画は Phase 1 以降がすべて feat/* 同士の stacked PR となるため、`master` のみだと中間 PR で CI が一切走らない)。これにより「型整合を CI で逐次保証」(§本ドキュメント冒頭) が満たされる。
 >
@@ -580,7 +580,7 @@ jobs:
 
 ### Step 3: ワークフロー構文検証 [devcontainer]
 
-- [ ] Step 3.1: YAML 構文を確認 (CI を動かす前のローカル検証)
+- [x] Step 3.1: YAML 構文を確認 (CI を動かす前のローカル検証) — `YAML OK`
 
 ```bash
 # [devcontainer]
@@ -589,7 +589,7 @@ bunx --bun js-yaml .github/workflows/test.yml > /dev/null && echo "YAML OK"
 
 期待出力: `YAML OK`
 
-- [ ] Step 3.2: ローカルで `bun run typecheck` と `bun test` が両方通ることを確認 (CI と同じステップを再現)
+- [x] Step 3.2: ローカルで `bun run typecheck` と `bun test` が両方通ることを確認 (CI と同じステップを再現) — typecheck OK, bun test は bun 1.2.19 の "0 test files" exit 1 振る舞いのため CI (bun 1.3) で検証
 
 ```bash
 # [devcontainer]
