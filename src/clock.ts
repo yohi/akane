@@ -47,6 +47,10 @@ export class FakeClock implements Clock {
   }
 
   advance(ms: number): void {
+    ms = Number(ms);
+    if (!Number.isFinite(ms) || ms < 0) {
+      throw new RangeError(`FakeClock.advance requires a finite non-negative ms, got: ${ms}`);
+    }
     const targetTime = this.now + ms;
     // Process timers in deadline order until target reached
     // Loop until no more eligible timers (handles callbacks scheduling new timers)

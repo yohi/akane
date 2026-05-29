@@ -24,6 +24,7 @@ const STYLE_BY_STAGE: Record<NotifierStage, string> = {
 
 export class TmuxNotifier implements Notifier {
   private detection: "unknown" | "ok" | "disabled" = "unknown";
+  private tmuxPath: string = "tmux";
   private readonly log: (level: "warn" | "info", message: string) => void;
 
   constructor(private readonly deps: TmuxNotifierDeps) {
