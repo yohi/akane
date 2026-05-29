@@ -1678,7 +1678,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/notifier.ts tests/notifier.test.ts
@@ -1687,7 +1687,7 @@ git commit -m "feat(notifier): add TmuxNotifier with 3-stage detection and color
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/9)
 
 ```bash
 git push -u origin feat/1-4-notifier
@@ -1696,7 +1696,7 @@ gh pr create --draft --base feat/1-3-pinger --head feat/1-4-notifier \
   --body "Phase 1 stack #4 (serial). tmux display-message + window highlight per design §5."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #9 (https://github.com/yohi/akane/pull/9)
 
 ---
 
@@ -1714,7 +1714,7 @@ gh pr create --draft --base feat/1-3-pinger --head feat/1-4-notifier \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -1722,7 +1722,7 @@ git checkout feat/1-4-notifier
 git checkout -b feat/2-1-watchdog
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -1733,7 +1733,7 @@ git merge-base --is-ancestor "$EXPECTED_BASE" HEAD \
 echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 ```
 
-- [ ] Step 1.3: Phase 1 のファイルが揃っていることを確認 (派生元の健全性チェック)
+- [x] Step 1.3: Phase 1 のファイルが揃っていることを確認 (派生元の健全性チェック) — OK: Phase 1 modules present
 
 ```bash
 # [devcontainer]
@@ -1744,7 +1744,7 @@ test -f src/clock.ts && test -f src/config.ts && test -f src/pinger.ts && test -
 
 ### Step 2: 失敗するテストを書く (基本遷移) [devcontainer]
 
-- [ ] Step 2.1: `tests/watchdog.test.ts` を作成
+- [x] Step 2.1: `tests/watchdog.test.ts` を作成
 
 ```typescript
 import { describe, test, expect, beforeEach } from "bun:test";
@@ -1965,7 +1965,7 @@ describe("Watchdog - agent filtering", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (モジュール未存在エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -1976,7 +1976,7 @@ bun test tests/watchdog.test.ts
 
 ### Step 4: Watchdog 実装 [devcontainer]
 
-- [ ] Step 4.1: `src/watchdog.ts` を作成
+- [x] Step 4.1: `src/watchdog.ts` を作成
 
 ```typescript
 import type { Clock, TimerHandle } from "./clock";
@@ -2187,7 +2187,7 @@ export class Watchdog {
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`14 pass, 0 fail` — 期待約 13 件を上回る)
 
 ```bash
 # [devcontainer]
@@ -2198,14 +2198,14 @@ bun test tests/watchdog.test.ts
 
 > **失敗した場合**: 即座に `superpowers:systematic-debugging` スキルを起動し、Watchdog 単一テストを 1 件ずつ分離して原因を切り分ける。実装を後付けで膨らませず、最小の修正で通すこと。
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
 bun run typecheck
 ```
 
-- [ ] Step 5.3: Phase 1 のテストもまだ通ることを確認 (リグレッションチェック)
+- [x] Step 5.3: Phase 1 のテストもまだ通ることを確認 (リグレッションチェック) — 累計 41 pass, 0 fail
 
 ```bash
 # [devcontainer]
