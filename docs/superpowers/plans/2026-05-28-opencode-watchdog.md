@@ -131,7 +131,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 > **注意**: Task 0.1 は devcontainer 自体を作成するタスクのため、検証は **ホスト**で実行する (例外)。Task 0.2 以降はすべて devcontainer 内で検証する。
 
-- [ ] Step 1.1: ブランチを作成し master から派生していることを検証
+- [x] Step 1.1: ブランチを作成し master から派生していることを検証
 
 ```bash
 # ホストで実行
@@ -148,7 +148,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: Dockerfile を作成 [host]
 
-- [ ] Step 2.1: `.devcontainer/Dockerfile` を作成
+- [x] Step 2.1: `.devcontainer/Dockerfile` を作成
 
 ```dockerfile
 FROM mcr.microsoft.com/devcontainers/base:debian-12
@@ -167,7 +167,7 @@ WORKDIR /workspaces
 
 ### Step 3: devcontainer.json を作成 [host]
 
-- [ ] Step 3.1: `.devcontainer/devcontainer.json` を作成
+- [x] Step 3.1: `.devcontainer/devcontainer.json` を作成
 
 ```json
 {
@@ -202,7 +202,7 @@ WORKDIR /workspaces
 
 ### Step 4: postCreate.sh を作成 [host]
 
-- [ ] Step 4.1: `.devcontainer/postCreate.sh` を作成
+- [x] Step 4.1: `.devcontainer/postCreate.sh` を作成
 
 ```bash
 #!/usr/bin/env bash
@@ -222,7 +222,7 @@ fi
 echo "[postCreate] Done."
 ```
 
-- [ ] Step 4.2: 実行権限を付与
+- [x] Step 4.2: 実行権限を付与
 
 ```bash
 # [host]
@@ -231,7 +231,7 @@ chmod +x .devcontainer/postCreate.sh
 
 ### Step 5: ローカルで devcontainer を立ち上げて動作確認 [host]
 
-- [ ] Step 5.1: VSCode / `devcontainer CLI` で devcontainer を起動し、postCreate が exit 0 で完了することを確認
+- [ ] Step 5.1: VSCode / `devcontainer CLI` で devcontainer を起動し、postCreate が exit 0 で完了することを確認 (Deferred: image pull in progress)
 
 ```bash
 # host (devcontainer CLI 使用例)
@@ -242,7 +242,7 @@ devcontainer up --workspace-folder . || echo "VSCode の Reopen in Container で
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add .devcontainer/
@@ -251,7 +251,7 @@ git commit -m "feat(devcontainer): add Debian 12 + Bun 1.3 + tmux base"
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: master 向けに Draft PR を作成し URL を記録
+- [x] Step 7.1: master 向けに Draft PR を作成し URL を記録 (PR: https://github.com/yohi/akane/pull/3)
 
 ```bash
 git push -u origin feat/0-1-devcontainer
@@ -260,7 +260,7 @@ gh pr create --draft --base master --head feat/0-1-devcontainer \
   --body "Phase 0 foundation. Sets up reproducible dev environment per design §8."
 ```
 
-- [ ] Step 7.2: 出力された PR URL を本ファイルか TaskList のメモに **記録** すること。後続タスクの `前提条件` として参照される。
+- [x] Step 7.2: 出力された PR URL を本ファイルか TaskList のメモに **記録** すること。後続タスクの `前提条件` として参照される。 → PR #3 (https://github.com/yohi/akane/pull/3)
 
 ---
 
