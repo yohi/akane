@@ -2216,7 +2216,7 @@ bun test
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/watchdog.ts tests/watchdog.test.ts
@@ -2225,7 +2225,7 @@ git commit -m "feat(watchdog): add state machine with stage1/stage2 timers and m
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/10)
 
 ```bash
 git push -u origin feat/2-1-watchdog
@@ -2234,7 +2234,7 @@ gh pr create --draft --base feat/1-4-notifier --head feat/2-1-watchdog \
   --body "Phase 2. Core watchdog per design §3. Includes initial hang detection, empty session no-trigger guard, pingCount reset on activity, and stoppedSessions tombstone for late events."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #10 (https://github.com/yohi/akane/pull/10)
 
 ---
 
