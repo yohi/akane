@@ -101,9 +101,11 @@ export class Watchdog {
 
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
-    if (!this.isAgentMonitored(meta.agentName)) return;
 
     const existing = this.sessions.get(sessionId);
+    const effectiveName = meta.agentName ?? existing?.agentName;
+    if (!this.isAgentMonitored(effectiveName)) return;
+
     if (existing && existing.timer !== null) {
       this.clock.clearTimeout(existing.timer);
     }
@@ -118,7 +120,7 @@ export class Watchdog {
       state: "WATCHING",
       timer: null,
       pingCount: 0,
-      agentName: meta.agentName ?? existing?.agentName,
+      agentName: effectiveName,
     };
 
     entry.timer = this.clock.setTimeout(() => {
