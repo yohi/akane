@@ -33,7 +33,6 @@ const STOPPED_TOMBSTONE_CAPACITY = 10_000;
 export class Watchdog {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly stoppedSessions = new Set<string>();
-  private readonly stoppedOrder: string[] = [];
   private readonly config: WatchdogConfig;
   private readonly clock: Clock;
   private readonly notifier: Notifier;
@@ -102,11 +101,18 @@ export class Watchdog {
 
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
-    if (!this.isAgentMonitored(meta.agentName)) return;
 
     const existing = this.sessions.get(sessionId);
+    const effectiveName = meta.agentName ?? existing?.agentName;
+    if (!this.isAgentMonitored(effectiveName)) return;
+
     if (existing && existing.timer !== null) {
       this.clock.clearTimeout(existing.timer);
+    }
+    if (existing && existing.state !== "WATCHING") {
+      this.notifier.clear(sessionId).catch((err) =>
+        this.log("warn", `notifier.clear on reset failed: ${String(err)}`),
+      );
     }
     // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
     // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
@@ -114,7 +120,7 @@ export class Watchdog {
       state: "WATCHING",
       timer: null,
       pingCount: 0,
-      agentName: meta.agentName ?? existing?.agentName,
+      agentName: effectiveName,
     };
 
     entry.timer = this.clock.setTimeout(() => {
@@ -129,18 +135,14 @@ export class Watchdog {
   private recordTombstone(sessionId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
     this.stoppedSessions.add(sessionId);
-    this.stoppedOrder.push(sessionId);
-    while (this.stoppedOrder.length > STOPPED_TOMBSTONE_CAPACITY) {
-      const evicted = this.stoppedOrder.shift();
-      if (evicted !== undefined) this.stoppedSessions.delete(evicted);
+    if (this.stoppedSessions.size > STOPPED_TOMBSTONE_CAPACITY) {
+      const oldest = this.stoppedSessions.keys().next().value;
+      if (oldest !== undefined) this.stoppedSessions.delete(oldest);
     }
   }
 
   private clearTombstone(sessionId: string): void {
-    if (!this.stoppedSessions.has(sessionId)) return;
     this.stoppedSessions.delete(sessionId);
-    const idx = this.stoppedOrder.indexOf(sessionId);
-    if (idx >= 0) this.stoppedOrder.splice(idx, 1);
   }
 
   private async onStage1Expire(sessionId: string): Promise<void> {
@@ -174,6 +176,7 @@ export class Watchdog {
         );
       }, this.config.stage2Ms);
       await this.pinger.inject(sessionId, this.config.pingMessage);
+      if (!this.sessions.has(sessionId)) return;
       // Message text per design §5.2 (stage2 row).
       await this.notifier.notify(
         sessionId,
@@ -202,3 +205,4 @@ export class Watchdog {
     return true;
   }
 }
+
