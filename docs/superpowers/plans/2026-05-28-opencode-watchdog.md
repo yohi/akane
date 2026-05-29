@@ -1129,7 +1129,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/config.ts tests/config.test.ts
@@ -1138,7 +1138,7 @@ git commit -m "feat(config): add env > project > defaults resolution with valida
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/7)
 
 ```bash
 git push -u origin feat/1-2-config
@@ -1147,7 +1147,7 @@ gh pr create --draft --base feat/1-1-clock --head feat/1-2-config \
   --body "Phase 1 stack #2 (serial). Pure function config resolver per design §4."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #7 (https://github.com/yohi/akane/pull/7)
 
 ---
 
@@ -1165,7 +1165,7 @@ gh pr create --draft --base feat/1-1-clock --head feat/1-2-config \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -1173,7 +1173,7 @@ git checkout feat/1-2-config
 git checkout -b feat/1-3-pinger
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -1188,7 +1188,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 > **前提**: `docs/SDK_NOTES.md` に記録した `client.session.prompt` の引数形 (本プランのベースラインは `{ path: { id }, body: { parts } }`) に従ってテストを書く。実 SDK 型と差異があった場合は **SDK_NOTES の実測形を正** とし、本ステップのテスト/実装を併せて書き換える。
 
-- [ ] Step 2.1: `tests/pinger.test.ts` を作成
+- [x] Step 2.1: `tests/pinger.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -1253,7 +1253,7 @@ describe("OpenCodeAdapter", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (モジュール未存在エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -1264,7 +1264,7 @@ bun test tests/pinger.test.ts
 
 ### Step 4: 最小実装 [devcontainer]
 
-- [ ] Step 4.1: `src/pinger.ts` を作成
+- [x] Step 4.1: `src/pinger.ts` を作成
 
 ```typescript
 export interface Pinger {
@@ -1314,7 +1314,7 @@ export class OpenCodeAdapter implements Pinger {
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`5 pass, 0 fail`)
 
 ```bash
 # [devcontainer]
@@ -1323,7 +1323,7 @@ bun test tests/pinger.test.ts
 
 期待出力: `5 pass, 0 fail`
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
