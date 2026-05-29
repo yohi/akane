@@ -34,20 +34,35 @@ export class FakeClock implements Clock {
 
   clearTimeout(handle: TimerHandle): void {
     const timer = handle as FakeTimer | undefined;
-    if (timer) timer.cancelled = true;
+    if (timer) {
+      timer.cancelled = true;
+      const idx = this.timers.indexOf(timer);
+      if (idx !== -1) this.timers.splice(idx, 1);
+    }
   }
 
   advance(ms: number): void {
     const targetTime = this.now + ms;
     // Process timers in deadline order until target reached
     // Loop until no more eligible timers (handles callbacks scheduling new timers)
+    const MAX_ITERATIONS = 100_000;
+    let iterations = 0;
     while (true) {
+      if (++iterations > MAX_ITERATIONS) {
+        throw new Error(
+          `FakeClock.advance: exceeded ${MAX_ITERATIONS} timer iterations — possible infinite self-rescheduling loop`
+        );
+      }
       const eligible = this.timers
         .filter((t) => !t.cancelled && t.fireAt <= targetTime)
         .sort((a, b) => a.fireAt - b.fireAt)[0];
       if (!eligible) break;
+
       this.now = eligible.fireAt;
       eligible.cancelled = true;
+      const idx = this.timers.indexOf(eligible);
+      if (idx !== -1) this.timers.splice(idx, 1);
+
       eligible.callback();
     }
     this.now = targetTime;
@@ -56,6 +71,6 @@ export class FakeClock implements Clock {
   /** Number of timers scheduled but not yet fired or cancelled. Used by stress
    * tests to detect timer leaks (design §7.4). */
   pendingTimerCount(): number {
-    return this.timers.filter((t) => !t.cancelled).length;
+    return this.timers.length;
   }
 }

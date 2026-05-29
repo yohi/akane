@@ -24,15 +24,15 @@ export class OpenCodeAdapter implements Pinger {
 
   async inject(sessionId: string, message: string): Promise<void> {
     const client = this.client as OpenCodeClientLike;
-    const prompt = client?.session?.prompt;
-    if (typeof prompt !== "function") {
+    const session = client?.session;
+    if (typeof session?.prompt !== "function") {
       console.warn(
         `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${sessionId}.`,
       );
       return;
     }
     try {
-      await prompt({
+      await session.prompt({
         path: { id: sessionId },
         body: { parts: [{ type: "text", text: message }] },
       });

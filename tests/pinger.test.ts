@@ -55,4 +55,21 @@ describe("OpenCodeAdapter", () => {
     const adapter = new OpenCodeAdapter(failingClient);
     await expect(adapter.inject("s", "msg")).resolves.toBeUndefined();
   });
+
+  test("maintains 'this' binding when calling prompt", async () => {
+    let thisContext: any = null;
+    const fakeClient = {
+      session: {
+        name: "OpenCodeSession",
+        async prompt() {
+          thisContext = this;
+        },
+      },
+    };
+    const adapter = new OpenCodeAdapter(fakeClient);
+    await adapter.inject("sess-abc", "ping?");
+
+    expect(thisContext).toBeDefined();
+    expect(thisContext.name).toBe("OpenCodeSession");
+  });
 });

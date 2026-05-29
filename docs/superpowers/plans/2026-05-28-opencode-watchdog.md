@@ -270,7 +270,7 @@ gh pr create --draft --base master --head feat/0-1-devcontainer \
 - **実行モード**: 直列必須 (Wait for Task 0.1)
 - **前提条件**: Task 0.1 の Draft PR URL が存在すること
 
-> **順序の根拠**: 本タスクが先で、Task 0.3 (CI) が後。CI workflow が `bun install --frozen-lockfile` と `bun test` / `bun run typecheck` を実行する都合上、`package.json` / `bun.lockb` が **CI ワークフロー導入前に既に存在している** 必要があるため。逆順 (CI 先行) で導入すると初回 PR の CI が必ず失敗し、stacked PR の前提条件チェーンが壊れる。
+> **順序の根拠**: 本タスクが先で、Task 0.3 (CI) が後。CI workflow が `bun install --frozen-lockfile` と `bun test` / `bun run typecheck` を実行する都合上、`package.json` / `bun.lock` が **CI ワークフロー導入前に既に存在している** 必要があるため。逆順 (CI 先行) で導入すると初回 PR の CI が必ず失敗し、stacked PR の前提条件チェーンが壊れる。
 
 **Files:**
 - Create: `package.json`
@@ -376,7 +376,7 @@ coverage/
 
 ### Step 6: 依存関係インストール & 型チェック [devcontainer]
 
-- [x] Step 6.1: 依存をインストール (ホスト bun 1.2.19 で代替実行。bun 1.3 でのロックフォーマット (bun.lock vs bun.lockb) は devcontainer 完了後に検証)
+- [x] Step 6.1: 依存をインストール (ホスト bun 1.2.19 で代替実行。bun 1.3 でのロックフォーマット (bun.lockb vs bun.lock) は devcontainer 完了後に検証)
 
 ```bash
 # [devcontainer]
@@ -475,7 +475,7 @@ mkdir -p docs
 - [x] Step 8.1: コミット
 
 ```bash
-git add package.json tsconfig.json .gitignore src/.gitkeep tests/.gitkeep bun.lockb docs/SDK_NOTES.md
+git add package.json tsconfig.json .gitignore src/.gitkeep tests/.gitkeep bun.lock docs/SDK_NOTES.md
 git commit -m "feat(scaffold): bun + tsconfig strict + @opencode-ai/plugin + SDK notes"
 ```
 
@@ -487,7 +487,7 @@ git commit -m "feat(scaffold): bun + tsconfig strict + @opencode-ai/plugin + SDK
 git push -u origin feat/0-2-scaffold
 gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-scaffold \
   --title "feat(scaffold): bun + tsconfig + @opencode-ai/plugin baseline" \
-  --body "Phase 0 stack #2. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks. Predecessor of Task 0.3 (CI) — CI requires package.json/bun.lockb to be present, so scaffold lands first."
+  --body "Phase 0 stack #2. Adds package.json (with @opencode-ai/plugin), strict tsconfig, and docs/SDK_NOTES.md capturing the actual SDK shapes used by downstream Pinger/Plugin tasks. Predecessor of Task 0.3 (CI) — CI requires package.json/bun.lock to be present, so scaffold lands first."
 ```
 
 - [x] Step 9.2: PR URL を記録。**この URL は Task 0.3 (CI) の前提条件となる。** → PR #4 (https://github.com/yohi/akane/pull/4)
@@ -498,7 +498,7 @@ gh pr create --draft --base feat/0-1-devcontainer --head feat/0-2-scaffold \
 
 - **派生元ブランチ**: `feat/0-2-scaffold`
 - **実行モード**: 直列必須 (Wait for Task 0.2)
-- **前提条件**: Task 0.2 の Draft PR URL が存在すること (= `package.json` / `bun.lockb` が既に存在する)
+- **前提条件**: Task 0.2 の Draft PR URL が存在すること (= `package.json` / `bun.lock` が既に存在する)
 
 **Files:**
 - Create: `.github/workflows/test.yml`
@@ -528,9 +528,9 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ```bash
 # [devcontainer]
-test -f package.json && test -f bun.lockb \
-  && echo "OK: package.json と bun.lockb が存在" \
-  || { echo "ERROR: 派生元 (Task 0.2) で作成されているはずの package.json / bun.lockb が見つからない。CI を導入する前提が整っていない。"; exit 1; }
+test -f package.json && test -f bun.lock \
+  && echo "OK: package.json と bun.lock が存在" \
+  || { echo "ERROR: 派生元 (Task 0.2) で作成されているはずの package.json / bun.lock が見つからない。CI を導入する前提が整っていない。"; exit 1; }
 ```
 
 ### Step 2: GitHub Actions ワークフローを作成 [host or devcontainer (ファイル作成のみ)]
@@ -617,7 +617,7 @@ git commit -m "feat(ci): add bun test + typecheck workflow with feat/** trigger"
 git push -u origin feat/0-3-ci
 gh pr create --draft --base feat/0-2-scaffold --head feat/0-3-ci \
   --title "feat(ci): bun typecheck + test on master/feat stacked PRs" \
-  --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-slim runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lockb already exist."
+  --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-latest runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lock already exist."
 ```
 
 - [x] Step 5.2: PR URL を記録。**この URL は Task 1.1 (Phase 1 起点) の前提条件となる。** → PR #5 (https://github.com/yohi/akane/pull/5)
@@ -988,6 +988,8 @@ bun test tests/config.test.ts
 
 - [x] Step 4.1: `src/config.ts` を作成
 
+> **Note**: This snippet reflects the final implementation. `parsePositiveInt` and `validateNumber` reject zero and non-integers (where applicable), `parseBool` accepts a `warn` parameter and emits warnings, and `ConfigSources` correctly uses `Omit` to handle partial overrides for nested objects.
+
 ```typescript
 export interface WatchdogConfig {
   enabled: boolean;
@@ -1007,7 +1009,7 @@ export interface WatchdogConfig {
 }
 
 export interface ConfigSources {
-  project?: Partial<WatchdogConfig> & {
+  project?: Omit<Partial<WatchdogConfig>, "tmux" | "agents"> & {
     tmux?: Partial<WatchdogConfig["tmux"]>;
     agents?: Partial<WatchdogConfig["agents"]>;
   };
@@ -1034,17 +1036,19 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
 function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
     return undefined;
   }
   return n;
 }
 
-function parseBool(value: string | undefined): boolean | undefined {
+function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
   if (value === undefined) return undefined;
-  if (value === "true" || value === "1") return true;
-  if (value === "false" || value === "0") return false;
+  const lower = value.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1") return true;
+  if (lower === "false" || lower === "no" || lower === "0") return false;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
 
@@ -1052,10 +1056,15 @@ function validateNumber(
   value: number | undefined,
   key: string,
   warn: WarnFn,
+  requireInteger = false,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value < 0) {
-    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to default.`);
+  if (
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    (requireInteger && !Number.isInteger(value))
+  ) {
+    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to lower-priority source.`);
     return undefined;
   }
   return value;
@@ -1068,14 +1077,14 @@ export function resolveConfig(
   const env = sources.env ?? {};
   const project = sources.project ?? {};
 
-  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED);
+  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
 
-  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn);
-  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn);
-  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn);
+  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
+  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
+  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
   return {
     enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,
@@ -1098,14 +1107,16 @@ export function resolveConfig(
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [x] Step 5.1: テスト走行 (`7 pass, 0 fail`)
+- [x] Step 5.1: テスト走行 (`15 pass, 0 fail`)
+
+> **Note**: Initially 7 tests passed. Added 8 more tests in `tests/config.test.ts` to verify `parseBool` warnings, case-insensitive boolean parsing, partial `tmux`/`agents` project config, precedence (env invalid, project valid), and integer-only constraints for numeric settings.
 
 ```bash
 # [devcontainer]
 bun test tests/config.test.ts
 ```
 
-期待出力: `7 pass, 0 fail`
+期待出力: `15 pass, 0 fail` (13 original improved tests + 2 new validation tests)
 
 - [x] Step 5.2: 型チェック (エラーなし)
 
@@ -2903,7 +2914,7 @@ cat package.json | grep '"main"'
 ```bash
 # [host]
 mkdir -p "$HOME/.config/opencode/plugins/opencode-watchdog"
-cp -r src package.json tsconfig.json bun.lockb "$HOME/.config/opencode/plugins/opencode-watchdog/"
+cp -r src package.json tsconfig.json bun.lock "$HOME/.config/opencode/plugins/opencode-watchdog/"
 ( cd "$HOME/.config/opencode/plugins/opencode-watchdog" && bun install --frozen-lockfile )
 ```
 
@@ -3038,8 +3049,9 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 
 ## 第4次レビューを受けた追加修正 (v4)
 
-- ✅ **Phase 0 順序を入れ替え (Task 0.2 = scaffold、Task 0.3 = CI)**: 旧計画では CI 導入 (Task 0.2) が package.json 不在のブランチで `bun install --frozen-lockfile` を実行して必ず失敗していた。順序入れ替えにより CI 導入時点で package.json/bun.lockb が既に存在し、初回 CI が pass する。Task 0.3 (CI) Step 1.3 に **派生元健全性チェック** (`test -f package.json && test -f bun.lockb`) を追加し、構造が壊れていれば即時 abort。ブランチ名も `feat/0-2-scaffold` / `feat/0-3-ci` に統一。
+- ✅ **Phase 0 順序を入れ替え (Task 0.2 = scaffold、Task 0.3 = CI)**: 旧計画では CI 導入 (Task 0.2) が package.json 不在のブランチで `bun install --frozen-lockfile` を実行して必ず失敗していた。順序入れ替えにより CI 導入時点で package.json/bun.lock が既に存在し、初回 CI が pass する。Task 0.3 (CI) Step 1.3 に **派生元健全性チェック** (`test -f package.json && test -f bun.lock`) を追加し、構造が壊れていれば即時 abort。ブランチ名も `feat/0-2-scaffold` / `feat/0-3-ci` に統一。
 - ✅ **CI workflow に `bun run typecheck` を追加**: `bun test` の前に typecheck を実行 (fail fast)。冒頭で謳う「型整合 CI 逐次保証」が真に実効化。Step 3.2 にローカル等価検証 (`bun install --frozen-lockfile && bun run typecheck && bun test`) も追加。
 - ✅ **設計書 §3.3 を `onUserMessage` 経由に更新**: `message.updated (role=user)` のフローを `watchdog.onActivity` から `watchdog.onUserMessage` へ書き換え、tombstone 解除責務を明示。`message.part.updated` 側にも tombstone 抑止と pingCount リセットを明記。設計と実装の乖離を解消。
-- ✅ **手動配置検証で `bun.lockb` を cp 対象に追加**: 旧手順は cp に lockb を含めず、直後の `bun install --frozen-lockfile` が必ず失敗していた。1 単語追加で解消。
+- ✅ **手動配置検証で `bun.lock` を cp 対象に追加**: 旧手順は cp に lockb を含めず、直後の `bun install --frozen-lockfile` が必ず失敗していた。1 単語追加で解消。
 - ✅ **手動検証 §10.3-10.6 をネットワーク切断による決定的手順へ書き換え**: 「3 秒放置」では通常応答が返り stage1 が発火しないため検証が成立しない問題を解消。`nmcli networking off` (Linux) / `networksetup -setairportpower en0 off` (macOS) でストリーム停止を確実に再現する手順に固定。代替不可。SSH 越し実行禁止、復旧 `nmcli networking on` を Step 5.5 に追加、ネットワーク切断中の Ping 試行は tmux 表示で観測 (実送信は復旧後)、PR ログに切断方式 (nmcli/networksetup) も記録。
+
