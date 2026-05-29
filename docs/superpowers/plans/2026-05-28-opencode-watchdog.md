@@ -617,7 +617,7 @@ git commit -m "feat(ci): add bun test + typecheck workflow with feat/** trigger"
 git push -u origin feat/0-3-ci
 gh pr create --draft --base feat/0-2-scaffold --head feat/0-3-ci \
   --title "feat(ci): bun typecheck + test on master/feat stacked PRs" \
-  --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-slim runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lock already exist."
+  --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-latest runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lock already exist."
 ```
 
 - [ ] Step 5.2: PR URL を記録。**この URL は Task 1.1 (Phase 1 起点) の前提条件となる。**
