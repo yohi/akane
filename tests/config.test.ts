@@ -49,6 +49,26 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("stage1Ms");
   });
 
+  test("invalid 0 falls back to default with warn", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { project: { stage1Ms: 0 } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.stage1Ms).toBe(180_000);
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
+  test("env OPENCODE_WATCHDOG_MAX_PINGS=0 falls back to default", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { env: { OPENCODE_WATCHDOG_MAX_PINGS: "0" } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.maxPings).toBe(1);
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
   test("invalid type in env falls back to default", () => {
     const warnings: string[] = [];
     const cfg = resolveConfig(

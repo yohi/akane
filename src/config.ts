@@ -43,7 +43,7 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
 function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
     warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
     return undefined;
   }
@@ -63,7 +63,7 @@ function validateNumber(
   warn: WarnFn,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value < 0) {
+  if (!Number.isFinite(value) || value <= 0) {
     warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to default.`);
     return undefined;
   }
