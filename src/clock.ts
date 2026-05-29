@@ -27,6 +27,11 @@ export class FakeClock implements Clock {
   private timers: FakeTimer[] = [];
 
   setTimeout(callback: () => void, ms: number): TimerHandle {
+    ms = Number(ms);
+    if (!isFinite(ms)) {
+      throw new RangeError(`FakeClock.setTimeout: ms must be finite, got ${ms}`);
+    }
+    ms = Math.max(0, ms);
     const timer: FakeTimer = { fireAt: this.now + ms, callback, cancelled: false };
     this.timers.push(timer);
     return timer;
@@ -42,6 +47,10 @@ export class FakeClock implements Clock {
   }
 
   advance(ms: number): void {
+    ms = Number(ms);
+    if (!Number.isFinite(ms) || ms < 0) {
+      throw new RangeError(`FakeClock.advance requires a finite non-negative ms, got: ${ms}`);
+    }
     const targetTime = this.now + ms;
     // Process timers in deadline order until target reached
     // Loop until no more eligible timers (handles callbacks scheduling new timers)
