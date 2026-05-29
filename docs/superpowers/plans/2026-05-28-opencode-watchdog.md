@@ -376,7 +376,7 @@ coverage/
 
 ### Step 6: 依存関係インストール & 型チェック [devcontainer]
 
-- [x] Step 6.1: 依存をインストール (ホスト bun 1.2.19 で代替実行。bun 1.3 でのロックフォーマット (bun.lock vs bun.lock) は devcontainer 完了後に検証)
+- [x] Step 6.1: 依存をインストール (ホスト bun 1.2.19 で代替実行。bun 1.3 でのロックフォーマット (bun.lockb vs bun.lock) は devcontainer 完了後に検証)
 
 ```bash
 # [devcontainer]
@@ -3043,3 +3043,4 @@ gh pr create --draft --base feat/3-1-plugin-entry --head feat/3-2-stress-test \
 - ✅ **設計書 §3.3 を `onUserMessage` 経由に更新**: `message.updated (role=user)` のフローを `watchdog.onActivity` から `watchdog.onUserMessage` へ書き換え、tombstone 解除責務を明示。`message.part.updated` 側にも tombstone 抑止と pingCount リセットを明記。設計と実装の乖離を解消。
 - ✅ **手動配置検証で `bun.lock` を cp 対象に追加**: 旧手順は cp に lockb を含めず、直後の `bun install --frozen-lockfile` が必ず失敗していた。1 単語追加で解消。
 - ✅ **手動検証 §10.3-10.6 をネットワーク切断による決定的手順へ書き換え**: 「3 秒放置」では通常応答が返り stage1 が発火しないため検証が成立しない問題を解消。`nmcli networking off` (Linux) / `networksetup -setairportpower en0 off` (macOS) でストリーム停止を確実に再現する手順に固定。代替不可。SSH 越し実行禁止、復旧 `nmcli networking on` を Step 5.5 に追加、ネットワーク切断中の Ping 試行は tmux 表示で観測 (実送信は復旧後)、PR ログに切断方式 (nmcli/networksetup) も記録。
+
