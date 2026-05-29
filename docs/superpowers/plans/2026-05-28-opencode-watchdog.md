@@ -1321,7 +1321,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/pinger.ts tests/pinger.test.ts
@@ -1330,7 +1330,7 @@ git commit -m "feat(pinger): add Pinger interface with MockPinger and OpenCodeAd
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/8)
 
 ```bash
 git push -u origin feat/1-3-pinger
@@ -1339,7 +1339,7 @@ gh pr create --draft --base feat/1-2-config --head feat/1-3-pinger \
   --body "Phase 1 stack #3 (serial). Abstracts ping injection so watchdog core has no SDK dependency. Uses SDK shape recorded in docs/SDK_NOTES.md."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #8 (https://github.com/yohi/akane/pull/8)
 
 ---
 
@@ -1355,7 +1355,7 @@ gh pr create --draft --base feat/1-2-config --head feat/1-3-pinger \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -1363,7 +1363,7 @@ git checkout feat/1-3-pinger
 git checkout -b feat/1-4-notifier
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -1376,7 +1376,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するテストを書く [devcontainer]
 
-- [ ] Step 2.1: `tests/notifier.test.ts` を作成
+- [x] Step 2.1: `tests/notifier.test.ts` を作成 (計画書の `calls.find((c) => c.cmd[1] === 'display-message')` は probe 呼び出し (length 4) も拾うため `c.cmd.length === 3` で絞り込むよう修正)
 
 ```typescript
 import { describe, test, expect, beforeEach } from "bun:test";
@@ -1534,7 +1534,7 @@ describe("TmuxNotifier - error containment", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (モジュール未存在エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -1545,7 +1545,7 @@ bun test tests/notifier.test.ts
 
 ### Step 4: 最小実装 [devcontainer]
 
-- [ ] Step 4.1: `src/notifier.ts` を作成
+- [x] Step 4.1: `src/notifier.ts` を作成
 
 ```typescript
 export type NotifierStage = "warn" | "critical" | "silenced";
@@ -1660,7 +1660,7 @@ export function bunWhich(): WhichFn {
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`9 pass, 0 fail`)
 
 ```bash
 # [devcontainer]
@@ -1669,7 +1669,7 @@ bun test tests/notifier.test.ts
 
 期待出力: `9 pass, 0 fail` (テスト数は実装と一致)
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
