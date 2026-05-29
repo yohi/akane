@@ -844,7 +844,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/clock.ts tests/clock.test.ts
@@ -853,7 +853,7 @@ git commit -m "feat(clock): add DI-friendly Clock with RealClock and FakeClock"
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/6)
 
 ```bash
 git push -u origin feat/1-1-clock
@@ -862,7 +862,7 @@ gh pr create --draft --base feat/0-3-ci --head feat/1-1-clock \
   --body "Phase 1 stack #1 (serial). Pure DI abstraction over setTimeout/clearTimeout."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #6 (https://github.com/yohi/akane/pull/6)
 
 ---
 
@@ -878,7 +878,7 @@ gh pr create --draft --base feat/0-3-ci --head feat/1-1-clock \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -886,7 +886,7 @@ git checkout feat/1-1-clock
 git checkout -b feat/1-2-config
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -899,7 +899,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するテストを書く [devcontainer]
 
-- [ ] Step 2.1: `tests/config.test.ts` を作成
+- [x] Step 2.1: `tests/config.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -975,7 +975,7 @@ describe("resolveConfig", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (モジュール未存在エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -986,7 +986,7 @@ bun test tests/config.test.ts
 
 ### Step 4: 最小実装 [devcontainer]
 
-- [ ] Step 4.1: `src/config.ts` を作成
+- [x] Step 4.1: `src/config.ts` を作成
 
 ```typescript
 export interface WatchdogConfig {
@@ -1098,7 +1098,7 @@ export function resolveConfig(
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`7 pass, 0 fail`)
 
 ```bash
 # [devcontainer]
@@ -1107,7 +1107,7 @@ bun test tests/config.test.ts
 
 期待出力: `7 pass, 0 fail`
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
