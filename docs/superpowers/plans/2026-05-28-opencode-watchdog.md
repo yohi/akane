@@ -844,7 +844,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/clock.ts tests/clock.test.ts
@@ -853,7 +853,7 @@ git commit -m "feat(clock): add DI-friendly Clock with RealClock and FakeClock"
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/6)
 
 ```bash
 git push -u origin feat/1-1-clock
@@ -862,7 +862,7 @@ gh pr create --draft --base feat/0-3-ci --head feat/1-1-clock \
   --body "Phase 1 stack #1 (serial). Pure DI abstraction over setTimeout/clearTimeout."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #6 (https://github.com/yohi/akane/pull/6)
 
 ---
 
@@ -878,7 +878,7 @@ gh pr create --draft --base feat/0-3-ci --head feat/1-1-clock \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -886,7 +886,7 @@ git checkout feat/1-1-clock
 git checkout -b feat/1-2-config
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -899,7 +899,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するテストを書く [devcontainer]
 
-- [ ] Step 2.1: `tests/config.test.ts` を作成
+- [x] Step 2.1: `tests/config.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -975,7 +975,7 @@ describe("resolveConfig", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (モジュール未存在エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -986,7 +986,9 @@ bun test tests/config.test.ts
 
 ### Step 4: 最小実装 [devcontainer]
 
-- [ ] Step 4.1: `src/config.ts` を作成
+- [x] Step 4.1: `src/config.ts` を作成
+
+> **Note**: This snippet reflects the final implementation. `parsePositiveInt` and `validateNumber` reject zero and non-integers (where applicable), `parseBool` accepts a `warn` parameter and emits warnings, and `ConfigSources` correctly uses `Omit` to handle partial overrides for nested objects.
 
 ```typescript
 export interface WatchdogConfig {
@@ -1007,7 +1009,7 @@ export interface WatchdogConfig {
 }
 
 export interface ConfigSources {
-  project?: Partial<WatchdogConfig> & {
+  project?: Omit<Partial<WatchdogConfig>, "tmux" | "agents"> & {
     tmux?: Partial<WatchdogConfig["tmux"]>;
     agents?: Partial<WatchdogConfig["agents"]>;
   };
@@ -1034,17 +1036,19 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
 function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
     return undefined;
   }
   return n;
 }
 
-function parseBool(value: string | undefined): boolean | undefined {
+function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
   if (value === undefined) return undefined;
-  if (value === "true" || value === "1") return true;
-  if (value === "false" || value === "0") return false;
+  const lower = value.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1") return true;
+  if (lower === "false" || lower === "no" || lower === "0") return false;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
 
@@ -1052,10 +1056,15 @@ function validateNumber(
   value: number | undefined,
   key: string,
   warn: WarnFn,
+  requireInteger = false,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value < 0) {
-    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to default.`);
+  if (
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    (requireInteger && !Number.isInteger(value))
+  ) {
+    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to lower-priority source.`);
     return undefined;
   }
   return value;
@@ -1068,14 +1077,14 @@ export function resolveConfig(
   const env = sources.env ?? {};
   const project = sources.project ?? {};
 
-  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED);
+  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
 
-  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn);
-  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn);
-  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn);
+  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
+  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
+  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
   return {
     enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,
@@ -1098,16 +1107,18 @@ export function resolveConfig(
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`15 pass, 0 fail`)
+
+> **Note**: Initially 7 tests passed. Added 8 more tests in `tests/config.test.ts` to verify `parseBool` warnings, case-insensitive boolean parsing, partial `tmux`/`agents` project config, precedence (env invalid, project valid), and integer-only constraints for numeric settings.
 
 ```bash
 # [devcontainer]
 bun test tests/config.test.ts
 ```
 
-期待出力: `7 pass, 0 fail`
+期待出力: `15 pass, 0 fail` (13 original improved tests + 2 new validation tests)
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
