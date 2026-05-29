@@ -82,12 +82,16 @@ describe("TmuxNotifier - actions", () => {
   test("notify(warn) passes message verbatim and applies yellow highlight", async () => {
     const exact = "[Watchdog] Agent sess-1 idle for 180000ms";
     await notifier.notify("sess-1", "warn", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 3);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 5);
     expect(displayCall).toBeDefined();
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", "-t", "sess-1", exact]);
     expect(
       calls.some(
-        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=yellow"),
+        (c) =>
+          c.cmd[1] === "set-window-option" &&
+          c.cmd.includes("-t") &&
+          c.cmd.includes("sess-1") &&
+          c.cmd.includes("bg=yellow"),
       ),
     ).toBe(true);
   });
@@ -95,11 +99,15 @@ describe("TmuxNotifier - actions", () => {
   test("notify(critical) passes message verbatim and applies red highlight", async () => {
     const exact = "[Watchdog] Ping injected to sess-1";
     await notifier.notify("sess-1", "critical", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 3);
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 5);
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", "-t", "sess-1", exact]);
     expect(
       calls.some(
-        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
+        (c) =>
+          c.cmd[1] === "set-window-option" &&
+          c.cmd.includes("-t") &&
+          c.cmd.includes("sess-1") &&
+          c.cmd.includes("bg=red"),
       ),
     ).toBe(true);
   });
@@ -107,11 +115,15 @@ describe("TmuxNotifier - actions", () => {
   test("notify(silenced) passes message verbatim and keeps red highlight", async () => {
     const exact = "[Watchdog] Max pings reached. Manual intervention required.";
     await notifier.notify("sess-1", "silenced", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 3);
-    expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 5);
+    expect(displayCall!.cmd).toEqual(["tmux", "display-message", "-t", "sess-1", exact]);
     expect(
       calls.some(
-        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=red"),
+        (c) =>
+          c.cmd[1] === "set-window-option" &&
+          c.cmd.includes("-t") &&
+          c.cmd.includes("sess-1") &&
+          c.cmd.includes("bg=red"),
       ),
     ).toBe(true);
   });
@@ -120,7 +132,11 @@ describe("TmuxNotifier - actions", () => {
     await notifier.clear("sess-1");
     expect(
       calls.some(
-        (c) => c.cmd[1] === "set-window-option" && c.cmd.includes("default"),
+        (c) =>
+          c.cmd[1] === "set-window-option" &&
+          c.cmd.includes("-t") &&
+          c.cmd.includes("sess-1") &&
+          c.cmd.includes("default"),
       ),
     ).toBe(true);
   });
@@ -130,11 +146,16 @@ describe("TmuxNotifier - actions", () => {
     const malicious = "sess-1; rm -rf /";
     const message = `[Watchdog] Agent ${malicious} idle for 180000ms`;
     await notifier.notify(malicious, "warn", message);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 3);
-    expect(displayCall!.cmd.length).toBe(3);
-    expect(displayCall!.cmd[2]).toBe(message);
+    const displayCall = calls.find((c) => c.cmd[1] === "display-message" && c.cmd.length === 5);
+    expect(displayCall!.cmd.length).toBe(5);
+    expect(displayCall!.cmd[3]).toBe(malicious);
+    expect(displayCall!.cmd[4]).toBe(message);
     for (const c of calls) {
       expect(Array.isArray(c.cmd)).toBe(true);
+      if (c.cmd.includes("-t")) {
+        const tIndex = c.cmd.indexOf("-t");
+        expect(c.cmd[tIndex + 1]).toBe(malicious);
+      }
     }
   });
 });

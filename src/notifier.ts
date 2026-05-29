@@ -38,10 +38,12 @@ export class TmuxNotifier implements Notifier {
    */
   async notify(sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
-    await this.safeSpawn(["tmux", "display-message", message]);
+    await this.safeSpawn(["tmux", "display-message", "-t", sessionId, message]);
     await this.safeSpawn([
       "tmux",
       "set-window-option",
+      "-t",
+      sessionId,
       "window-status-current-style",
       STYLE_BY_STAGE[stage],
     ]);
@@ -52,6 +54,8 @@ export class TmuxNotifier implements Notifier {
     await this.safeSpawn([
       "tmux",
       "set-window-option",
+      "-t",
+      sessionId,
       "window-status-current-style",
       "default",
     ]);
