@@ -9,7 +9,7 @@ tmux -V
 
 if [ -f package.json ]; then
   echo "[postCreate] Installing dependencies..."
-  bun install --frozen-lockfile || bun install
+  bun install --frozen-lockfile
 fi
 
 echo "[postCreate] Done."
