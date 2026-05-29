@@ -97,4 +97,25 @@ describe("resolveConfig", () => {
     expect(cfg.tmux.enabled).toBe(false);
     expect(cfg.tmux.displayMessage).toBe(true);
   });
+
+  test("parseBool handles TRUE/FALSE case-insensitively", () => {
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "TRUE" } }).enabled).toBe(true);
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "FALSE" } }).enabled).toBe(false);
+  });
+
+  test("parseBool handles yes/no", () => {
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "yes" } }).enabled).toBe(true);
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "no" } }).enabled).toBe(false);
+  });
+
+  test("parseBool warns on invalid value", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { env: { OPENCODE_WATCHDOG_ENABLED: "maybe" } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.enabled).toBe(true); // デフォルト
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_ENABLED");
+  });
 });

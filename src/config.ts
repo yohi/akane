@@ -50,10 +50,12 @@ function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn):
   return n;
 }
 
-function parseBool(value: string | undefined): boolean | undefined {
+function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
   if (value === undefined) return undefined;
-  if (value === "true" || value === "1") return true;
-  if (value === "false" || value === "0") return false;
+  const lower = value.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1") return true;
+  if (lower === "false" || lower === "no" || lower === "0") return false;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
   return undefined;
 }
 
@@ -77,7 +79,7 @@ export function resolveConfig(
   const env = sources.env ?? {};
   const project = sources.project ?? {};
 
-  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED);
+  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
