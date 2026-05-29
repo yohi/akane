@@ -602,7 +602,7 @@ bun test
 
 ### Step 4: コミット [host]
 
-- [ ] Step 4.1: コミット
+- [x] Step 4.1: コミット
 
 ```bash
 git add .github/workflows/test.yml
@@ -611,7 +611,7 @@ git commit -m "feat(ci): add bun test + typecheck workflow with feat/** trigger"
 
 ### Step 5: Draft PR 作成 [host]
 
-- [ ] Step 5.1: 派生元ブランチ向けに Draft PR を作成
+- [x] Step 5.1: 派生元ブランチ向けに Draft PR を作成 (PR: https://github.com/yohi/akane/pull/5)
 
 ```bash
 git push -u origin feat/0-3-ci
@@ -620,7 +620,7 @@ gh pr create --draft --base feat/0-2-scaffold --head feat/0-3-ci \
   --body "Phase 0 stack #3. Triggers typecheck and tests on master and stacked feat/** PRs using ubuntu-slim runner. Lands AFTER Task 0.2 (scaffold) so package.json/bun.lockb already exist."
 ```
 
-- [ ] Step 5.2: PR URL を記録。**この URL は Task 1.1 (Phase 1 起点) の前提条件となる。**
+- [x] Step 5.2: PR URL を記録。**この URL は Task 1.1 (Phase 1 起点) の前提条件となる。** → PR #5 (https://github.com/yohi/akane/pull/5)
 
 ---
 
@@ -641,7 +641,7 @@ gh pr create --draft --base feat/0-2-scaffold --head feat/0-3-ci \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -649,7 +649,7 @@ git checkout feat/0-3-ci
 git checkout -b feat/1-1-clock
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -662,7 +662,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するテストを書く [devcontainer]
 
-- [ ] Step 2.1: `tests/clock.test.ts` を作成
+- [x] Step 2.1: `tests/clock.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -745,7 +745,7 @@ describe("FakeClock", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (Cannot find module '../src/clock' エラーを確認 — TDD red)
 
 ```bash
 # [devcontainer]
@@ -756,7 +756,7 @@ bun test tests/clock.test.ts
 
 ### Step 4: 最小実装 [devcontainer]
 
-- [ ] Step 4.1: `src/clock.ts` を作成
+- [x] Step 4.1: `src/clock.ts` を作成
 
 ```typescript
 export type TimerHandle = unknown;
@@ -824,7 +824,7 @@ export class FakeClock implements Clock {
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: テスト走行
+- [x] Step 5.1: テスト走行 (`6 pass, 0 fail` — ホスト bun 1.2.19 で検証)
 
 ```bash
 # [devcontainer]
@@ -833,7 +833,7 @@ bun test tests/clock.test.ts
 
 期待出力: `6 pass, 0 fail`
 
-- [ ] Step 5.2: 型チェック
+- [x] Step 5.2: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
