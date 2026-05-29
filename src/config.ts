@@ -16,7 +16,7 @@ export interface WatchdogConfig {
 }
 
 export interface ConfigSources {
-  project?: Partial<WatchdogConfig> & {
+  project?: Omit<Partial<WatchdogConfig>, "tmux" | "agents"> & {
     tmux?: Partial<WatchdogConfig["tmux"]>;
     agents?: Partial<WatchdogConfig["agents"]>;
   };

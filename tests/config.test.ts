@@ -86,4 +86,15 @@ describe("resolveConfig", () => {
     expect(cfg.agents.include).toEqual(["main"]);
     expect(cfg.agents.exclude).toEqual(["debug"]);
   });
+
+  test("allows partial tmux config in project", () => {
+    const sources: ConfigSources = {
+      project: {
+        tmux: { enabled: false }
+      }
+    };
+    const cfg = resolveConfig(sources);
+    expect(cfg.tmux.enabled).toBe(false);
+    expect(cfg.tmux.displayMessage).toBe(true);
+  });
 });
