@@ -89,7 +89,14 @@ export class TmuxNotifier implements Notifier {
 
   private async safeSpawn(cmd: string[]): Promise<SpawnResult | null> {
     try {
-      return await this.deps.spawn(cmd);
+      const result = await this.deps.spawn(cmd);
+      if (result.exitCode !== 0) {
+        this.log(
+          "warn",
+          `tmux command failed: ${cmd.join(" ")} (exitCode: ${result.exitCode}, stdout: ${result.stdout ?? ""})`,
+        );
+      }
+      return result;
     } catch (err) {
       this.log("warn", `tmux spawn failed: ${String(err)}`);
       return null;

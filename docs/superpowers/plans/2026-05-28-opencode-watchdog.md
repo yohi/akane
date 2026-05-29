@@ -1387,7 +1387,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するテストを書く [devcontainer]
 
-- [x] Step 2.1: `tests/notifier.test.ts` を作成 (計画書の `calls.find((c) => c.cmd[1] === 'display-message')` は probe 呼び出し (length 4) も拾うため `c.cmd.length === 3` で絞り込むよう修正)
+- [x] Step 2.1: `tests/notifier.test.ts` を作成 (計画書の `calls.find((c) => c.cmd.length === 5 && c.cmd[1] === 'display-message')` は probe 呼び出し (length 4) も拾うため `c.cmd.length === 5` で絞り込むよう修正)
 
 ```typescript
 import { describe, test, expect, beforeEach } from "bun:test";
@@ -1474,7 +1474,7 @@ describe("TmuxNotifier - actions", () => {
   test("notify(warn) passes message verbatim and applies yellow highlight", async () => {
     const exact = "[Watchdog] Agent sess-1 idle for 180000ms";
     await notifier.notify("sess-1", "warn", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    const displayCall = calls.find((c) => c.cmd.length === 5 && c.cmd[1] === "display-message");
     expect(displayCall).toBeDefined();
     expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
     expect(
@@ -1487,7 +1487,7 @@ describe("TmuxNotifier - actions", () => {
   test("notify(critical) passes message verbatim and applies red highlight", async () => {
     const exact = "[Watchdog] Ping injected to sess-1";
     await notifier.notify("sess-1", "critical", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    const displayCall = calls.find((c) => c.cmd.length === 5 && c.cmd[1] === "display-message");
     expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
     expect(
       calls.some(
@@ -1499,7 +1499,7 @@ describe("TmuxNotifier - actions", () => {
   test("notify(silenced) passes message verbatim and keeps red highlight", async () => {
     const exact = "[Watchdog] Max pings reached. Manual intervention required.";
     await notifier.notify("sess-1", "silenced", exact);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    const displayCall = calls.find((c) => c.cmd.length === 5 && c.cmd[1] === "display-message");
     expect(displayCall!.cmd).toEqual(["tmux", "display-message", exact]);
     expect(
       calls.some(
@@ -1522,7 +1522,7 @@ describe("TmuxNotifier - actions", () => {
     const malicious = "sess-1; rm -rf /";
     const message = `[Watchdog] Agent ${malicious} idle for 180000ms`;
     await notifier.notify(malicious, "warn", message);
-    const displayCall = calls.find((c) => c.cmd[1] === "display-message");
+    const displayCall = calls.find((c) => c.cmd.length === 5 && c.cmd[1] === "display-message");
     expect(displayCall!.cmd.length).toBe(3);
     expect(displayCall!.cmd[2]).toBe(message);
     for (const c of calls) {
@@ -1689,7 +1689,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット – PR `#9`: https://github.com/yohi/akane/pull/9
 
 ```bash
 git add src/notifier.ts tests/notifier.test.ts
@@ -1698,7 +1698,7 @@ git commit -m "feat(notifier): add TmuxNotifier with 3-stage detection and color
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 – PR `#9`: https://github.com/yohi/akane/pull/9
 
 ```bash
 git push -u origin feat/1-4-notifier
@@ -1707,7 +1707,7 @@ gh pr create --draft --base feat/1-3-pinger --head feat/1-4-notifier \
   --body "Phase 1 stack #4 (serial). tmux display-message + window highlight per design §5."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 – PR `#9`: https://github.com/yohi/akane/pull/9
 
 ---
 
