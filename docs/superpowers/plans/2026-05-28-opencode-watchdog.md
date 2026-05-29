@@ -2468,7 +2468,7 @@ bun test tests/index.smoke.test.ts
 >
 > SDK_NOTES と差異があった場合は SDK_NOTES の実測形を正として本実装と上の smoke test を併せて書き換える。
 
-- [ ] Step 4.1: `src/index.ts` を作成
+- [x] Step 4.1: `src/index.ts` を作成 (Phase 0 stub を削除して本実装に置換)
 
 ```typescript
 import { resolveConfig, type WatchdogConfig } from "./config";
@@ -2630,7 +2630,7 @@ bun test tests/index.smoke.test.ts
 
 期待出力: 14 テストパス (smoke 3 + extractSessionId 6 + isUserMessage 5)
 
-- [ ] Step 5.2: 全テスト走行 (リグレッションチェック)
+- [x] Step 5.2: 全テスト走行 (リグレッションチェック) — 累計 56 pass, 0 fail
 
 ```bash
 # [devcontainer]
@@ -2648,7 +2648,7 @@ bun run typecheck
 
 ### Step 6: コミット [host]
 
-- [ ] Step 6.1: コミット
+- [x] Step 6.1: コミット
 
 ```bash
 git add src/index.ts tests/index.smoke.test.ts
@@ -2657,7 +2657,7 @@ git commit -m "feat(plugin): wire watchdog to OpenCode event hook with config + 
 
 ### Step 7: Draft PR 作成 [host]
 
-- [ ] Step 7.1: Draft PR 作成
+- [x] Step 7.1: Draft PR 作成 (PR: https://github.com/yohi/akane/pull/11)
 
 ```bash
 git push -u origin feat/3-1-plugin-entry
@@ -2666,7 +2666,7 @@ gh pr create --draft --base feat/2-1-watchdog --head feat/3-1-plugin-entry \
   --body "Phase 3 stack #1. Plugin entry per design §3.1. Loads opencode.json and dispatches events."
 ```
 
-- [ ] Step 7.2: PR URL を記録
+- [x] Step 7.2: PR URL を記録 → PR #11 (https://github.com/yohi/akane/pull/11)
 
 ---
 
@@ -2681,7 +2681,7 @@ gh pr create --draft --base feat/2-1-watchdog --head feat/3-1-plugin-entry \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -2689,7 +2689,7 @@ git checkout feat/3-1-plugin-entry
 git checkout -b feat/3-2-stress-test
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行 (ホストで代替実行)
 
 ```bash
 # [devcontainer]
@@ -2702,7 +2702,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: ストレステスト + メモリリーク検証を書く [devcontainer]
 
-- [ ] Step 2.1: `tests/stress.test.ts` を作成
+- [x] Step 2.1: `tests/stress.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -2841,7 +2841,7 @@ describe("Acceptance §10 - empty session no false trigger", () => {
 
 ### Step 3: テスト実行 → 確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行 (`5 pass, 0 fail`)
 
 ```bash
 # [devcontainer]
@@ -2850,7 +2850,7 @@ bun test tests/stress.test.ts
 
 期待出力: 全 5 テストがパス (memory & timer leak 3 + initial hang detection 1 + empty session 1)
 
-- [ ] Step 3.2: 全テスト走行 (受け入れ条件 §10 を含む全シナリオの最終確認)
+- [x] Step 3.2: 全テスト走行 (受け入れ条件 §10 を含む全シナリオの最終確認) — 累計 61 pass, 0 fail
 
 ```bash
 # [devcontainer]
@@ -2859,7 +2859,7 @@ bun test
 
 期待出力: 全テスト ( Phase 1 + Phase 2 + Phase 3 ) パス
 
-- [ ] Step 3.3: 型チェック
+- [x] Step 3.3: 型チェック (エラーなし)
 
 ```bash
 # [devcontainer]
@@ -2868,19 +2868,19 @@ bun run typecheck
 
 ### Step 4: 受け入れ条件チェックリストでの自己検証 [devcontainer]
 
-- [ ] Step 4.1: 設計書 §10 の 10 項目をテスト結果に照らして確認
+- [x] Step 4.1: 設計書 §10 の 10 項目をテスト結果に照らして確認
 
 確認項目 (設計書 §10 から転記):
-- [ ] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → **Step 5 の手動配置検証で確認** (smoke test だけでは未充足)
-- [ ] (2) `OPENCODE_WATCHDOG_STAGE1_MS=1000` 等の環境変数で挙動が変わる → config 単体テストでカバー
-- [ ] (3) 180秒のストリーム停止で Tmux 黄色ハイライトと display-message が出る → notifier 単体テスト + watchdog stage1 テストでカバー
-- [ ] (4) さらに 180 秒経過で Ping が 1 回注入され Tmux が赤色に切り替わる → watchdog stage2 テスト
-- [ ] (5) `maxPings: 1` で 2 度目の stage2 でも Ping は再注入されない → watchdog `maxPings ceiling` テスト
-- [ ] (6) Tmux 非起動環境でプラグインを動かしてもプロセスが落ちず、ログのみ残る → notifier detection テスト
-- [ ] (7) `bun test` がすべて pass する → Step 3.2 確認
-- [ ] (8) Map 内タイマー数が `session.idle` 後に 0 になる → stress test で `activeSessionCount()` / `activeTimerCount()` / FakeClock の `pendingTimerCount()` の三層検証で確認
-- [ ] (9) 初期ハング検知 (onUserMessage のみ → stage1/stage2) → stress test "initial hang detection"
-- [ ] (10) 空セッション誤検知なし → stress test "empty session no false trigger"
+- [ ] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → **Step 5 の手動配置検証で確認** (人間オペレータ責務 — AGENT では実 OpenCode 起動・ネットワーク切断不可能)
+- [x] (2) `OPENCODE_WATCHDOG_STAGE1_MS=1000` 等の環境変数で振る舞いが変わる → config 単体テストでカバー (7 pass)
+- [x] (3) 180秒のストリーム停止で Tmux 黄色ハイライトと display-message が出る → notifier 単体テスト + watchdog stage1 テストでカバー
+- [x] (4) さらに 180 秒経過で Ping が 1 回注入され Tmux が赤色に切り替わる → watchdog stage2 テスト
+- [x] (5) `maxPings: 1` で 2 度目の stage2 でも Ping は再注入されない → watchdog `maxPings ceiling` テスト
+- [x] (6) Tmux 非起動環境でプラグインを動かしてもプロセスが落ちず、ログのみ残る → notifier detection テスト
+- [x] (7) `bun test` がすべて pass する → 累計 61 pass, 0 fail
+- [x] (8) Map 内タイマー数が `session.idle` 後に 0 になる → stress test で `activeSessionCount()` / `activeTimerCount()` / FakeClock の `pendingTimerCount()` の三層検証で確認
+- [x] (9) 初期ハング検知 (onUserMessage のみ → stage1/stage2) → stress test "initial hang detection"
+- [x] (10) 空セッション誤検知なし → stress test "empty session no false trigger"
 
 ### Step 5: 受け入れ条件 §10.1 の手動配置検証 [host]
 
