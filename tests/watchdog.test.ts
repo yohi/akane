@@ -41,6 +41,7 @@ function setup(configOverrides: Partial<WatchdogConfig> = {}) {
     clock,
     pinger,
     notifier,
+    log: () => {},
   });
   return { clock, pinger, notifier, watchdog };
 }
@@ -118,7 +119,7 @@ describe("Watchdog - maxPings ceiling", () => {
     clock.advance(1000); // silenced
     await new Promise((r) => setTimeout(r, 10));
 
-    watchdog.onActivity("s1"); // recovery
+    watchdog.onUserMessage("s1"); // recovery via user input per §3.4
     clock.advance(1000); // stage1 again
     clock.advance(1000); // stage2 → ping again because pingCount reset
     await new Promise((r) => setTimeout(r, 10));

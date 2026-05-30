@@ -10,6 +10,7 @@ interface SessionEntry {
   timer: TimerHandle | null;
   pingCount: number;
   agentName?: string;
+  lastPingTime?: number;
 }
 
 export interface WatchdogDeps {
@@ -47,6 +48,10 @@ export class Watchdog {
     this.log = deps.log ?? ((level, m) => console[level](`[watchdog] ${m}`));
   }
 
+  getLastPingTime(sessionId: string): number {
+    return this.sessions.get(sessionId)?.lastPingTime ?? 0;
+  }
+
   activeSessionCount(): number {
     return this.sessions.size;
   }
@@ -75,6 +80,7 @@ export class Watchdog {
    * onActivity.
    */
   onUserMessage(sessionId: string, meta: ActivityMeta = {}): void {
+    this.log("info", `[Watchdog] onUserMessage for session ${sessionId}`);
     this.clearTombstone(sessionId);
     this.armOrReset(sessionId, meta);
   }
@@ -84,14 +90,27 @@ export class Watchdog {
    * tombstone set, the event is treated as stale and ignored (design §7.3).
    */
   onActivity(sessionId: string, meta: ActivityMeta = {}): void {
-    if (this.stoppedSessions.has(sessionId)) return;
+    if (this.stoppedSessions.has(sessionId)) {
+      this.log("info", `[Watchdog] onActivity ignored: session ${sessionId} is in tombstone`);
+      return;
+    }
+    const existing = this.sessions.get(sessionId);
+    if (existing && existing.state === "SILENCED") {
+      this.log("info", `[Watchdog] onActivity ignored: session ${sessionId} is SILENCED`);
+      // SILENCED state can ONLY be reset by onUserMessage (fresh user input) per design §3.4.
+      return;
+    }
     this.armOrReset(sessionId, meta);
   }
 
   /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
+    this.log("info", `[Watchdog] stop called for session ${sessionId}`);
     const entry = this.sessions.get(sessionId);
-    if (entry && entry.timer !== null) this.clock.clearTimeout(entry.timer);
+    if (entry && entry.timer !== null) {
+      this.log("info", `[Watchdog] Clearing timer for session ${sessionId}`);
+      this.clock.clearTimeout(entry.timer);
+    }
     this.sessions.delete(sessionId);
     this.recordTombstone(sessionId);
     this.notifier.clear(sessionId).catch((err) =>
@@ -101,6 +120,7 @@ export class Watchdog {
 
   /** Stop all active sessions and clear all timers. */
   stopAll(): void {
+    this.log("info", "[Watchdog] stopAll called");
     for (const [sessionId, entry] of this.sessions.entries()) {
       if (entry.timer) {
         this.clock.clearTimeout(entry.timer);
@@ -118,12 +138,19 @@ export class Watchdog {
 
     const existing = this.sessions.get(sessionId);
     const effectiveName = meta.agentName ?? existing?.agentName;
-    if (!this.isAgentMonitored(effectiveName)) return;
+    if (!this.isAgentMonitored(effectiveName)) {
+      this.log("info", `[Watchdog] Session ${sessionId} not monitored (agentName: ${effectiveName})`);
+      return;
+    }
+
+    this.log("info", `[Watchdog] armOrReset for session ${sessionId} (existing state: ${existing?.state ?? "NONE"})`);
 
     if (existing && existing.timer !== null) {
+      this.log("info", `[Watchdog] Clearing existing timer for session ${sessionId}`);
       this.clock.clearTimeout(existing.timer);
     }
     if (existing && existing.state !== "WATCHING") {
+      this.log("info", `[Watchdog] Clearing notifier for session ${sessionId} (resetting to WATCHING)`);
       this.notifier.clear(sessionId).catch((err) =>
         this.log("warn", `notifier.clear on reset failed: ${String(err)}`),
       );
@@ -137,6 +164,7 @@ export class Watchdog {
       agentName: effectiveName,
     };
 
+    this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
       this.onStage1Expire(sessionId).catch((err) =>
         this.log("warn", `stage1 handler failed: ${String(err)}`),
@@ -149,6 +177,7 @@ export class Watchdog {
   private recordTombstone(sessionId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
     this.stoppedSessions.add(sessionId);
+    this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
     if (this.stoppedSessions.size > STOPPED_TOMBSTONE_CAPACITY) {
       const oldest = this.stoppedSessions.keys().next().value;
       if (oldest !== undefined) this.stoppedSessions.delete(oldest);
@@ -156,13 +185,21 @@ export class Watchdog {
   }
 
   private clearTombstone(sessionId: string): void {
-    this.stoppedSessions.delete(sessionId);
+    if (this.stoppedSessions.delete(sessionId)) {
+      this.log("info", `[Watchdog] Clearing tombstone for session ${sessionId}`);
+    }
   }
 
   private async onStage1Expire(sessionId: string): Promise<void> {
     const entry = this.sessions.get(sessionId);
-    if (!entry) return;
+    if (!entry) {
+      this.log("info", `[Watchdog] onStage1Expire ignored: session ${sessionId} no longer exists`);
+      return;
+    }
+    this.log("info", `[Watchdog] Session ${sessionId} STAGE1 expired. Transitioning to STAGE1_NOTIFIED`);
     entry.state = "STAGE1_NOTIFIED";
+    
+    this.log("info", `[Watchdog] Scheduling stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
       this.onStage2Expire(sessionId).catch((err) =>
         this.log("warn", `stage2 handler failed: ${String(err)}`),
@@ -175,6 +212,7 @@ export class Watchdog {
       `[Watchdog] Agent ${sessionId} idle for ${this.config.stage1Ms}ms`,
     );
     if (this.sessions.get(sessionId) !== entry) {
+      this.log("info", `[Watchdog] Session entry changed during notify. Cleaning up notifier.`);
       this.notifier.clear(sessionId).catch((err) =>
         this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
       );
@@ -183,16 +221,24 @@ export class Watchdog {
 
   private async onStage2Expire(sessionId: string): Promise<void> {
     const entry = this.sessions.get(sessionId);
-    if (!entry) return;
+    if (!entry) {
+      this.log("info", `[Watchdog] onStage2Expire ignored: session ${sessionId} no longer exists`);
+      return;
+    }
 
     if (entry.pingCount < this.config.maxPings) {
+      this.log("info", `[Watchdog] Session ${sessionId} STAGE2 expired. Injecting Ping (count: ${entry.pingCount + 1}/${this.config.maxPings})`);
       entry.state = "PINGED";
       entry.pingCount += 1;
-      await this.pinger.inject(sessionId, this.config.pingMessage);
-      if (this.sessions.get(sessionId) !== entry) return;
+      entry.lastPingTime = this.clock.now();
+      // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
+      // and state transitions due to network/API timeouts.
+      this.pinger.inject(sessionId, this.config.pingMessage).catch((err) =>
+        this.log("warn", `Failed to inject ping to ${sessionId}: ${String(err)}`),
+      );
 
-      // Reset the stage2 timer after the inject resolves to prevent concurrent
-      // onStage2Expire executions that could double-count pingCount.
+      // Reset the stage2 timer immediately to maintain correct state progression.
+      this.log("info", `[Watchdog] Scheduling next stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
       entry.timer = this.clock.setTimeout(() => {
         this.onStage2Expire(sessionId).catch((err) =>
           this.log("warn", `stage2 handler failed: ${String(err)}`),
@@ -206,11 +252,13 @@ export class Watchdog {
         `[Watchdog] Ping injected to ${sessionId}`,
       );
       if (this.sessions.get(sessionId) !== entry) {
+        this.log("info", `[Watchdog] Session entry changed during notify. Cleaning up notifier.`);
         this.notifier.clear(sessionId).catch((err) =>
           this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
         );
       }
     } else {
+      this.log("info", `[Watchdog] Session ${sessionId} reached max pings. Transitioning to SILENCED`);
       entry.state = "SILENCED";
       entry.timer = null;
       // Message text per design §5.2 (SILENCED row).
@@ -220,6 +268,7 @@ export class Watchdog {
         "[Watchdog] Max pings reached. Manual intervention required.",
       );
       if (this.sessions.get(sessionId) !== entry) {
+        this.log("info", `[Watchdog] Session entry changed during notify. Cleaning up notifier.`);
         this.notifier.clear(sessionId).catch((err) =>
           this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
         );

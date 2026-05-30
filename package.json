@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "description": "OpenCode session hang detector with tmux notification and self-recovery ping injection",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
+    "build": "bun build ./src/index.ts --outfile ./dist/index.js --target node --external node:fs",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
