@@ -2,12 +2,16 @@ import { describe, test, expect } from "bun:test";
 import plugin, {
   extractSessionId,
   isUserMessage,
+  isPingEvent,
+  extractMessageId,
+  isNewUserMessage,
   type OpenCodeEvent,
 } from "../src/index";
 
 describe("plugin entry smoke", () => {
-  test("default export is a Plugin function", () => {
-    expect(typeof plugin).toBe("function");
+  test("default export is a Plugin object containing id and server", () => {
+    expect(plugin.id).toBe("opencode-watchdog");
+    expect(typeof plugin.server).toBe("function");
   });
 
   test("instantiated plugin exposes event handler and dispose function", async () => {
@@ -20,7 +24,7 @@ describe("plugin entry smoke", () => {
       directory: process.cwd(),
       worktree: process.cwd(),
     };
-    const instance = await (plugin as (ctx: unknown) => Promise<{ event: unknown; dispose: unknown }>)(
+    const instance = await (plugin.server as (ctx: unknown) => Promise<{ event: unknown; dispose: unknown }>)(
       fakeContext,
     );
     expect(typeof instance.event).toBe("function");
@@ -38,7 +42,7 @@ describe("plugin entry smoke", () => {
       directory: process.cwd(),
       worktree: process.cwd(),
     };
-    const instance = await (plugin as (ctx: unknown) => Promise<{
+    const instance = await (plugin.server as (ctx: unknown) => Promise<{
       event: (e: { event: unknown }) => Promise<void>;
     }>)(fakeContext);
     await instance.event({
@@ -138,13 +142,22 @@ describe("extractSessionId (event routing)", () => {
 });
 
 describe("isUserMessage (initial-trigger role determination)", () => {
-  test("true only for message.updated with role=user", () => {
+  test("true only for message.updated with role=user and non-empty parts", () => {
     expect(
       isUserMessage({
         type: "message.updated",
-        properties: { info: { role: "user", sessionID: "s" } },
+        properties: { info: { role: "user", sessionID: "s", parts: [{ type: "text", text: "hello" }] } },
       }),
     ).toBe(true);
+  });
+
+  test("false for message.updated with role=user but empty parts", () => {
+    expect(
+      isUserMessage({
+        type: "message.updated",
+        properties: { info: { role: "user", sessionID: "s", parts: [] } },
+      }),
+    ).toBe(false);
   });
 
   test("false for message.updated with role=assistant", () => {
@@ -183,5 +196,109 @@ describe("isUserMessage (initial-trigger role determination)", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  test("isPingEvent identifies matching ping messages", () => {
+    const matchingMsgEvent: OpenCodeEvent = {
+      type: "message.updated",
+      properties: {
+        info: {
+          role: "user",
+          sessionID: "s",
+          parts: [{ type: "text", text: "ping-msg" }],
+        },
+      },
+    };
+    const nonMatchingMsgEvent: OpenCodeEvent = {
+      type: "message.updated",
+      properties: {
+        info: {
+          role: "user",
+          sessionID: "s",
+          parts: [{ type: "text", text: "different-msg" }],
+        },
+      },
+    };
+    const matchingPartEvent: OpenCodeEvent = {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          text: "ping-msg",
+        },
+      },
+    };
+
+    expect(isPingEvent(matchingMsgEvent, "ping-msg")).toBe(true);
+    expect(isPingEvent(nonMatchingMsgEvent, "ping-msg")).toBe(false);
+    expect(isPingEvent(matchingPartEvent, "ping-msg")).toBe(true);
+    expect(isPingEvent(matchingPartEvent, "different-msg")).toBe(false);
+
+    // Partial match test cases (streaming simulation)
+    const partialMsgEvent1: OpenCodeEvent = {
+      type: "message.updated",
+      properties: { info: { parts: [{ type: "text", text: "pin" }] } } as never,
+    };
+    const partialMsgEvent2: OpenCodeEvent = {
+      type: "message.updated",
+      properties: { info: { parts: [{ type: "text", text: "pi" }] } } as never,
+    };
+    const partialPartEvent1: OpenCodeEvent = {
+      type: "message.part.updated",
+      properties: { part: { text: "pin" } } as never,
+    };
+    const partialPartEvent2: OpenCodeEvent = {
+      type: "message.part.updated",
+      properties: { part: { text: "pi" } } as never,
+    };
+
+    expect(isPingEvent(partialMsgEvent1, "ping-msg")).toBe(true);
+    expect(isPingEvent(partialMsgEvent2, "ping-msg")).toBe(true);
+    expect(isPingEvent(partialPartEvent1, "ping-msg")).toBe(true);
+    expect(isPingEvent(partialPartEvent2, "ping-msg")).toBe(true);
+  });
+});
+
+describe("extractMessageId (messageID extraction)", () => {
+  test("extracts id from message.updated properties.info.id", () => {
+    expect(
+      extractMessageId({
+        type: "message.updated",
+        properties: { info: { id: "msg_123" } },
+      }),
+    ).toBe("msg_123");
+  });
+
+  test("extracts messageID from message.part.updated properties.part.messageID", () => {
+    expect(
+      extractMessageId({
+        type: "message.part.updated",
+        properties: { part: { messageID: "msg_456" } },
+      }),
+    ).toBe("msg_456");
+  });
+
+  test("returns undefined for other events", () => {
+    expect(
+      extractMessageId({
+        type: "session.idle",
+        properties: { sessionID: "s" },
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("isNewUserMessage (deduplication utility)", () => {
+  test("returns true for a new message ID and false for subsequent checks of the same ID", () => {
+    const msgId = `unique_msg_id_${Math.random()}`;
+    expect(isNewUserMessage(msgId)).toBe(true);
+    expect(isNewUserMessage(msgId)).toBe(false);
+    expect(isNewUserMessage(msgId)).toBe(false);
+  });
+
+  test("returns true for different message IDs", () => {
+    const msgId1 = `msg_id_a_${Math.random()}`;
+    const msgId2 = `msg_id_b_${Math.random()}`;
+    expect(isNewUserMessage(msgId1)).toBe(true);
+    expect(isNewUserMessage(msgId2)).toBe(true);
   });
 });

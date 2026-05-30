@@ -28,8 +28,8 @@ describe("Watchdog - memory & timer leak (design §7.4)", () => {
       clock,
       pinger: new MockPinger(),
       notifier: new NoopNotifier(),
+      log: () => {},
     });
-
     for (let s = 0; s < 1000; s++) {
       const sid = `sess-${s}`;
       for (let c = 0; c < 100; c++) {
@@ -59,6 +59,7 @@ describe("Watchdog - memory & timer leak (design §7.4)", () => {
       clock,
       pinger: new MockPinger(),
       notifier: new NoopNotifier(),
+      log: () => {},
     });
 
     for (let i = 0; i < 100; i++) {
@@ -77,6 +78,7 @@ describe("Watchdog - memory & timer leak (design §7.4)", () => {
       clock,
       pinger: new MockPinger(),
       notifier: new NoopNotifier(),
+      log: () => {},
     });
     for (let i = 0; i < 500; i++) {
       watchdog.onActivity("s-single");
@@ -100,7 +102,7 @@ describe("Acceptance §10 - initial hang detection", () => {
       },
       async clear() {},
     };
-    const watchdog = new Watchdog({ config: cfg, clock, pinger, notifier });
+    const watchdog = new Watchdog({ config: cfg, clock, pinger, notifier, log: () => {} });
     watchdog.onUserMessage("s-init");
     clock.advance(cfg.stage1Ms);
     expect(notifies).toContain("warn");
@@ -121,7 +123,7 @@ describe("Acceptance §10 - empty session no false trigger", () => {
       },
       async clear() {},
     };
-    const watchdog = new Watchdog({ config: cfg, clock, pinger, notifier });
+    const watchdog = new Watchdog({ config: cfg, clock, pinger, notifier, log: () => {} });
     watchdog.onSessionCreated("s-empty");
     clock.advance(60_000);
     expect(pinger.calls.length).toBe(0);

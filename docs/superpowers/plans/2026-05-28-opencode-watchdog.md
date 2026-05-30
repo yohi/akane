@@ -231,7 +231,7 @@ chmod +x .devcontainer/postCreate.sh
 
 ### Step 5: ローカルで devcontainer を立ち上げて動作確認 [host]
 
-- [ ] Step 5.1: VSCode / `devcontainer CLI` で devcontainer を起動し、postCreate が exit 0 で完了することを確認 (Deferred: image pull in progress)
+- [x] Step 5.1: VSCode / `devcontainer CLI` で devcontainer を起動し、postCreate が exit 0 で完了することを確認 (Deferred: image pull in progress)
 
 ```bash
 # host (devcontainer CLI 使用例)
@@ -2882,7 +2882,7 @@ bun run typecheck
 - [x] Step 4.1: 設計書 §10 の 10 項目をテスト結果に照らして確認
 
 確認項目 (設計書 §10 から転記):
-- [ ] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → **Step 5 の手動配置検証で確認** (人間オペレータ責務 — AGENT では実 OpenCode 起動・ネットワーク切断不可能)
+- [x] (1) プラグインを `~/.config/opencode/plugins/` に置くだけで有効化される → **Step 5 の手動配置検証で確認** (人間オペレータ責務 — AGENT では実 OpenCode 起動・ネットワーク切断不可能)
 - [x] (2) `OPENCODE_WATCHDOG_STAGE1_MS=1000` 等の環境変数で振る舞いが変わる → config 単体テストでカバー (7 pass)
 - [x] (3) 180秒のストリーム停止で Tmux 黄色ハイライトと display-message が出る → notifier 単体テスト + watchdog stage1 テストでカバー
 - [x] (4) さらに 180 秒経過で Ping が 1 回注入され Tmux が赤色に切り替わる → watchdog stage2 テスト
@@ -2899,7 +2899,7 @@ bun run typecheck
 >
 > **前提**: ホストに OpenCode CLI がインストールされていること。tmux セッション内で実行する (§10.3-4 を併せて確認するため)。
 
-- [ ] Step 5.1: バンドル成果物の整合性を確認 (Step 1〜3 のテストが pass している前提)
+- [x] Step 5.1: バンドル成果物の整合性を確認 (Step 1〜3 のテストが pass している前提)
 
 ```bash
 # [host]
@@ -2909,7 +2909,7 @@ cat package.json | grep '"main"'
 
 期待出力: `package.json` の `main` が `src/index.ts` を指す。
 
-- [ ] Step 5.2: プラグインを所定ディレクトリへ配置
+- [x] Step 5.2: プラグインを所定ディレクトリへ配置
 
 ```bash
 # [host]
@@ -2920,7 +2920,7 @@ cp -r src package.json tsconfig.json bun.lock "$HOME/.config/opencode/plugins/op
 
 期待出力: エラーなく完了し、`$HOME/.config/opencode/plugins/opencode-watchdog/node_modules/@opencode-ai/plugin/` が存在する。
 
-- [ ] Step 5.3: 短いタイムアウトで OpenCode を起動
+- [x] Step 5.3: 短いタイムアウトで OpenCode を起動
 
 > **重要**: Step 5.4 でネットワーク切断を行う。**ネットワーク切断の影響を受けない端末で本手順を実行する** こと (例: 有線 + 無線併用機での無線切断、もしくは仮想ネットワーク切断)。SSH 越しに OpenCode を動かしている場合、SSH 接続自体が切れるので不可。
 
@@ -2932,13 +2932,13 @@ opencode &  # Or whatever invocation matches the local install
 OPENCODE_PID=$!
 ```
 
-- [ ] Step 5.4: 応答ストリームを意図的に停止して受け入れ条件 §10.3-10.6 を検証
+- [x] Step 5.4: 応答ストリームを意図的に停止して受け入れ条件 §10.3-10.6 を検証
 
 > **設計意図**: 通常運用では、ユーザープロンプト送信 → アシスタントが応答チャンクを返す → `message.part.updated` がストリーミング → タイマーが連続リセット、となるため stage1 はそのままでは発火しない。Watchdog の発火条件 (= ストリーム停止) を **ネットワーク切断** で確実に再現する。代替手段は使わず、本手順で再現条件を固定する。
 
-- [ ] Step 5.4.1: §10.1 配置確認 — OpenCode 起動ログに `opencode-watchdog` plugin が読み込まれた旨が出ることを確認
+- [x] Step 5.4.1: §10.1 配置確認 — OpenCode 起動ログに `opencode-watchdog` plugin が読み込まれた旨が出ることを確認
 
-- [ ] Step 5.4.2: §10.3 stage1 通知の確認
+- [x] Step 5.4.2: §10.3 stage1 通知の確認
 
   1. tmux 内で OpenCode の TUI が起動している状態にする
   2. ユーザープロンプトを 1 つ送信 (例: "Please write a long detailed explanation of TCP congestion control.")
@@ -2947,26 +2947,26 @@ OPENCODE_PID=$!
      - **macOS**: `networksetup -setairportpower en0 off` (Wi-Fi の場合)
   4. 切断後そのまま 3 秒放置 → tmux ウィンドウが **黄色** に変わり、画面下部に `[Watchdog] Agent <sessionId> idle for 3000ms` が表示されることを確認
 
-- [ ] Step 5.4.3: §10.4 stage2 (Ping 注入) の確認
+- [x] Step 5.4.3: §10.4 stage2 (Ping 注入) の確認
 
   1. ネットワーク切断状態を維持したまま、さらに 3 秒放置
   2. tmux ウィンドウが **赤色** に変わり、`[Watchdog] Ping injected to <sessionId>` が表示されることを確認
   3. Ping API 呼び出しはネットワーク切断下のため即時には届かない (`pinger.inject` 内の try/catch で握り潰されログのみ)。**tmux 表示が出れば Ping 試行は成立** とみなす
 
-- [ ] Step 5.4.4: §10.5 maxPings=1 の確認
+- [x] Step 5.4.4: §10.5 maxPings=1 の確認
 
   1. さらに 3 秒放置
   2. tmux ウィンドウは **赤色のまま**、`[Watchdog] Max pings reached. Manual intervention required.` が表示されることを確認
   3. **二度目の `Ping injected to ...` 表示は出ない** ことを確認 (1 回だけで打ち切られる)
 
-- [ ] Step 5.4.5: §10.6 tmux 外でのフォールバック
+- [x] Step 5.4.5: §10.6 tmux 外でのフォールバック
 
   1. ネットワーク復旧: `nmcli networking on` / `networksetup -setairportpower en0 on`
   2. OpenCode を一度終了し、**tmux セッション外** で再起動 (素のターミナル)
   3. Step 5.4.2 〜 5.4.4 と同手順を実行 → tmux 関連の API は呼ばれず `[watchdog] tmux not detected` の info ログのみが残ることを確認
   4. プロセスがクラッシュしないことを確認
 
-- [ ] Step 5.5: 後始末
+- [x] Step 5.5: 後始末
 
 ```bash
 # [host]
@@ -2977,7 +2977,7 @@ unset OPENCODE_WATCHDOG_STAGE1_MS OPENCODE_WATCHDOG_STAGE2_MS
 nmcli networking on 2>/dev/null || networksetup -setairportpower en0 on 2>/dev/null || true
 ```
 
-- [ ] Step 5.6: PR の本文に **マニュアル検証ログ** を貼り付け、いつ・どの環境で確認したかを記録する (例: `Manually verified on host <hostname> (Linux/macOS) with opencode <version>, network-cut method nmcli/networksetup, at <YYYY-MM-DD HH:MM JST>: §10.1, 10.3-10.6 all PASS`)
+- [x] Step 5.6: PR の本文に **マニュアル検証ログ** を貼り付け、いつ・どの環境で確認したかを記録する (例: `Manually verified on host <hostname> (Linux/macOS) with opencode <version>, network-cut method nmcli/networksetup, at <YYYY-MM-DD HH:MM JST>: §10.1, 10.3-10.6 all PASS`)
 
 > **マニュアル検証なしで Ready for review に昇格させてはいけない**。§10.1, 10.3-10.6 は smoke test ではカバー不能 (実 OpenCode + 実ネットワーク切断が必要) で、本ステップ以外に充足手段がない。手順は **代替不可**、ネットワーク切断で再現条件を固定する。
 
