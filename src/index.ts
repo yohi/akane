@@ -67,9 +67,10 @@ export function isPingEvent(event: OpenCodeEvent, pingMessage: string): boolean 
   
   const isMatch = (text: string | undefined) => {
     if (!text) return false;
-    // Apply substring matching for 2 or more characters.
+    // Apply unidirectional substring matching for 2 or more characters.
+    // This handles streaming chunks while avoiding false positives from user text containing pingMessage.
     if (text.length >= 2) {
-      return pingMessage.includes(text) || text.includes(pingMessage);
+      return pingMessage.includes(text);
     }
     // For single character chunks, check if it is the start of the ping message.
     return pingMessage.startsWith(text);
@@ -149,33 +150,36 @@ export function extractMessageId(event: OpenCodeEvent): string | undefined {
   return undefined;
 }
 
-const IGNORED_PING_MESSAGE_IDS = new Set<string>();
-const IGNORED_PING_MESSAGE_IDS_LIMIT = 100;
+class BoundedSet<T> {
+  private set = new Set<T>();
+  constructor(private limit: number) {}
 
-function recordIgnoredPingMessageId(messageId: string) {
-  if (IGNORED_PING_MESSAGE_IDS.has(messageId)) return;
-  IGNORED_PING_MESSAGE_IDS.add(messageId);
-  if (IGNORED_PING_MESSAGE_IDS.size > IGNORED_PING_MESSAGE_IDS_LIMIT) {
-    const oldest = IGNORED_PING_MESSAGE_IDS.keys().next().value;
-    if (oldest !== undefined) {
-      IGNORED_PING_MESSAGE_IDS.delete(oldest);
+  has(value: T): boolean {
+    return this.set.has(value);
+  }
+
+  /**
+   * Adds a value to the set.
+   * @returns true if the value was newly added, false if already present.
+   */
+  add(value: T): boolean {
+    if (this.set.has(value)) return false;
+    this.set.add(value);
+    if (this.set.size > this.limit) {
+      const oldest = this.set.keys().next().value;
+      if (oldest !== undefined) {
+        this.set.delete(oldest);
+      }
     }
+    return true;
   }
 }
 
-const SEEN_USER_MESSAGE_IDS = new Set<string>();
-const SEEN_USER_MESSAGE_IDS_LIMIT = 1000;
+const IGNORED_PING_MESSAGE_IDS = new BoundedSet<string>(100);
+const SEEN_USER_MESSAGE_IDS = new BoundedSet<string>(1000);
 
 export function isNewUserMessage(messageId: string): boolean {
-  if (SEEN_USER_MESSAGE_IDS.has(messageId)) return false;
-  SEEN_USER_MESSAGE_IDS.add(messageId);
-  if (SEEN_USER_MESSAGE_IDS.size > SEEN_USER_MESSAGE_IDS_LIMIT) {
-    const oldest = SEEN_USER_MESSAGE_IDS.keys().next().value;
-    if (oldest !== undefined) {
-      SEEN_USER_MESSAGE_IDS.delete(oldest);
-    }
-  }
-  return true;
+  return SEEN_USER_MESSAGE_IDS.add(messageId);
 }
 
 import * as fs from "node:fs";
@@ -288,25 +292,46 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
           return;
         }
 
+        // --- Human Intervention Bypass (Priority 1) ---
+        // We handle user-originated messages and typing first so they bypass BOTH the ping-filter
+        // and the arm-lock. This ensures that if a user types something that happens to contain
+        // ping keywords, or if they intervene during the arm-lock period, the watchdog still resets.
+        const isManualUserMessage = isUserMessage(event);
+        const agentName = extractAgentName(event);
+        const partText =
+          event.type === "message.part.updated"
+            ? (event.properties as { part?: { text?: string } } | undefined)?.part?.text
+            : undefined;
+        const isUserTyping =
+          event.type === "message.part.updated" &&
+          agentName === undefined &&
+          typeof partText === "string" &&
+          partText.length > 0;
+
+        if (isManualUserMessage || isUserTyping) {
+          if (messageId && !SEEN_USER_MESSAGE_IDS.add(messageId)) {
+            instLog("info", `Event ignored (already seen user message/typing: ${messageId})`);
+            return;
+          }
+          instLog(
+            "info",
+            `Event triggered onUserMessage (bypassing arm lock) for session ${sessionId} (messageId: ${messageId})`,
+          );
+          watchdog.onUserMessage(sessionId, { agentName });
+          return;
+        }
+
+        // --- Self-Injected Ping Filtering (Priority 2) ---
         if (isPingEvent(event, config.pingMessage)) {
           instLog("info", `Event ignored (identified as self-injected ping event)`);
           if (messageId) {
-            recordIgnoredPingMessageId(messageId);
+            IGNORED_PING_MESSAGE_IDS.add(messageId);
           }
           // Ignore self-injected ping messages completely to prevent infinite loops.
           return;
         }
 
-        if (isUserMessage(event)) {
-          if (messageId && !isNewUserMessage(messageId)) {
-            instLog("info", `Event ignored (already seen user message: ${messageId})`);
-            return;
-          }
-          instLog("info", `Event triggered onUserMessage (bypassing arm lock) for session ${sessionId} (messageId: ${messageId})`);
-          watchdog.onUserMessage(sessionId, { agentName: extractAgentName(event) });
-          return;
-        }
-
+        // --- Arm Lock (Priority 3) ---
         // Lock window: Block all arming/resets during the stage2 window * 2 (minimum 30 seconds) after a ping injection.
         // This completely prevents late API timeouts, queue updates, or error messages (which typically
         // take 10-30s) from re-arming the watchdog during the recovery assessment phase.
@@ -315,12 +340,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         const nowTime = clock.now();
         const lockDuration = Math.max(config.stage2Ms * 2, 30000);
         if (lastPingTime > 0 && nowTime - lastPingTime < lockDuration) {
-          instLog("info", `Event blocked by arm lock (lastPing: ${lastPingTime}, now: ${nowTime}, lockDuration: ${lockDuration})`);
+          instLog(
+            "info",
+            `Event blocked by arm lock (lastPing: ${lastPingTime}, now: ${nowTime}, lockDuration: ${lockDuration})`,
+          );
           if (messageId) {
-            recordIgnoredPingMessageId(messageId);
+            IGNORED_PING_MESSAGE_IDS.add(messageId);
           }
           return;
         }
+
+        // --- Assistant Activity & Other Events (Priority 4) ---
 
         // Ignore empty user message updated events (shell creation or ping initialization)
         // to prevent them from falling through to the assistant activity fallback below.
@@ -333,24 +363,13 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         }
 
         if (event.type === "message.part.updated") {
-          const part = (event.properties as { part?: { text?: string } } | undefined)?.part;
-          const agentName = extractAgentName(event);
-
           // If this is an assistant event (has agent name), treat as activity to refresh stage1.
           if (agentName !== undefined) {
-            instLog("info", `Event triggered onActivity (assistant part update) for session ${sessionId}`);
+            instLog(
+              "info",
+              `Event triggered onActivity (assistant part update) for session ${sessionId}`,
+            );
             watchdog.onActivity(sessionId, { agentName });
-            return;
-          }
-
-          // For user-originated part updates, only treat as activity if it has non-empty text
-          // (which means a real user is typing, as ping messages are already ignored).
-          // Empty updates (like queue status changes or empty shells) are ignored.
-          // Note: We use onUserMessage here instead of onActivity so that user typing or sending
-          // a message can successfully restore the session from SILENCED state.
-          if (part && typeof part.text === "string" && part.text.length > 0) {
-            instLog("info", `Event triggered onUserMessage (user typing part update) for session ${sessionId}`);
-            watchdog.onUserMessage(sessionId, { agentName });
             return;
           }
           instLog("info", `Event ignored (message.part.updated not matching activity criteria)`);

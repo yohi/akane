@@ -55,12 +55,12 @@ cp -r package.json dist ~/.config/opencode/plugins/opencode-watchdog/
 
 ## 4. Codebase Structure
 
-- [src/index.ts](file:///home/y_ohi/program/akane/src/index.ts): Plugin entry point. Dispatches incoming events to `Watchdog` and handles duplicate loading protection.
-- [src/watchdog.ts](file:///home/y_ohi/program/akane/src/watchdog.ts): Core Watchdog engine. Manages state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`) and session timers.
-- [src/notifier.ts](file:///home/y_ohi/program/akane/src/notifier.ts): Handles Tmux status line colorization (`bg=yellow`, `bg=red`, `default`) and display notifications.
-- [src/pinger.ts](file:///home/y_ohi/program/akane/src/pinger.ts): Adapter for `client.session.prompt` to inject the ping message into the active session.
-- [src/clock.ts](file:///home/y_ohi/program/akane/src/clock.ts): DI Clock wrapper (`RealClock` and `FakeClock`) enabling fast time-advance testing.
-- [src/config.ts](file:///home/y_ohi/program/akane/src/config.ts): Merges config priorities: env > project config (jsonc) > defaults.
+- [src/index.ts](./src/index.ts): Plugin entry point. Dispatches incoming events to `Watchdog` and handles duplicate loading protection.
+- [src/watchdog.ts](./src/watchdog.ts): Core Watchdog engine. Manages state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`) and session timers.
+- [src/notifier.ts](./src/notifier.ts): Handles Tmux status line colorization (`bg=yellow`, `bg=red`, `default`) and display notifications.
+- [src/pinger.ts](./src/pinger.ts): Adapter for `client.session.prompt` to inject the ping message into the active session.
+- [src/clock.ts](./src/clock.ts): DI Clock wrapper (`RealClock` and `FakeClock`) enabling fast time-advance testing.
+- [src/config.ts](./src/config.ts): Merges config priorities: env > project config (jsonc) > defaults.
 
 ---
 

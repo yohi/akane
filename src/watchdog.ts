@@ -185,8 +185,9 @@ export class Watchdog {
   }
 
   private clearTombstone(sessionId: string): void {
-    this.log("info", `[Watchdog] Clearing tombstone for session ${sessionId}`);
-    this.stoppedSessions.delete(sessionId);
+    if (this.stoppedSessions.delete(sessionId)) {
+      this.log("info", `[Watchdog] Clearing tombstone for session ${sessionId}`);
+    }
   }
 
   private async onStage1Expire(sessionId: string): Promise<void> {

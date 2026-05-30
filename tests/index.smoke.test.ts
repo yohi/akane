@@ -197,8 +197,10 @@ describe("isUserMessage (initial-trigger role determination)", () => {
       ).toBe(false);
     }
   });
+});
 
-  test("isPingEvent identifies matching ping messages", () => {
+describe("isPingEvent", () => {
+  test("identifies matching ping messages", () => {
     const matchingMsgEvent: OpenCodeEvent = {
       type: "message.updated",
       properties: {
