@@ -69,7 +69,12 @@ function extractAgentName(event: OpenCodeEvent): string | undefined {
         part?: AgentNameSource;
       }
     | undefined;
-  return props?.info?.agent ?? props?.part?.agent;
+  return (
+    props?.info?.agent ??
+    props?.part?.agent ??
+    props?.info?.agentName ??
+    props?.part?.agentName
+  );
 }
 
 interface PluginInputLike {
@@ -120,7 +125,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         if (!config.enabled) return;
         const sessionId = extractSessionId(event);
 
-        if (event.type === "session.created") {
+        if (event.type === "session.created" || event.type === "session.updated") {
           // Informational only per design §2.3.
           return;
         }
@@ -156,9 +161,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       }
     },
     dispose: async () => {
-      // Per design §7.4: timers should not outlive plugin teardown. Watchdog
-      // tracks active sessions internally; consumers can rely on process exit
-      // to GC them. This dispose hook is preserved for future explicit cleanup.
+      watchdog.stopAll();
     },
   };
 };

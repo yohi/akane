@@ -47,6 +47,29 @@ describe("resolveConfig", () => {
     expect(cfg.stage1Ms).toBe(180_000);
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings[0]).toContain("stage1Ms");
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("invalid 0 falls back to default with warn", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { project: { stage1Ms: 0 } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.stage1Ms).toBe(180_000);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("env OPENCODE_WATCHDOG_MAX_PINGS=0 falls back to default", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { env: { OPENCODE_WATCHDOG_MAX_PINGS: "0" } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.maxPings).toBe(1);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("lower-priority source");
   });
 
   test("invalid type in env falls back to default", () => {
@@ -57,6 +80,34 @@ describe("resolveConfig", () => {
     );
     expect(cfg.maxPings).toBe(1);
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("uses project config when env is invalid", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      {
+        env: { OPENCODE_WATCHDOG_MAX_PINGS: "0" },
+        project: { maxPings: 5 },
+      },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.maxPings).toBe(5);
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_MAX_PINGS");
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("validateNumber rejects non-integers for millisecond and ping settings", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { project: { stage1Ms: 123.45 } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.stage1Ms).toBe(DEFAULT_CONFIG.stage1Ms);
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("stage1Ms");
+    expect(warnings[0]).toContain("lower-priority source");
   });
 
   test("agents.include and exclude pass through", () => {
@@ -65,5 +116,38 @@ describe("resolveConfig", () => {
     });
     expect(cfg.agents.include).toEqual(["main"]);
     expect(cfg.agents.exclude).toEqual(["debug"]);
+  });
+
+  test("allows partial tmux config in project", () => {
+    const sources: ConfigSources = {
+      project: {
+        tmux: { enabled: false }
+      }
+    };
+    const cfg = resolveConfig(sources);
+    expect(cfg.tmux.enabled).toBe(false);
+    expect(cfg.tmux.displayMessage).toBe(true);
+  });
+
+  test("parseBool handles TRUE/FALSE case-insensitively", () => {
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "TRUE" } }).enabled).toBe(true);
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "FALSE" } }).enabled).toBe(false);
+  });
+
+  test("parseBool handles yes/no", () => {
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "yes" } }).enabled).toBe(true);
+    expect(resolveConfig({ env: { OPENCODE_WATCHDOG_ENABLED: "no" } }).enabled).toBe(false);
+  });
+
+  test("parseBool warns on invalid value", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { env: { OPENCODE_WATCHDOG_ENABLED: "maybe" } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.enabled).toBe(true); // デフォルト
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_ENABLED");
+    expect(warnings[0]).toContain("lower-priority source");
   });
 });

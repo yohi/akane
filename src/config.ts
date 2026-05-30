@@ -16,7 +16,7 @@ export interface WatchdogConfig {
 }
 
 export interface ConfigSources {
-  project?: Partial<WatchdogConfig> & {
+  project?: Omit<Partial<WatchdogConfig>, "tmux" | "agents"> & {
     tmux?: Partial<WatchdogConfig["tmux"]>;
     agents?: Partial<WatchdogConfig["agents"]>;
   };
@@ -43,17 +43,19 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
 function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn): number | undefined {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to default.`);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
     return undefined;
   }
   return n;
 }
 
-function parseBool(value: string | undefined): boolean | undefined {
+function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
   if (value === undefined) return undefined;
-  if (value === "true" || value === "1") return true;
-  if (value === "false" || value === "0") return false;
+  const lower = value.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1") return true;
+  if (lower === "false" || lower === "no" || lower === "0") return false;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
 
@@ -61,10 +63,15 @@ function validateNumber(
   value: number | undefined,
   key: string,
   warn: WarnFn,
+  requireInteger = false,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value < 0) {
-    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to default.`);
+  if (
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    (requireInteger && !Number.isInteger(value))
+  ) {
+    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to lower-priority source.`);
     return undefined;
   }
   return value;
@@ -77,14 +84,14 @@ export function resolveConfig(
   const env = sources.env ?? {};
   const project = sources.project ?? {};
 
-  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED);
+  const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
 
-  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn);
-  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn);
-  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn);
+  const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
+  const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
+  const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
   return {
     enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,

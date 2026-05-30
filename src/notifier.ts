@@ -24,6 +24,7 @@ const STYLE_BY_STAGE: Record<NotifierStage, string> = {
 
 export class TmuxNotifier implements Notifier {
   private detection: "unknown" | "ok" | "disabled" = "unknown";
+  private tmuxPath: string = "tmux";
   private readonly log: (level: "warn" | "info", message: string) => void;
 
   constructor(private readonly deps: TmuxNotifierDeps) {
@@ -38,9 +39,9 @@ export class TmuxNotifier implements Notifier {
    */
   async notify(sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
-    await this.safeSpawn(["tmux", "display-message", message]);
+    await this.safeSpawn([this.tmuxPath, "display-message", message]);
     await this.safeSpawn([
-      "tmux",
+      this.tmuxPath,
       "set-window-option",
       "window-status-current-style",
       STYLE_BY_STAGE[stage],
@@ -50,7 +51,7 @@ export class TmuxNotifier implements Notifier {
   async clear(sessionId: string): Promise<void> {
     if (!(await this.ensureTmux())) return;
     await this.safeSpawn([
-      "tmux",
+      this.tmuxPath,
       "set-window-option",
       "window-status-current-style",
       "default",
@@ -73,7 +74,8 @@ export class TmuxNotifier implements Notifier {
       this.log("info", "tmux binary not found in PATH.");
       return false;
     }
-    const probe = await this.safeSpawn(["tmux", "display-message", "-p", "#{session_name}"]);
+    this.tmuxPath = path;
+    const probe = await this.safeSpawn([this.tmuxPath, "display-message", "-p", "#{session_name}"]);
     if (!probe || probe.exitCode !== 0) {
       this.detection = "disabled";
       this.log("info", "tmux probe failed; disabling tmux integration.");
@@ -85,7 +87,14 @@ export class TmuxNotifier implements Notifier {
 
   private async safeSpawn(cmd: string[]): Promise<SpawnResult | null> {
     try {
-      return await this.deps.spawn(cmd);
+      const result = await this.deps.spawn(cmd);
+      if (result.exitCode !== 0) {
+        this.log(
+          "warn",
+          `tmux command failed: ${cmd.join(" ")} (exitCode: ${result.exitCode}, stdout: ${result.stdout ?? ""})`,
+        );
+      }
+      return result;
     } catch (err) {
       this.log("warn", `tmux spawn failed: ${String(err)}`);
       return null;
