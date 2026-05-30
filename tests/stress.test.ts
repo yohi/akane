@@ -39,9 +39,8 @@ describe("Watchdog - memory & timer leak (design §7.4)", () => {
     // Mid-state: Map populated, every session has exactly one armed stage1 timer.
     expect(watchdog.activeSessionCount()).toBe(1000);
     expect(watchdog.activeTimerCount()).toBe(1000);
-    // FakeClock-side: Watchdog reset overwrites the prior timer reference, so
-    // the cancelled tombstones accumulate inside FakeClock but the live count
-    // (non-cancelled) must match Watchdog's view.
+    // FakeClock-side: FakeClock tracks only pending active timers (cancelled ones
+    // are physically removed in clearTimeout), so it must match Watchdog's view.
     expect(clock.pendingTimerCount()).toBe(1000);
 
     for (let s = 0; s < 1000; s++) {
@@ -106,7 +105,7 @@ describe("Acceptance §10 - initial hang detection", () => {
     clock.advance(cfg.stage1Ms);
     expect(notifies).toContain("warn");
     clock.advance(cfg.stage2Ms);
-    await new Promise((r) => setTimeout(r, 10));
+    await Promise.resolve(); // flush microtasks (MockPinger.inject is synchronous)
     expect(pinger.calls.length).toBe(1);
   });
 });
