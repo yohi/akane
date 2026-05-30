@@ -105,7 +105,7 @@ describe("Acceptance §10 - initial hang detection", () => {
     clock.advance(cfg.stage1Ms);
     expect(notifies).toContain("warn");
     clock.advance(cfg.stage2Ms);
-    await Promise.resolve(); // flush microtasks (MockPinger.inject is synchronous)
+    await new Promise((r) => setTimeout(r, 10)); // flush microtasks (MockPinger.inject is synchronous)
     expect(pinger.calls.length).toBe(1);
   });
 });
