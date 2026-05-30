@@ -10,7 +10,7 @@ describe("plugin entry smoke", () => {
     expect(typeof plugin).toBe("function");
   });
 
-  test("instantiated plugin exposes event handler", async () => {
+  test("instantiated plugin exposes event handler and dispose function", async () => {
     const fakeContext = {
       client: {
         app: { log: async () => undefined },
@@ -20,10 +20,12 @@ describe("plugin entry smoke", () => {
       directory: process.cwd(),
       worktree: process.cwd(),
     };
-    const instance = await (plugin as (ctx: unknown) => Promise<{ event: unknown }>)(
+    const instance = await (plugin as (ctx: unknown) => Promise<{ event: unknown; dispose: unknown }>)(
       fakeContext,
     );
     expect(typeof instance.event).toBe("function");
+    expect(typeof instance.dispose).toBe("function");
+    await (instance.dispose as () => Promise<void>)();
   });
 
   test("event handler does not throw on typical payloads", async () => {

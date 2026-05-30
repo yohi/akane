@@ -161,10 +161,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       }
     },
     dispose: async () => {
-      // Per design §7.4: timers should not outlive plugin teardown. Watchdog
-      // tracks active sessions internally; consumers can rely on process exit
-      // to GC them. This dispose hook is preserved for future explicit cleanup.
-      // TODO: Implement explicit timer cleanup for active sessions to prevent leaks in reloading environments.
+      watchdog.stopAll();
     },
   };
 };

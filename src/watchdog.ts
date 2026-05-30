@@ -99,6 +99,16 @@ export class Watchdog {
     );
   }
 
+  /** Stop all active sessions and clear all timers. */
+  stopAll(): void {
+    for (const entry of this.sessions.values()) {
+      if (entry.timer) {
+        this.clock.clearTimeout(entry.timer);
+      }
+    }
+    this.sessions.clear();
+  }
+
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
 
