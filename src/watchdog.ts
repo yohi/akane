@@ -101,10 +101,14 @@ export class Watchdog {
 
   /** Stop all active sessions and clear all timers. */
   stopAll(): void {
-    for (const entry of this.sessions.values()) {
+    for (const [sessionId, entry] of this.sessions.entries()) {
       if (entry.timer) {
         this.clock.clearTimeout(entry.timer);
       }
+      this.recordTombstone(sessionId);
+      this.notifier.clear(sessionId).catch((err) =>
+        this.log("warn", `notifier.clear failed on stopAll: ${String(err)}`),
+      );
     }
     this.sessions.clear();
   }
@@ -170,6 +174,11 @@ export class Watchdog {
       "warn",
       `[Watchdog] Agent ${sessionId} idle for ${this.config.stage1Ms}ms`,
     );
+    if (!this.sessions.has(sessionId)) {
+      this.notifier.clear(sessionId).catch((err) =>
+        this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
+      );
+    }
   }
 
   private async onStage2Expire(sessionId: string): Promise<void> {
@@ -179,20 +188,28 @@ export class Watchdog {
     if (entry.pingCount < this.config.maxPings) {
       entry.state = "PINGED";
       entry.pingCount += 1;
-      // Reset the stage2 timer to await response after ping.
+      await this.pinger.inject(sessionId, this.config.pingMessage);
+      if (!this.sessions.has(sessionId)) return;
+
+      // Reset the stage2 timer after the inject resolves to prevent concurrent
+      // onStage2Expire executions that could double-count pingCount.
       entry.timer = this.clock.setTimeout(() => {
         this.onStage2Expire(sessionId).catch((err) =>
           this.log("warn", `stage2 handler failed: ${String(err)}`),
         );
       }, this.config.stage2Ms);
-      await this.pinger.inject(sessionId, this.config.pingMessage);
-      if (!this.sessions.has(sessionId)) return;
+
       // Message text per design §5.2 (stage2 row).
       await this.notifier.notify(
         sessionId,
         "critical",
         `[Watchdog] Ping injected to ${sessionId}`,
       );
+      if (!this.sessions.has(sessionId)) {
+        this.notifier.clear(sessionId).catch((err) =>
+          this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
+        );
+      }
     } else {
       entry.state = "SILENCED";
       entry.timer = null;
@@ -202,6 +219,11 @@ export class Watchdog {
         "silenced",
         "[Watchdog] Max pings reached. Manual intervention required.",
       );
+      if (!this.sessions.has(sessionId)) {
+        this.notifier.clear(sessionId).catch((err) =>
+          this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
+        );
+      }
     }
   }
 
