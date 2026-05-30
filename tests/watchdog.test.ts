@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { Watchdog } from "../src/watchdog";
 import { FakeClock } from "../src/clock";
 import { MockPinger } from "../src/pinger";
@@ -162,6 +162,21 @@ describe("Watchdog - lifecycle cleanup", () => {
     clock.advance(1000);
     expect(notifier.notifies.length).toBe(1);
     expect(notifier.notifies[0]!.stage).toBe("warn");
+  });
+
+  test("stopAll() removes all sessions and clears all active timers", () => {
+    const { watchdog, clock, notifier } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onActivity("s2");
+    expect(watchdog.activeSessionCount()).toBe(2);
+    expect(watchdog.activeTimerCount()).toBe(2);
+
+    watchdog.stopAll();
+    expect(watchdog.activeSessionCount()).toBe(0);
+    expect(watchdog.activeTimerCount()).toBe(0);
+
+    clock.advance(10_000);
+    expect(notifier.notifies.length).toBe(0);
   });
 });
 
