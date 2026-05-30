@@ -1,9 +1,16 @@
 {
-  "name": "opencode-watchdog",
+  "name": "@yohi/akane",
   "version": "0.1.0",
   "description": "OpenCode session hang detector with tmux notification and self-recovery ping injection",
   "type": "module",
   "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yohi/akane.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "build": "bun build ./src/index.ts --outfile ./dist/index.js --target node --external node:fs",
     "test": "bun test",
