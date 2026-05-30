@@ -41,14 +41,41 @@ TypeScript ソースコードをコンパイルしてバンドルを作成しま
 bun run build
 ```
 
-### 3. デプロイ
-ビルドされた `dist/index.js` と `package.json` を OpenCode のプラグインディレクトリに配置します。
+### 3. リリース (開発者向け)
+このプロジェクトは Conventional Commits に基づき、GitHub Actions によって自動的にリリースされます。
+`master` ブランチにプッシュされると、`release-please` がリリース PR を作成します。PR がマージされると、GitHub Packages への公開と GitHub Release の作成が行われます。
+
+### 4. インストール・デプロイ (ローカル)
+開発中にローカルビルドをテストする場合は、`dist/index.js` と `package.json` を OpenCode のプラグインディレクトリに配置します。
 ```bash
-mkdir -p ~/.config/opencode/plugins/opencode-watchdog
-cp -r package.json dist ~/.config/opencode/plugins/opencode-watchdog/
+mkdir -p ~/.config/opencode/plugins/akane
+cp -r package.json dist ~/.config/opencode/plugins/akane/
 ```
 
-### 4. 実行テスト
+### 5. OpenCode への登録と設定
+`~/.config/opencode/opencode.jsonc` の `plugins` セクションにプラグイン（パッケージ名とバージョン）を追加し、必要に応じて設定を記述します。
+
+```jsonc
+{
+  "plugins": [
+    // GitHub Packages から最新版をインストールする場合
+    "@yohi/akane@latest"
+  ],
+  "experimental": {
+    "watchdog": {
+      "enabled": true,
+      "stage1Ms": 180000,
+      "stage2Ms": 180000,
+      "maxPings": 1,
+      "tmux": {
+        "highlightWindow": true
+      }
+    }
+  }
+}
+```
+
+### 6. 実行テスト
 単体テストおよびストレステストは `bun test` で実行できます。
 ```bash
 bun test
@@ -59,4 +86,3 @@ bun test
 1. ハング検知により赤色（SILENCED）に移行した後は、自動Pingの連投を防ぐため、アシスタントの出力等による自動リセットは動作しません。
 2. ネットワーク環境などを復旧させた後、**チャット欄に任意の新規メッセージを入力して送信**します。
 3. プラグインがユーザーの新規発話を検知した瞬間に、Tmux の赤色警告表示がクリア（通常色へ復帰）され、再び通常監視状態に戻ります。
-
