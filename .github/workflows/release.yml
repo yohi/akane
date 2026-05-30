@@ -55,12 +55,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag latest
-        run: npm dist-tag add @yohi/akane@${{ needs.release-please.outputs.tag_name }} latest
+        run: npm dist-tag add @yohi/akane@$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//') latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package
-        run: npm pack
+        run: npm pack --pack-destination .
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
