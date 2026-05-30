@@ -174,7 +174,7 @@ export class Watchdog {
       "warn",
       `[Watchdog] Agent ${sessionId} idle for ${this.config.stage1Ms}ms`,
     );
-    if (!this.sessions.has(sessionId)) {
+    if (this.sessions.get(sessionId) !== entry) {
       this.notifier.clear(sessionId).catch((err) =>
         this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
       );
@@ -189,7 +189,7 @@ export class Watchdog {
       entry.state = "PINGED";
       entry.pingCount += 1;
       await this.pinger.inject(sessionId, this.config.pingMessage);
-      if (!this.sessions.has(sessionId)) return;
+      if (this.sessions.get(sessionId) !== entry) return;
 
       // Reset the stage2 timer after the inject resolves to prevent concurrent
       // onStage2Expire executions that could double-count pingCount.
@@ -205,7 +205,7 @@ export class Watchdog {
         "critical",
         `[Watchdog] Ping injected to ${sessionId}`,
       );
-      if (!this.sessions.has(sessionId)) {
+      if (this.sessions.get(sessionId) !== entry) {
         this.notifier.clear(sessionId).catch((err) =>
           this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
         );
@@ -219,7 +219,7 @@ export class Watchdog {
         "silenced",
         "[Watchdog] Max pings reached. Manual intervention required.",
       );
-      if (!this.sessions.has(sessionId)) {
+      if (this.sessions.get(sessionId) !== entry) {
         this.notifier.clear(sessionId).catch((err) =>
           this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
         );

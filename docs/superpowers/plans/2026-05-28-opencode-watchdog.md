@@ -2263,7 +2263,7 @@ gh pr create --draft --base feat/1-4-notifier --head feat/2-1-watchdog \
 
 ### Step 1: ブランチ作成と検証 [devcontainer]
 
-- [ ] Step 1.1: ブランチ作成
+- [x] Step 1.1: ブランチ作成
 
 ```bash
 # [host]
@@ -2271,7 +2271,7 @@ git checkout feat/2-1-watchdog
 git checkout -b feat/3-1-plugin-entry
 ```
 
-- [ ] Step 1.2: ポカヨケ実行
+- [x] Step 1.2: ポカヨケ実行
 
 ```bash
 # [devcontainer]
@@ -2284,7 +2284,7 @@ echo "OK: $CURRENT_BRANCH は $EXPECTED_BASE から派生しています。"
 
 ### Step 2: 失敗するスモークテストを書く [devcontainer]
 
-- [ ] Step 2.1: `tests/index.smoke.test.ts` を作成
+- [x] Step 2.1: `tests/index.smoke.test.ts` を作成
 
 ```typescript
 import { describe, test, expect } from "bun:test";
@@ -2461,7 +2461,7 @@ describe("isUserMessage (initial-trigger role determination)", () => {
 
 ### Step 3: テスト実行 → 失敗確認 [devcontainer]
 
-- [ ] Step 3.1: テスト走行
+- [x] Step 3.1: テスト走行
 
 ```bash
 # [devcontainer]
@@ -2632,7 +2632,7 @@ export default plugin;
 
 ### Step 5: テスト実行 → 成功確認 [devcontainer]
 
-- [ ] Step 5.1: スモークテスト走行
+- [x] Step 5.1: スモークテスト走行
 
 ```bash
 # [devcontainer]
@@ -2650,7 +2650,7 @@ bun test
 
 期待出力: すべてパス
 
-- [ ] Step 5.3: 型チェック
+- [x] Step 5.3: 型チェック
 
 ```bash
 # [devcontainer]

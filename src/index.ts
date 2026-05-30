@@ -94,7 +94,11 @@ function readProjectConfig(
   if (
     typeof candidate.enabled === "boolean" ||
     typeof candidate.stage1Ms === "number" ||
-    typeof candidate.stage2Ms === "number"
+    typeof candidate.stage2Ms === "number" ||
+    typeof candidate.maxPings === "number" ||
+    typeof candidate.pingMessage === "string" ||
+    typeof candidate.tmux === "object" ||
+    typeof candidate.agents === "object"
   ) {
     return candidate;
   }
