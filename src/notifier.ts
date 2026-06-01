@@ -89,10 +89,10 @@ export class TmuxNotifier implements Notifier {
     try {
       const result = await this.deps.spawn(cmd);
       if (result.exitCode !== 0) {
-        this.log(
-          "warn",
-          `tmux command failed: ${cmd.join(" ")} (exitCode: ${result.exitCode}, stdout: ${result.stdout ?? ""})`,
-        );
+        // Log only the binary name and exit code. The full command line (and stdout)
+        // can contain the notification message body (session id / arbitrary text),
+        // which may be sensitive and must not be persisted to logs.
+        this.log("warn", `tmux command failed: ${cmd[0]} (exitCode: ${result.exitCode})`);
       }
       return result;
     } catch (err) {
