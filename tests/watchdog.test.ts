@@ -3,6 +3,7 @@ import { Watchdog } from "../src/watchdog";
 import { FakeClock } from "../src/clock";
 import { MockPinger } from "../src/pinger";
 import type { Notifier, NotifierStage } from "../src/notifier";
+import type { Telemetry, TelemetrySnapshot } from "../src/telemetry";
 import type { WatchdogConfig } from "../src/config";
 
 interface NotifyCall {
@@ -22,12 +23,43 @@ class MockNotifier implements Notifier {
   }
 }
 
+class MockTelemetry implements Telemetry {
+  hangups = 0;
+  pings = 0;
+  recoveries = 0;
+  failures = 0;
+  recordHangup() {
+    this.hangups += 1;
+  }
+  recordPing() {
+    this.pings += 1;
+  }
+  recordRecovery() {
+    this.recoveries += 1;
+  }
+  recordFailure() {
+    this.failures += 1;
+  }
+  snapshot(): TelemetrySnapshot {
+    return {
+      hangupsDetected: this.hangups,
+      pingsSent: this.pings,
+      recoveries: this.recoveries,
+      silencedFailures: this.failures,
+      recoveryRate: null,
+    };
+  }
+  report() {
+    return "";
+  }
+}
 const baseConfig: WatchdogConfig = {
   enabled: true,
   stage1Ms: 1000,
   stage2Ms: 1000,
   maxPings: 1,
   pingMessage: "ping?",
+  notifierType: "tmux",
   tmux: { enabled: true, displayMessage: true, highlightWindow: true },
   agents: {},
 };
@@ -36,14 +68,16 @@ function setup(configOverrides: Partial<WatchdogConfig> = {}) {
   const clock = new FakeClock();
   const pinger = new MockPinger();
   const notifier = new MockNotifier();
+  const telemetry = new MockTelemetry();
   const watchdog = new Watchdog({
     config: { ...baseConfig, ...configOverrides },
     clock,
     pinger,
     notifier,
+    telemetry,
     log: () => {},
   });
-  return { clock, pinger, notifier, watchdog };
+  return { clock, pinger, notifier, telemetry, watchdog };
 }
 
 describe("Watchdog - basic timer behavior", () => {
@@ -226,5 +260,44 @@ describe("Watchdog - agent filtering", () => {
 
     watchdog.onActivity("s2", { agentName: "main" });
     expect(watchdog.activeSessionCount()).toBe(1);
+  });
+});
+
+describe("Watchdog - telemetry hooks", () => {
+  test("records a hangup when stage1 expires", () => {
+    const { watchdog, telemetry, clock } = setup();
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    expect(telemetry.hangups).toBe(1);
+  });
+
+  test("records a ping when stage2 injects", async () => {
+    const { watchdog, telemetry, clock } = setup();
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    expect(telemetry.pings).toBe(1);
+  });
+
+  test("records a failure when transitioning to SILENCED", async () => {
+    const { watchdog, telemetry, clock } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // stage2 again → silenced
+    await new Promise((r) => setTimeout(r, 10));
+    expect(telemetry.failures).toBe(1);
+  });
+
+  test("records a recovery when activity returns after a ping", async () => {
+    const { watchdog, telemetry, clock } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping (pingCount=1, state PINGED)
+    await new Promise((r) => setTimeout(r, 10));
+    watchdog.onActivity("s1"); // activity returns before SILENCED
+    expect(telemetry.recoveries).toBe(1);
   });
 });
