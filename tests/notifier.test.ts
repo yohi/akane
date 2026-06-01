@@ -216,3 +216,25 @@ describe("OSNotifier - misc", () => {
     await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
   });
 });
+
+import { createNotifier } from "../src/notifier";
+
+describe("createNotifier (factory)", () => {
+  const baseDeps = {
+    env: {} as Record<string, string | undefined>,
+    spawn: (async () => ({ exitCode: 0 })) as SpawnFn,
+    which: ((): string | null => null) as WhichFn,
+    platform: "linux",
+    log: () => {},
+  };
+
+  test('type "tmux" returns a TmuxNotifier', () => {
+    const n = createNotifier("tmux", baseDeps);
+    expect(n).toBeInstanceOf(TmuxNotifier);
+  });
+
+  test('type "os" returns an OSNotifier', () => {
+    const n = createNotifier("os", baseDeps);
+    expect(n).toBeInstanceOf(OSNotifier);
+  });
+});
