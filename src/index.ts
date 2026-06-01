@@ -12,7 +12,7 @@
 import { Watchdog } from "./watchdog";
 import { RealClock } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
-import { TmuxNotifier, bunSpawn, bunWhich } from "./notifier";
+import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
@@ -239,10 +239,13 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
 
   const clock = new RealClock();
   const pinger = new OpenCodeAdapter(input?.client);
-  const notifier = new TmuxNotifier({
+  const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
     which: bunWhich(),
+    // `process` is guaranteed under Bun/Node, but the guard keeps this safe in any
+    // non-Node test/CI harness; "linux" is the default OS-notifier target there.
+    platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
   const watchdog = new Watchdog({
