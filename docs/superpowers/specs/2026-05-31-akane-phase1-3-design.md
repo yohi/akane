@@ -118,11 +118,18 @@ config.ts (notifierType 追加)
 - `session.deleted` / `session.idle` のルーティングは不変（従来どおり `stop()`）。
 - 補足: `stop()` 自体のロジックは不変。recoverable / terminal の振り分けは index.ts に集約する。これが Q&A の「stop() 従来通り」の正確な範囲。
 
+#### recoverable エラーの扱い（継続監視と終端遷移）
+
+- **継続監視**: `classifyError` が recoverable（`rate_limit` / `provider_timeout`）と判定した場合、index.ts は `watchdog.noteError(sessionId, reason)` を呼ぶのみで `stop()` を呼ばない。Watchdog の状態機械は停止されず、既存のアイドル検出（stage1）→ ping（stage2）フローがそのまま継続する。`noteError` で保持した `lastErrorReason` は次の ping の `buildPingPrompt` に乗り、エージェントへ「なぜハングしたか」を伝える。
+- **エラー継続時の終端遷移**: recoverable エラーが解消されず ping への応答も無いまま `onStage2Expire` が `maxPings`（既定 1）に達した場合、状態機械は従来どおり SILENCED へ遷移し、`telemetry.recordFailure()` 相当が走り、以降の ping は送られない（`watchdog.stop()` 相当でタイマーを停止）。すなわち recoverable であっても無限に ping し続けることはなく、上限は既存の `maxPings` で頭打ちになる。
+- **検証項目（リソース消費の上界）**: recoverable ルートで監視を継続する際の最大リソース消費を検証する。1 セッションあたりの追加 ping 回数は `maxPings` を超えず、SILENCED までの最大監視時間は概ね `stage1Ms + maxPings × stage2Ms` で上界が定まることをテストで確認する（タイマーリークが無いことは `FakeClock.pendingTimerCount()` で担保 / 設計 §7.4）。
+
 ### 4.3 Watchdog（`src/watchdog.ts`）
 - `SessionEntry` に `lastErrorReason?: HangReason` を追加。
 - `noteError(sessionId: string, reason: HangReason): void`:
-  - 既存 entry があれば `lastErrorReason` を更新。
-  - entry が無い場合（タイマー未武装）でも将来の ping で使えるよう、最低限の保持を行う（ただし監視対象外セッションは無視）。実装は既存 `sessions` Map に副作用を限定し、tombstone は変更しない。
+  - `sessions.get(sessionId)` で取得した既存 entry に対してのみ `lastErrorReason` を更新する。
+  - entry が無いセッション（監視対象外 / タイマー未武装）は**何も保持せず早期リターン**する。別ストレージや tombstone への退避は行わない（メモリリーク防止 / 副作用を `sessions` Map に限定）。これにより、`buildPingPrompt(this.config.pingMessage, entry.lastErrorReason)` と `pinger.inject(sessionId, prompt, { reason: entry.lastErrorReason })` は常に既存 entry に対して一貫して動作する。
+  - 停止済みセッション（tombstone）は `stoppedSessions` を見て無視する。
 - ping 注入時: `buildPingPrompt(this.config.pingMessage, entry.lastErrorReason)` を生成して `pinger.inject(sessionId, prompt, { reason: entry.lastErrorReason })` へ渡す。
 
 ### 4.4 Pinger（`src/pinger.ts`）
