@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
   TmuxNotifier,
+  OSNotifier,
   type NotifierStage,
   type SpawnFn,
   type WhichFn,
@@ -146,6 +147,72 @@ describe("TmuxNotifier - error containment", () => {
       throw new Error("ENOENT");
     };
     const n = new TmuxNotifier({ env: buildEnv(), spawn, which });
+    await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
+  });
+});
+
+describe("OSNotifier - linux (notify-send)", () => {
+  test("critical maps to critical urgency, args passed as array", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "critical", "hello");
+    expect(calls[0]!.cmd).toEqual([
+      "/usr/bin/notify-send",
+      "-u",
+      "critical",
+      "Akane Watchdog",
+      "hello",
+    ]);
+  });
+
+  test("warn maps to normal urgency", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls[0]!.cmd[2]).toBe("normal");
+  });
+
+  test("disables silently when notify-send is absent", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => null;
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls.length).toBe(0);
+  });
+});
+
+describe("OSNotifier - macOS (osascript)", () => {
+  test("uses osascript and escapes double quotes (no shell)", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => null; // not consulted on darwin
+    const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", 'say "hi" now');
+    expect(calls[0]!.cmd[0]).toBe("osascript");
+    expect(calls[0]!.cmd[1]).toBe("-e");
+    expect(calls[0]!.cmd[2]).toBe(
+      'display notification "say \\"hi\\" now" with title "Akane Watchdog"',
+    );
+    expect(calls[0]!.cmd.length).toBe(3);
+  });
+});
+
+describe("OSNotifier - misc", () => {
+  test("clear() is a no-op (no spawn)", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.clear("s1");
+    expect(calls.length).toBe(0);
+  });
+
+  test("spawn rejection is swallowed (no throw)", async () => {
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const spawn: SpawnFn = async () => {
+      throw new Error("ENOENT");
+    };
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
     await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
   });
 });
