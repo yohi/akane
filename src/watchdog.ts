@@ -42,8 +42,6 @@ export class Watchdog {
   private readonly pinger: Pinger;
   private readonly telemetry: Telemetry;
   private readonly log: (level: "info" | "warn", message: string) => void;
-  private readonly log: (level: "info" | "warn", message: string) => void;
-  private readonly log: (level: "info" | "warn", message: string) => void;
 
   constructor(deps: WatchdogDeps) {
     this.config = deps.config;
