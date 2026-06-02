@@ -14,6 +14,7 @@ import { RealClock } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
 import { TmuxNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
+import { classifyError, type HangReason } from "./errors";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -180,6 +181,24 @@ const SEEN_USER_MESSAGE_IDS = new BoundedSet<string>(1000);
 
 export function isNewUserMessage(messageId: string): boolean {
   return SEEN_USER_MESSAGE_IDS.add(messageId);
+}
+
+export type SessionErrorRoute =
+  | { action: "note"; reason: HangReason }
+  | { action: "stop" };
+
+/**
+ * Decides how a session.error should be handled: recoverable reasons
+ * (rate_limit / provider_timeout) are "note" (keep watching, let the ping carry
+ * the reason); everything else (unknown / unclassifiable) is "stop" (terminal),
+ * preserving the legacy behavior.
+ */
+export function routeSessionError(properties: unknown): SessionErrorRoute {
+  const reason = classifyError(properties);
+  if (reason === "rate_limit" || reason === "provider_timeout") {
+    return { action: "note", reason };
+  }
+  return { action: "stop" };
 }
 
 import * as fs from "node:fs";

@@ -5,6 +5,7 @@ import plugin, {
   isPingEvent,
   extractMessageId,
   isNewUserMessage,
+  routeSessionError,
   type OpenCodeEvent,
 } from "../src/index";
 
@@ -302,5 +303,30 @@ describe("isNewUserMessage (deduplication utility)", () => {
     const msgId2 = `msg_id_b_${Math.random()}`;
     expect(isNewUserMessage(msgId1)).toBe(true);
     expect(isNewUserMessage(msgId2)).toBe(true);
+  });
+});
+
+describe("routeSessionError (recoverable vs terminal)", () => {
+  test("rate_limit → note (do not stop)", () => {
+    expect(routeSessionError({ message: "rate limit 429" })).toEqual({
+      action: "note",
+      reason: "rate_limit",
+    });
+  });
+
+  test("provider_timeout → note (do not stop)", () => {
+    expect(routeSessionError({ message: "request timed out" })).toEqual({
+      action: "note",
+      reason: "provider_timeout",
+    });
+  });
+
+  test("unknown error → stop", () => {
+    expect(routeSessionError({ message: "weird explosion" })).toEqual({ action: "stop" });
+  });
+
+  test("unclassifiable (null) → stop", () => {
+    expect(routeSessionError({})).toEqual({ action: "stop" });
+    expect(routeSessionError(undefined)).toEqual({ action: "stop" });
   });
 });
