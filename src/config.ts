@@ -109,7 +109,7 @@ export function resolveConfig(
     warn,
   );
   const projNotifierType = parseNotifierType(
-    project.notifierType as string | undefined,
+    project.notifierType,
     "notifierType",
     warn,
   );
