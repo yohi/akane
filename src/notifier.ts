@@ -193,7 +193,10 @@ export class OSNotifier implements Notifier {
       }
       return result;
     } catch (err) {
-      this.log("warn", `OS notify spawn failed: ${String(err)}`);
+      const errKind = (err && typeof err === "object")
+        ? ((err as any).code || (err as any).name || "Error")
+        : typeof err;
+      this.log("warn", `OS notify spawn failed: ${cmd[0]} (${errKind})`);
       return null;
     }
   }
