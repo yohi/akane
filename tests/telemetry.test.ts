@@ -29,6 +29,19 @@ describe("TelemetryCollector", () => {
     expect(t.snapshot().recoveryRate).toBeCloseTo(2 / 3, 5);
   });
 
+  test("recoveryRate is 1.0 when recoveries > 0 and failures = 0", () => {
+    const t = new TelemetryCollector();
+    t.recordRecovery();
+    expect(t.snapshot().recoveryRate).toBe(1.0);
+  });
+
+  test("recoveryRate is 0.0 when recoveries = 0 and failures > 0", () => {
+    const t = new TelemetryCollector();
+    t.recordFailure();
+    expect(t.snapshot().recoveryRate).toBe(0.0);
+  });
+
+
   test("report() renders a single-line human-readable summary", () => {
     const t = new TelemetryCollector();
     t.recordHangup();
