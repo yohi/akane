@@ -149,7 +149,7 @@ export class OSNotifier implements Notifier {
   async notify(_sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!this.ensureBackend()) return;
     if (this.deps.platform === "darwin") {
-      const escaped = message.replace(/"/g, '\\"');
+      const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       await this.safeSpawn([
         "osascript",
         "-e",
@@ -194,7 +194,10 @@ export class OSNotifier implements Notifier {
       }
       return result;
     } catch (err) {
-      this.log("warn", `OS notify spawn failed: ${String(err)}`);
+      const errKind = (err && typeof err === "object")
+        ? ((err as any).code || (err as any).name || "Error")
+        : typeof err;
+      this.log("warn", `OS notify spawn failed: ${cmd[0]} (${errKind})`);
       return null;
     }
   }
