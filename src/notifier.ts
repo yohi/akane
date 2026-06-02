@@ -220,11 +220,15 @@ export function createNotifier(type: NotifierType, deps: CreateNotifierDeps): No
       which: deps.which,
       log: deps.log,
     });
+  } else if (type === "tmux") {
+    return new TmuxNotifier({
+      env: deps.env,
+      spawn: deps.spawn,
+      which: deps.which,
+      log: deps.log,
+    });
+  } else {
+    const _exhaustive: never = type;
+    throw new Error(`Unsupported NotifierType: ${_exhaustive}`);
   }
-  return new TmuxNotifier({
-    env: deps.env,
-    spawn: deps.spawn,
-    which: deps.which,
-    log: deps.log,
-  });
 }
