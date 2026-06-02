@@ -1,3 +1,5 @@
+import type { NotifierType } from "./config";
+
 export type NotifierStage = "warn" | "critical" | "silenced";
 
 export interface Notifier {
@@ -200,4 +202,29 @@ export class OSNotifier implements Notifier {
       return null;
     }
   }
+}
+
+export interface CreateNotifierDeps {
+  env: Record<string, string | undefined>;
+  spawn: SpawnFn;
+  which: WhichFn;
+  platform: string;
+  log?: (level: "warn" | "info", message: string) => void;
+}
+
+export function createNotifier(type: NotifierType, deps: CreateNotifierDeps): Notifier {
+  if (type === "os") {
+    return new OSNotifier({
+      platform: deps.platform,
+      spawn: deps.spawn,
+      which: deps.which,
+      log: deps.log,
+    });
+  }
+  return new TmuxNotifier({
+    env: deps.env,
+    spawn: deps.spawn,
+    which: deps.which,
+    log: deps.log,
+  });
 }

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import {
   TmuxNotifier,
   OSNotifier,
+  createNotifier,
   type NotifierStage,
   type SpawnFn,
   type WhichFn,
@@ -236,5 +237,25 @@ describe("OSNotifier - misc", () => {
     };
     const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
     await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
+  });
+});
+
+describe("createNotifier (factory)", () => {
+  const baseDeps = {
+    env: {} as Record<string, string | undefined>,
+    spawn: (async () => ({ exitCode: 0 })) as SpawnFn,
+    which: ((): string | null => null) as WhichFn,
+    platform: "linux",
+    log: () => {},
+  };
+
+  test('type "tmux" returns a TmuxNotifier', () => {
+    const n = createNotifier("tmux", baseDeps);
+    expect(n).toBeInstanceOf(TmuxNotifier);
+  });
+
+  test('type "os" returns an OSNotifier', () => {
+    const n = createNotifier("os", baseDeps);
+    expect(n).toBeInstanceOf(OSNotifier);
   });
 });
