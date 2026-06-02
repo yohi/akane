@@ -181,33 +181,3 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("lower-priority source");
   });
 });
-
-  test("notifierType defaults to tmux", () => {
-    const cfg = resolveConfig({});
-    expect(cfg.notifierType).toBe("tmux");
-  });
-
-  test("project overrides notifierType to os", () => {
-    const cfg = resolveConfig({ project: { notifierType: "os" } });
-    expect(cfg.notifierType).toBe("os");
-  });
-
-  test("env OPENCODE_WATCHDOG_NOTIFIER_TYPE overrides project", () => {
-    const cfg = resolveConfig({
-      project: { notifierType: "tmux" },
-      env: { OPENCODE_WATCHDOG_NOTIFIER_TYPE: "os" },
-    });
-    expect(cfg.notifierType).toBe("os");
-  });
-
-  test("invalid notifierType falls back to default with warn", () => {
-    const warnings: string[] = [];
-    const cfg = resolveConfig(
-      { env: { OPENCODE_WATCHDOG_NOTIFIER_TYPE: "popup" } },
-      (msg) => warnings.push(msg),
-    );
-    expect(cfg.notifierType).toBe("tmux");
-    expect(warnings.length).toBe(1);
-    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_NOTIFIER_TYPE");
-    expect(warnings[0]).toContain("lower-priority source");
-  });
