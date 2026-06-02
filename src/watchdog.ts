@@ -2,6 +2,9 @@ import type { Clock, TimerHandle } from "./clock";
 import type { Notifier } from "./notifier";
 import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
+import { NoopTelemetry, type Telemetry } from "./telemetry";
+import type { HangReason } from "./errors";
+import { buildPingPrompt } from "./pinger";
 
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
 
@@ -11,6 +14,7 @@ interface SessionEntry {
   pingCount: number;
   agentName?: string;
   lastPingTime?: number;
+  lastErrorReason?: HangReason;
 }
 
 export interface WatchdogDeps {
@@ -18,6 +22,7 @@ export interface WatchdogDeps {
   clock: Clock;
   notifier: Notifier;
   pinger: Pinger;
+  telemetry?: Telemetry;
   log?: (level: "info" | "warn", message: string) => void;
 }
 
@@ -38,6 +43,7 @@ export class Watchdog {
   private readonly clock: Clock;
   private readonly notifier: Notifier;
   private readonly pinger: Pinger;
+  private readonly telemetry: Telemetry;
   private readonly log: (level: "info" | "warn", message: string) => void;
 
   constructor(deps: WatchdogDeps) {
@@ -45,11 +51,29 @@ export class Watchdog {
     this.clock = deps.clock;
     this.notifier = deps.notifier;
     this.pinger = deps.pinger;
+    this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.log = deps.log ?? ((level, m) => console[level](`[watchdog] ${m}`));
   }
 
   getLastPingTime(sessionId: string): number {
     return this.sessions.get(sessionId)?.lastPingTime ?? 0;
+  }
+
+  /**
+   * Records the last classified error reason for a monitored session so the next
+   * ping can explain why it hung. Side effects are limited to the `sessions` Map:
+   * a non-monitored / unknown session (no entry) is ignored, and the tombstone set
+   * is never modified (design §4.3).
+   */
+  noteError(sessionId: string, reason: HangReason): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    const entry = this.sessions.get(sessionId);
+    if (entry) {
+      entry.lastErrorReason = reason;
+      this.log("info", `[Watchdog] noteError: session ${sessionId} reason=${reason}`);
+    } else {
+      this.log("info", `[Watchdog] noteError ignored: session ${sessionId} not monitored`);
+    }
   }
 
   activeSessionCount(): number {
@@ -157,6 +181,9 @@ export class Watchdog {
     }
     // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
     // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
+    if (existing && existing.pingCount > 0 && existing.state !== "SILENCED") {
+      this.telemetry.recordRecovery();
+    }
     const entry: SessionEntry = {
       state: "WATCHING",
       timer: null,
@@ -198,6 +225,7 @@ export class Watchdog {
     }
     this.log("info", `[Watchdog] Session ${sessionId} STAGE1 expired. Transitioning to STAGE1_NOTIFIED`);
     entry.state = "STAGE1_NOTIFIED";
+    this.telemetry.recordHangup();
     
     this.log("info", `[Watchdog] Scheduling stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
@@ -230,10 +258,13 @@ export class Watchdog {
       this.log("info", `[Watchdog] Session ${sessionId} STAGE2 expired. Injecting Ping (count: ${entry.pingCount + 1}/${this.config.maxPings})`);
       entry.state = "PINGED";
       entry.pingCount += 1;
+      this.telemetry.recordPing();
       entry.lastPingTime = this.clock.now();
+      const reason = entry.lastErrorReason;
+      const prompt = buildPingPrompt(this.config.pingMessage, reason);
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
       // and state transitions due to network/API timeouts.
-      this.pinger.inject(sessionId, this.config.pingMessage).catch((err) =>
+      this.pinger.inject(sessionId, prompt, { reason }).catch((err) =>
         this.log("warn", `Failed to inject ping to ${sessionId}: ${String(err)}`),
       );
 
@@ -260,6 +291,7 @@ export class Watchdog {
     } else {
       this.log("info", `[Watchdog] Session ${sessionId} reached max pings. Transitioning to SILENCED`);
       entry.state = "SILENCED";
+      this.telemetry.recordFailure();
       entry.timer = null;
       // Message text per design §5.2 (SILENCED row).
       await this.notifier.notify(
