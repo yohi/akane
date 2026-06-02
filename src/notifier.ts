@@ -150,7 +150,10 @@ export class OSNotifier implements Notifier {
   async notify(_sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!this.ensureBackend()) return;
     if (this.deps.platform === "darwin") {
-      const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const escaped = message
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\r?\n/g, " ");
       await this.safeSpawn([
         "osascript",
         "-e",
@@ -170,6 +173,12 @@ export class OSNotifier implements Notifier {
     if (this.detection === "ok") return true;
     if (this.detection === "disabled") return false;
     if (this.deps.platform === "darwin") {
+      const path = this.deps.which("osascript");
+      if (!path) {
+        this.detection = "disabled";
+        this.log("info", "osascript not found in PATH; disabling OS notifications.");
+        return false;
+      }
       this.detection = "ok";
       return true;
     }

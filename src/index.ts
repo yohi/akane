@@ -129,6 +129,7 @@ function readProjectConfig(
     typeof candidate.stage2Ms === "number" ||
     typeof candidate.maxPings === "number" ||
     typeof candidate.pingMessage === "string" ||
+    typeof candidate.notifierType === "string" ||
     typeof candidate.tmux === "object" ||
     typeof candidate.agents === "object"
   ) {

@@ -193,9 +193,9 @@ describe("OSNotifier - linux (notify-send)", () => {
 });
 
 describe("OSNotifier - macOS (osascript)", () => {
-  test("uses osascript and escapes double quotes and backslashes (no shell)", async () => {
+  test("uses osascript and escapes double quotes, backslashes, and newlines (no shell)", async () => {
     const { spawn, calls } = buildSpawn({});
-    const which: WhichFn = () => null; // not consulted on darwin
+    const which: WhichFn = (binary) => (binary === "osascript" ? "/usr/bin/osascript" : null);
     const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
     
     // Test case 1: double quotes
@@ -218,6 +218,20 @@ describe("OSNotifier - macOS (osascript)", () => {
     expect(calls[2]!.cmd[2]).toBe(
       'display notification "foo\\\\\\\"" with title "Akane Watchdog"',
     );
+
+    // Test case 4: newlines
+    await n.notify("s1", "warn", "line1\nline2\r\nline3");
+    expect(calls[3]!.cmd[2]).toBe(
+      'display notification "line1 line2 line3" with title "Akane Watchdog"',
+    );
+  });
+
+  test("disables silently when osascript is absent", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => null;
+    const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls.length).toBe(0);
   });
 });
 
