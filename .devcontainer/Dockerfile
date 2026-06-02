@@ -7,10 +7,12 @@ RUN apt-get update \
 
 USER vscode
 
+ENV BUN_INSTALL=/home/vscode/.bun
+ENV PATH="$BUN_INSTALL/bin:$PATH"
+
 # Install Bun directly (feature unavailable in some networks)
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.2.19" \
- && export BUN_INSTALL="$HOME/.bun" \
- && echo 'export BUN_INSTALL="$HOME/.bun"' >> "$HOME/.bashrc" \
- && echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$HOME/.bashrc"
+RUN curl -fsSL https://bun.sh/install > /tmp/install.sh \
+ && bash /tmp/install.sh "bun-v1.2.19" \
+ && rm /tmp/install.sh
 
 WORKDIR /workspaces
