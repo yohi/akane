@@ -228,6 +228,7 @@ export function createNotifier(type: NotifierType, deps: CreateNotifierDeps): No
       log: deps.log,
     });
   } else {
-    throw new Error(`Unsupported NotifierType: ${type}`);
+    const _exhaustive: never = type;
+    throw new Error(`Unsupported NotifierType: ${_exhaustive}`);
   }
 }
