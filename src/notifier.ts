@@ -1,5 +1,6 @@
-export type NotifierStage = "warn" | "critical" | "silenced";
 import type { NotifierType } from "./config";
+
+export type NotifierStage = "warn" | "critical" | "silenced";
 
 export interface Notifier {
   notify(sessionId: string, stage: NotifierStage, message: string): Promise<void>;

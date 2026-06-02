@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import {
   TmuxNotifier,
   OSNotifier,
+  createNotifier,
   type NotifierStage,
   type SpawnFn,
   type WhichFn,
@@ -238,8 +239,6 @@ describe("OSNotifier - misc", () => {
     await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
   });
 });
-
-import { createNotifier } from "../src/notifier";
 
 describe("createNotifier (factory)", () => {
   const baseDeps = {
