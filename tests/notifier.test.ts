@@ -174,6 +174,14 @@ describe("OSNotifier - linux (notify-send)", () => {
     expect(calls[0]!.cmd[2]).toBe("normal");
   });
 
+  test("silenced maps to critical urgency", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "silenced", "hi");
+    expect(calls[0]!.cmd[2]).toBe("critical");
+  });
+
   test("disables silently when notify-send is absent", async () => {
     const { spawn, calls } = buildSpawn({});
     const which: WhichFn = () => null;
@@ -184,10 +192,12 @@ describe("OSNotifier - linux (notify-send)", () => {
 });
 
 describe("OSNotifier - macOS (osascript)", () => {
-  test("uses osascript and escapes double quotes (no shell)", async () => {
+  test("uses osascript and escapes double quotes and backslashes (no shell)", async () => {
     const { spawn, calls } = buildSpawn({});
     const which: WhichFn = () => null; // not consulted on darwin
     const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
+    
+    // Test case 1: double quotes
     await n.notify("s1", "warn", 'say "hi" now');
     expect(calls[0]!.cmd[0]).toBe("osascript");
     expect(calls[0]!.cmd[1]).toBe("-e");
@@ -195,6 +205,18 @@ describe("OSNotifier - macOS (osascript)", () => {
       'display notification "say \\"hi\\" now" with title "Akane Watchdog"',
     );
     expect(calls[0]!.cmd.length).toBe(3);
+
+    // Test case 2: backslash at the end
+    await n.notify("s1", "warn", 'foo\\');
+    expect(calls[1]!.cmd[2]).toBe(
+      'display notification "foo\\\\" with title "Akane Watchdog"',
+    );
+
+    // Test case 3: backslash and double quote (escaped quote in source)
+    await n.notify("s1", "warn", 'foo\\"');
+    expect(calls[2]!.cmd[2]).toBe(
+      'display notification "foo\\\\\\\"" with title "Akane Watchdog"',
+    );
   });
 });
 

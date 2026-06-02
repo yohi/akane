@@ -148,7 +148,7 @@ export class OSNotifier implements Notifier {
   async notify(_sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!this.ensureBackend()) return;
     if (this.deps.platform === "darwin") {
-      const escaped = message.replace(/"/g, '\\"');
+      const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       await this.safeSpawn([
         "osascript",
         "-e",
