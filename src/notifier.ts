@@ -219,11 +219,14 @@ export function createNotifier(type: NotifierType, deps: CreateNotifierDeps): No
       which: deps.which,
       log: deps.log,
     });
+  } else if (type === "tmux") {
+    return new TmuxNotifier({
+      env: deps.env,
+      spawn: deps.spawn,
+      which: deps.which,
+      log: deps.log,
+    });
+  } else {
+    throw new Error(`Unsupported NotifierType: ${type}`);
   }
-  return new TmuxNotifier({
-    env: deps.env,
-    spawn: deps.spawn,
-    which: deps.which,
-    log: deps.log,
-  });
 }
