@@ -11,9 +11,11 @@
 
 import { Watchdog } from "./watchdog";
 import { RealClock } from "./clock";
+import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
-import { TmuxNotifier, bunSpawn, bunWhich } from "./notifier";
+import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
+import { TelemetryCollector, type Telemetry } from "./telemetry";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -207,6 +209,47 @@ function writeLog(level: "info" | "warn", message: string) {
 }
 
 const ACTIVE_INSTANCES = new Set<string>();
+export interface TelemetryReporterDeps {
+  clock: Clock;
+  telemetry: Telemetry;
+  intervalMs: number;
+  log: (level: "info" | "warn", message: string) => void;
+}
+
+/**
+ * Self-rescheduling telemetry report loop. Uses Clock.setTimeout (not setInterval,
+ * which Clock does not expose) so it is FakeClock-testable. Returns a stop function
+ * that cancels the pending timer.
+ */
+export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void {
+  let handle: TimerHandle = null;
+  const schedule = () => {
+    handle = deps.clock.setTimeout(() => {
+      deps.log("info", deps.telemetry.report());
+      schedule();
+    }, deps.intervalMs);
+  };
+  schedule();
+  return () => {
+    if (handle !== null) deps.clock.clearTimeout(handle);
+    handle = null;
+  };
+}
+
+function parseReportMs(
+  raw: string | undefined,
+  log: (level: "info" | "warn", message: string) => void,
+): number {
+  const DEFAULT = 60_000;
+  if (raw === undefined) return DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    log("warn", `Invalid OPENCODE_WATCHDOG_REPORT_MS: "${raw}". Using default ${DEFAULT}ms.`);
+    return DEFAULT;
+  }
+  return n;
+}
+
 
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
@@ -239,17 +282,28 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
 
   const clock = new RealClock();
   const pinger = new OpenCodeAdapter(input?.client);
-  const notifier = new TmuxNotifier({
+  const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
     which: bunWhich(),
+    platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
+  const telemetry = new TelemetryCollector();
   const watchdog = new Watchdog({
     config,
     clock,
     pinger,
     notifier,
+    telemetry,
+    log: instLog,
+  });
+
+  const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
+  const stopReporter = startTelemetryReporter({
+    clock,
+    telemetry,
+    intervalMs: reportMs,
     log: instLog,
   });
 
@@ -394,7 +448,9 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       if (inputDir) {
         ACTIVE_INSTANCES.delete(inputDir);
       }
+      stopReporter();
       watchdog.stopAll();
+      instLog("info", telemetry.report());
     },
   };
 };
