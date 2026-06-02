@@ -115,3 +115,89 @@ export function bunSpawn(): SpawnFn {
 export function bunWhich(): WhichFn {
   return (binary) => Bun.which(binary) ?? null;
 }
+
+export interface OSNotifierDeps {
+  platform: string;
+  spawn: SpawnFn;
+  which: WhichFn;
+  log?: (level: "warn" | "info", message: string) => void;
+}
+
+const OS_URGENCY_BY_STAGE: Record<NotifierStage, "normal" | "critical"> = {
+  warn: "normal",
+  critical: "critical",
+  silenced: "critical",
+};
+
+/**
+ * Cross-platform OS desktop notification backend.
+ * - linux: `notify-send -u <urgency> "Akane Watchdog" <message>`
+ * - darwin: `osascript -e 'display notification "<escaped>" with title "Akane Watchdog"'`
+ * Arguments are always passed as an array (no shell), avoiding injection. macOS
+ * message double-quotes are escaped. Detection failures disable silently.
+ */
+export class OSNotifier implements Notifier {
+  private detection: "unknown" | "ok" | "disabled" = "unknown";
+  private notifySendPath = "notify-send";
+  private readonly log: (level: "warn" | "info", message: string) => void;
+
+  constructor(private readonly deps: OSNotifierDeps) {
+    this.log = deps.log ?? ((level, message) => console[level](`[watchdog] ${message}`));
+  }
+
+  async notify(_sessionId: string, stage: NotifierStage, message: string): Promise<void> {
+    if (!this.ensureBackend()) return;
+    if (this.deps.platform === "darwin") {
+      const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      await this.safeSpawn([
+        "osascript",
+        "-e",
+        `display notification "${escaped}" with title "Akane Watchdog"`,
+      ]);
+      return;
+    }
+    const urgency = OS_URGENCY_BY_STAGE[stage];
+    await this.safeSpawn([this.notifySendPath, "-u", urgency, "Akane Watchdog", message]);
+  }
+
+  async clear(_sessionId: string): Promise<void> {
+    // OS notifications are transient; nothing to clear. Always resolves.
+  }
+
+  private ensureBackend(): boolean {
+    if (this.detection === "ok") return true;
+    if (this.detection === "disabled") return false;
+    if (this.deps.platform === "darwin") {
+      this.detection = "ok";
+      return true;
+    }
+    const path = this.deps.which("notify-send");
+    if (!path) {
+      this.detection = "disabled";
+      this.log("info", "notify-send not found in PATH; disabling OS notifications.");
+      return false;
+    }
+    this.notifySendPath = path;
+    this.detection = "ok";
+    return true;
+  }
+
+  private async safeSpawn(cmd: string[]): Promise<SpawnResult | null> {
+    try {
+      const result = await this.deps.spawn(cmd);
+      if (result.exitCode !== 0) {
+        // Log only the binary name and exit code. The full command line contains the
+        // notification message body (session id / error reason / arbitrary text),
+        // which may be sensitive and must not be persisted to logs.
+        this.log("warn", `OS notify failed: ${cmd[0]} (exitCode: ${result.exitCode})`);
+      }
+      return result;
+    } catch (err) {
+      const errKind = (err && typeof err === "object")
+        ? ((err as any).code || (err as any).name || "Error")
+        : typeof err;
+      this.log("warn", `OS notify spawn failed: ${cmd[0]} (${errKind})`);
+      return null;
+    }
+  }
+}
