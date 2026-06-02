@@ -150,7 +150,6 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("OPENCODE_WATCHDOG_ENABLED");
     expect(warnings[0]).toContain("lower-priority source");
   });
-});
 
   test("notifierType defaults to tmux", () => {
     const cfg = resolveConfig({});
@@ -181,3 +180,4 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("OPENCODE_WATCHDOG_NOTIFIER_TYPE");
     expect(warnings[0]).toContain("lower-priority source");
   });
+});
