@@ -28,6 +28,7 @@ const baseConfig: WatchdogConfig = {
   stage2Ms: 1000,
   maxPings: 1,
   pingMessage: "ping?",
+  notifierType: "tmux",
   tmux: { enabled: true, displayMessage: true, highlightWindow: true },
   agents: {},
 };
