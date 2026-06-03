@@ -15,6 +15,8 @@ function collectStrings(payload: unknown, depth = 0): string {
     const v = obj[key];
     if (typeof v === "string") {
       parts.push(v);
+    } else if (typeof v === "number") {
+      parts.push(String(v));
     } else if (v && typeof v === "object") {
       parts.push(collectStrings(v, depth + 1));
     }
@@ -25,7 +27,7 @@ function collectStrings(payload: unknown, depth = 0): string {
 export function classifyError(payload: unknown): HangReason | null {
   const text = collectStrings(payload);
   if (text.length === 0) return null;
-  if (/rate.?limit|429|too many requests/i.test(text)) return "rate_limit";
+  if (/rate.?limit|\b429\b|too many requests/i.test(text)) return "rate_limit";
   if (/timeout|timed out|etimedout|deadline/i.test(text)) return "provider_timeout";
   return "unknown";
 }

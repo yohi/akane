@@ -37,7 +37,7 @@ interface OpenCodeClientLike {
 export class OpenCodeAdapter implements Pinger {
   constructor(private readonly client: unknown) {}
 
-  async inject(sessionId: string, message: string, _context?: PingContext): Promise<void> {
+  async inject(sessionId: string, message: string, context?: PingContext): Promise<void> {
     const client = this.client as OpenCodeClientLike;
     const session = client?.session;
     if (typeof session?.prompt !== "function") {
@@ -47,9 +47,10 @@ export class OpenCodeAdapter implements Pinger {
       return;
     }
     try {
+      const finalMessage = buildPingPrompt(message, context?.reason);
       await session.prompt({
         path: { id: sessionId },
-        body: { parts: [{ type: "text", text: message }] },
+        body: { parts: [{ type: "text", text: finalMessage }] },
       });
     } catch (err) {
       console.warn(`[watchdog] Failed to inject ping to ${sessionId}:`, err);

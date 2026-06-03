@@ -53,6 +53,7 @@ class MockTelemetry implements Telemetry {
     return "";
   }
 }
+
 const baseConfig: WatchdogConfig = {
   enabled: true,
   stage1Ms: 1000,
@@ -290,5 +291,44 @@ describe("Watchdog - noteError and reason-aware ping", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(pinger.calls[0]!.message).toBe("ping?");
     expect(pinger.calls[0]!.context).toEqual({ reason: undefined });
+  });
+});
+
+describe("Watchdog - telemetry hooks", () => {
+  test("records a hangup when stage1 expires", () => {
+    const { watchdog, telemetry, clock } = setup();
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    expect(telemetry.hangups).toBe(1);
+  });
+
+  test("records a ping when stage2 injects", async () => {
+    const { watchdog, telemetry, clock } = setup();
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    expect(telemetry.pings).toBe(1);
+  });
+
+  test("records a failure when transitioning to SILENCED", async () => {
+    const { watchdog, telemetry, clock } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // stage2 again → silenced
+    await new Promise((r) => setTimeout(r, 10));
+    expect(telemetry.failures).toBe(1);
+  });
+
+  test("records a recovery when activity returns after a ping", async () => {
+    const { watchdog, telemetry, clock } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping (pingCount=1, state PINGED)
+    await new Promise((r) => setTimeout(r, 10));
+    watchdog.onActivity("s1"); // activity returns before SILENCED
+    expect(telemetry.recoveries).toBe(1);
   });
 });

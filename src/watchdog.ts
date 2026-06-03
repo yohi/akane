@@ -182,6 +182,7 @@ export class Watchdog {
     // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
     // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
     if (existing && existing.pingCount > 0 && existing.state !== "SILENCED") {
+      // Activity returned after a ping was injected — the session recovered.
       this.telemetry.recordRecovery();
     }
     const entry: SessionEntry = {
