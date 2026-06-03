@@ -11,9 +11,11 @@
 
 import { Watchdog } from "./watchdog";
 import { RealClock } from "./clock";
+import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
 import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
+import { TelemetryCollector, type Telemetry } from "./telemetry";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -208,6 +210,51 @@ function writeLog(level: "info" | "warn", message: string) {
 }
 
 const ACTIVE_INSTANCES = new Set<string>();
+export interface TelemetryReporterDeps {
+  clock: Clock;
+  telemetry: Telemetry;
+  intervalMs: number;
+  log: (level: "info" | "warn", message: string) => void;
+}
+
+/**
+ * Self-rescheduling telemetry report loop. Uses Clock.setTimeout (not setInterval,
+ * which Clock does not expose) so it is FakeClock-testable. Returns a stop function
+ * that cancels the pending timer.
+ */
+export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void {
+  let handle: TimerHandle = null;
+  let stopped = false;
+  const schedule = () => {
+    if (stopped) return;
+    handle = deps.clock.setTimeout(() => {
+      handle = null;
+      deps.log("info", deps.telemetry.report());
+      schedule();
+    }, deps.intervalMs);
+  };
+  schedule();
+  return () => {
+    stopped = true;
+    if (handle !== null) deps.clock.clearTimeout(handle);
+    handle = null;
+  };
+}
+
+function parseReportMs(
+  raw: string | undefined,
+  log: (level: "info" | "warn", message: string) => void,
+): number {
+  const DEFAULT = 60_000;
+  if (raw === undefined) return DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    log("warn", `Invalid OPENCODE_WATCHDOG_REPORT_MS: "${raw}". Using default ${DEFAULT}ms.`);
+    return DEFAULT;
+  }
+  return n;
+}
+
 
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
@@ -249,11 +296,21 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
     platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
+  const telemetry = new TelemetryCollector();
   const watchdog = new Watchdog({
     config,
     clock,
     pinger,
     notifier,
+    telemetry,
+    log: instLog,
+  });
+
+  const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
+  const stopReporter = startTelemetryReporter({
+    clock,
+    telemetry,
+    intervalMs: reportMs,
     log: instLog,
   });
 
@@ -398,7 +455,21 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       if (inputDir) {
         ACTIVE_INSTANCES.delete(inputDir);
       }
-      watchdog.stopAll();
+      try {
+        stopReporter();
+      } catch (err) {
+        instLog("warn", `Error stopping telemetry reporter: ${String(err)}`);
+      }
+      try {
+        watchdog.stopAll();
+      } catch (err) {
+        instLog("warn", `Error stopping watchdog: ${String(err)}`);
+      }
+      try {
+        instLog("info", telemetry.report());
+      } catch (err) {
+        console.warn("[watchdog] telemetry report error in dispose:", err);
+      }
     },
   };
 };
