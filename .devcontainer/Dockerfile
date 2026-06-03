@@ -5,8 +5,14 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends tmux ca-certificates curl unzip git \
  && rm -rf /var/lib/apt/lists/*
 
-# Bun is installed via the devcontainer feature (see devcontainer.json).
-# Verify installation is delegated to postCreate.sh.
-
 USER vscode
+
+ENV BUN_INSTALL=/home/vscode/.bun
+ENV PATH="$BUN_INSTALL/bin:$PATH"
+
+# Install Bun directly (feature unavailable in some networks)
+RUN curl -fsSL https://bun.sh/install > /tmp/install.sh \
+ && bash /tmp/install.sh "bun-v1.2.19" \
+ && rm /tmp/install.sh
+
 WORKDIR /workspaces
