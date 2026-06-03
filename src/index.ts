@@ -15,7 +15,7 @@ import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
 import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
-import { TelemetryCollector, type Telemetry } from "./telemetry";
+import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -210,41 +210,6 @@ function writeLog(level: "info" | "warn", message: string) {
 }
 
 const ACTIVE_INSTANCES = new Set<string>();
-export interface TelemetryReporterDeps {
-  clock: Clock;
-  telemetry: Telemetry;
-  intervalMs: number;
-  log: (level: "info" | "warn", message: string) => void;
-}
-
-/**
- * Self-rescheduling telemetry report loop. Uses Clock.setTimeout (not setInterval,
- * which Clock does not expose) so it is FakeClock-testable. Returns a stop function
- * that cancels the pending timer.
- */
-export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void {
-  let handle: TimerHandle = null;
-  let stopped = false;
-  const schedule = () => {
-    if (stopped) return;
-    handle = deps.clock.setTimeout(() => {
-      try {
-        deps.log("info", deps.telemetry.report());
-      } finally {
-        handle = null;
-        if (!stopped) {
-          schedule();
-        }
-      }
-    }, deps.intervalMs);
-  };
-  schedule();
-  return () => {
-    stopped = true;
-    if (handle !== null) deps.clock.clearTimeout(handle);
-    handle = null;
-  };
-}
 
 function parseReportMs(
   raw: string | undefined,

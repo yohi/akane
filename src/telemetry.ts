@@ -1,3 +1,5 @@
+import type { Clock, TimerHandle } from "./clock";
+
 export interface TelemetrySnapshot {
   hangupsDetected: number;
   pingsSent: number;
@@ -75,4 +77,42 @@ export class NoopTelemetry implements Telemetry {
 export function formatTelemetryReport(s: TelemetrySnapshot): string {
   const rate = s.recoveryRate === null ? "n/a" : `${(s.recoveryRate * 100).toFixed(1)}%`;
   return `[Telemetry] hangups=${s.hangupsDetected} pings=${s.pingsSent} recoveries=${s.recoveries} failures=${s.silencedFailures} recoveryRate=${rate}`;
+}
+
+export interface TelemetryReporterDeps {
+  clock: Clock;
+  telemetry: Telemetry;
+  intervalMs: number;
+  log: (level: "info" | "warn", message: string) => void;
+}
+
+/**
+ * Self-rescheduling telemetry report loop. Uses Clock.setTimeout (not setInterval,
+ * which Clock does not expose) so it is FakeClock-testable. Returns a stop function
+ * that cancels the pending timer.
+ */
+export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void {
+  let handle: TimerHandle = null;
+  let stopped = false;
+  const schedule = () => {
+    if (stopped) return;
+    handle = deps.clock.setTimeout(() => {
+      try {
+        deps.log("info", deps.telemetry.report());
+      } catch (err) {
+        deps.log("warn", `Telemetry report error: ${String(err)}`);
+      } finally {
+        handle = null;
+        if (!stopped) {
+          schedule();
+        }
+      }
+    }, deps.intervalMs);
+  };
+  schedule();
+  return () => {
+    stopped = true;
+    if (handle !== null) deps.clock.clearTimeout(handle);
+    handle = null;
+  };
 }

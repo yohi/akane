@@ -1,7 +1,6 @@
 import { describe, test, expect } from "bun:test";
-import { startTelemetryReporter } from "../src/index";
+import { startTelemetryReporter, TelemetryCollector } from "../src/telemetry";
 import { FakeClock } from "../src/clock";
-import { TelemetryCollector } from "../src/telemetry";
 
 describe("startTelemetryReporter", () => {
   test("emits a report every interval via self-rescheduling", () => {
