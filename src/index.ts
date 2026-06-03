@@ -15,6 +15,7 @@ import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
 import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
+import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
@@ -185,6 +186,24 @@ export function isNewUserMessage(messageId: string): boolean {
   return SEEN_USER_MESSAGE_IDS.add(messageId);
 }
 
+export type SessionErrorRoute =
+  | { action: "note"; reason: "rate_limit" | "provider_timeout" }
+  | { action: "stop" };
+
+/**
+ * Decides how a session.error should be handled: recoverable reasons
+ * (rate_limit / provider_timeout) are "note" (keep watching, let the ping carry
+ * the reason); everything else (unknown / unclassifiable) is "stop" (terminal),
+ * preserving the legacy behavior.
+ */
+export function routeSessionError(properties: unknown): SessionErrorRoute {
+  const reason = classifyError(properties);
+  if (reason === "rate_limit" || reason === "provider_timeout") {
+    return { action: "note", reason };
+  }
+  return { action: "stop" };
+}
+
 import * as fs from "node:fs";
 
 const LOG_FILE = (typeof process !== "undefined" ? process.env.HOME ?? "." : ".") + "/opencode-watchdog.log";
@@ -303,11 +322,23 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
 
         if (
           event.type === "session.deleted" ||
-          event.type === "session.idle" ||
-          event.type === "session.error"
+          event.type === "session.idle"
         ) {
           instLog("info", `Stop event received for session ${sessionId}`);
           if (sessionId) watchdog.stop(sessionId);
+          return;
+        }
+
+        if (event.type === "session.error") {
+          instLog("info", `Error event received for session ${sessionId}`);
+          if (sessionId) {
+            const route = routeSessionError(event.properties);
+            if (route.action === "note") {
+              watchdog.noteError(sessionId, route.reason);
+            } else {
+              watchdog.stop(sessionId);
+            }
+          }
           return;
         }
 
