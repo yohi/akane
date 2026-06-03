@@ -322,11 +322,23 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
 
         if (
           event.type === "session.deleted" ||
-          event.type === "session.idle" ||
-          event.type === "session.error"
+          event.type === "session.idle"
         ) {
           instLog("info", `Stop event received for session ${sessionId}`);
           if (sessionId) watchdog.stop(sessionId);
+          return;
+        }
+
+        if (event.type === "session.error") {
+          instLog("info", `Error event received for session ${sessionId}`);
+          if (sessionId) {
+            const route = routeSessionError(event.properties);
+            if (route.action === "note") {
+              watchdog.noteError(sessionId, route.reason);
+            } else {
+              watchdog.stop(sessionId);
+            }
+          }
           return;
         }
 

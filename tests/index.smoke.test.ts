@@ -329,4 +329,47 @@ describe("routeSessionError (recoverable vs terminal)", () => {
     expect(routeSessionError({})).toEqual({ action: "stop" });
     expect(routeSessionError(undefined)).toEqual({ action: "stop" });
   });
+
+  test("session.error event routing in event hook", async () => {
+    const fakeContext = {
+      client: {
+        app: { log: async () => undefined },
+        session: { prompt: async () => undefined },
+      },
+      $: () => undefined,
+      directory: `${process.cwd()}/test-session-error-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+
+    const instance = await (plugin.server as (ctx: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(fakeContext);
+
+    try {
+      // 1. Recoverable error (rate limit) should noteError (does not throw)
+      await instance.event({
+        event: {
+          type: "session.error",
+          properties: {
+            sessionID: "s-err-recoverable",
+            message: "rate limit 429",
+          },
+        },
+      });
+
+      // 2. Terminal error should stop (does not throw)
+      await instance.event({
+        event: {
+          type: "session.error",
+          properties: {
+            sessionID: "s-err-terminal",
+            message: "weird explosion",
+          },
+        },
+      });
+    } finally {
+      await instance.dispose();
+    }
+  });
 });
