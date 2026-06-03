@@ -2,6 +2,7 @@ import type { Clock, TimerHandle } from "./clock";
 import type { Notifier } from "./notifier";
 import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
+import { NoopTelemetry, type Telemetry } from "./telemetry";
 
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
 
@@ -18,6 +19,7 @@ export interface WatchdogDeps {
   clock: Clock;
   notifier: Notifier;
   pinger: Pinger;
+  telemetry?: Telemetry;
   log?: (level: "info" | "warn", message: string) => void;
 }
 
@@ -38,6 +40,7 @@ export class Watchdog {
   private readonly clock: Clock;
   private readonly notifier: Notifier;
   private readonly pinger: Pinger;
+  private readonly telemetry: Telemetry;
   private readonly log: (level: "info" | "warn", message: string) => void;
 
   constructor(deps: WatchdogDeps) {
@@ -45,6 +48,7 @@ export class Watchdog {
     this.clock = deps.clock;
     this.notifier = deps.notifier;
     this.pinger = deps.pinger;
+    this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.log = deps.log ?? ((level, m) => console[level](`[watchdog] ${m}`));
   }
 
@@ -157,6 +161,10 @@ export class Watchdog {
     }
     // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
     // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
+    if (existing && existing.pingCount > 0 && existing.state !== "SILENCED") {
+      // Activity returned after a ping was injected — the session recovered.
+      this.telemetry.recordRecovery();
+    }
     const entry: SessionEntry = {
       state: "WATCHING",
       timer: null,
@@ -198,6 +206,7 @@ export class Watchdog {
     }
     this.log("info", `[Watchdog] Session ${sessionId} STAGE1 expired. Transitioning to STAGE1_NOTIFIED`);
     entry.state = "STAGE1_NOTIFIED";
+    this.telemetry.recordHangup();
     
     this.log("info", `[Watchdog] Scheduling stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
@@ -230,6 +239,7 @@ export class Watchdog {
       this.log("info", `[Watchdog] Session ${sessionId} STAGE2 expired. Injecting Ping (count: ${entry.pingCount + 1}/${this.config.maxPings})`);
       entry.state = "PINGED";
       entry.pingCount += 1;
+      this.telemetry.recordPing();
       entry.lastPingTime = this.clock.now();
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
       // and state transitions due to network/API timeouts.
@@ -260,6 +270,7 @@ export class Watchdog {
     } else {
       this.log("info", `[Watchdog] Session ${sessionId} reached max pings. Transitioning to SILENCED`);
       entry.state = "SILENCED";
+      this.telemetry.recordFailure();
       entry.timer = null;
       // Message text per design §5.2 (SILENCED row).
       await this.notifier.notify(
