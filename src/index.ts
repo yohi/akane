@@ -228,9 +228,14 @@ export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void 
   const schedule = () => {
     if (stopped) return;
     handle = deps.clock.setTimeout(() => {
-      handle = null;
-      deps.log("info", deps.telemetry.report());
-      schedule();
+      try {
+        deps.log("info", deps.telemetry.report());
+      } finally {
+        handle = null;
+        if (!stopped) {
+          schedule();
+        }
+      }
     }, deps.intervalMs);
   };
   schedule();
@@ -307,12 +312,14 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   });
 
   const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
-  const stopReporter = startTelemetryReporter({
-    clock,
-    telemetry,
-    intervalMs: reportMs,
-    log: instLog,
-  });
+  const stopReporter = config.enabled
+    ? startTelemetryReporter({
+        clock,
+        telemetry,
+        intervalMs: reportMs,
+        log: instLog,
+      })
+    : undefined;
 
   return {
     event: async ({ event }: { event: OpenCodeEvent }) => {
@@ -456,7 +463,9 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         ACTIVE_INSTANCES.delete(inputDir);
       }
       try {
-        stopReporter();
+        if (typeof stopReporter === "function") {
+          stopReporter();
+        }
       } catch (err) {
         instLog("warn", `Error stopping telemetry reporter: ${String(err)}`);
       }
