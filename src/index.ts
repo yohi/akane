@@ -11,10 +11,12 @@
 
 import { Watchdog } from "./watchdog";
 import { RealClock } from "./clock";
+import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
-import { TmuxNotifier, bunSpawn, bunWhich } from "./notifier";
+import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
 import { classifyError, type HangReason } from "./errors";
+import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -130,6 +132,7 @@ function readProjectConfig(
     typeof candidate.stage2Ms === "number" ||
     typeof candidate.maxPings === "number" ||
     typeof candidate.pingMessage === "string" ||
+    typeof candidate.notifierType === "string" ||
     typeof candidate.tmux === "object" ||
     typeof candidate.agents === "object"
   ) {
@@ -227,6 +230,21 @@ function writeLog(level: "info" | "warn", message: string) {
 
 const ACTIVE_INSTANCES = new Set<string>();
 
+function parseReportMs(
+  raw: string | undefined,
+  log: (level: "info" | "warn", message: string) => void,
+): number {
+  const DEFAULT = 60_000;
+  if (raw === undefined) return DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    log("warn", `Invalid OPENCODE_WATCHDOG_REPORT_MS: "${raw}". Using default ${DEFAULT}ms.`);
+    return DEFAULT;
+  }
+  return n;
+}
+
+
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
@@ -258,19 +276,34 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
 
   const clock = new RealClock();
   const pinger = new OpenCodeAdapter(input?.client);
-  const notifier = new TmuxNotifier({
+  const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
     which: bunWhich(),
+    // `process` is guaranteed under Bun/Node, but the guard keeps this safe in any
+    // non-Node test/CI harness; "linux" is the default OS-notifier target there.
+    platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
+  const telemetry = new TelemetryCollector();
   const watchdog = new Watchdog({
     config,
     clock,
     pinger,
     notifier,
+    telemetry,
     log: instLog,
   });
+
+  const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
+  const stopReporter = config.enabled
+    ? startTelemetryReporter({
+        clock,
+        telemetry,
+        intervalMs: reportMs,
+        log: instLog,
+      })
+    : undefined;
 
   return {
     event: async ({ event }: { event: OpenCodeEvent }) => {
@@ -413,7 +446,25 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       if (inputDir) {
         ACTIVE_INSTANCES.delete(inputDir);
       }
-      watchdog.stopAll();
+      try {
+        if (typeof stopReporter === "function") {
+          stopReporter();
+        }
+      } catch (err) {
+        instLog("warn", `Error stopping telemetry reporter: ${String(err)}`);
+      }
+      try {
+        watchdog.stopAll();
+      } catch (err) {
+        instLog("warn", `Error stopping watchdog: ${String(err)}`);
+      }
+      if (config.enabled) {
+        try {
+          instLog("info", telemetry.report());
+        } catch (err) {
+          console.warn("[watchdog] telemetry report error in dispose:", err);
+        }
+      }
     },
   };
 };

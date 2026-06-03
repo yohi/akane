@@ -35,12 +35,12 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
   maxPings: 1,
   pingMessage:
     "現在の状況を教えてください。ハングしているようであれば、思考プロセスを要約して次のアクションを提示してください。",
+  notifierType: "tmux",
   tmux: {
     enabled: true,
     displayMessage: true,
     highlightWindow: true,
   },
-  notifierType: "tmux",
   agents: {},
 };
 
@@ -102,17 +102,17 @@ export function resolveConfig(
   const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
+  const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
   const envNotifierType = parseNotifierType(
     env.OPENCODE_WATCHDOG_NOTIFIER_TYPE,
     "OPENCODE_WATCHDOG_NOTIFIER_TYPE",
     warn,
   );
   const projNotifierType = parseNotifierType(
-    project.notifierType as string | undefined,
+    project.notifierType,
     "notifierType",
     warn,
   );
-  const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
 
   const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
   const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);

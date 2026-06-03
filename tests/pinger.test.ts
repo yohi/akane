@@ -45,6 +45,25 @@ describe("OpenCodeAdapter", () => {
     expect(firstPart.text).toBe("ping?");
   });
 
+  test("OpenCodeAdapter.inject includes context.reason in the generated ping message by invoking buildPingPrompt", async () => {
+    const calls: Array<{ path: { id: string }; body: { parts: Array<{ type: string; text: string }> } }> = [];
+    const fakeClient = {
+      session: {
+        prompt: async (args: any) => {
+          calls.push(args);
+        },
+      },
+    };
+    const adapter = new OpenCodeAdapter(fakeClient);
+    await adapter.inject("sess-abc", "ping?", { reason: "rate_limit" });
+
+    expect(calls.length).toBe(1);
+    const firstPart = calls[0]!.body.parts[0];
+    expect(firstPart!.type).toBe("text");
+    expect(firstPart!.text).toContain("[Watchdog]");
+    expect(firstPart!.text).toContain("APIレート制限に到達しました");
+  });
+
   test("does not throw when client method is missing (logs only)", async () => {
     const adapter = new OpenCodeAdapter({} as unknown);
     await expect(adapter.inject("s", "msg")).resolves.toBeUndefined();
@@ -85,10 +104,24 @@ describe("buildPingPrompt", () => {
     expect(buildPingPrompt("base message")).toBe("base message");
   });
 
-  test("appends Japanese reason context when reason given", () => {
+  test("appends Japanese reason context when rate_limit given", () => {
     const out = buildPingPrompt("base message", "rate_limit");
     expect(out.startsWith("base message")).toBe(true);
     expect(out).toContain("[Watchdog]");
     expect(out).toContain("APIレート制限に到達しました");
+  });
+
+  test("appends Japanese reason context when provider_timeout given", () => {
+    const out = buildPingPrompt("base message", "provider_timeout");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("プロバイダ応答がタイムアウトしました");
+  });
+
+  test("appends Japanese reason context when unknown given", () => {
+    const out = buildPingPrompt("base message", "unknown");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("原因不明のエラーが発生しました");
   });
 });

@@ -15,6 +15,19 @@ describe("classifyError", () => {
     expect(classifyError({ message: "deadline exceeded" })).toBe("provider_timeout");
   });
 
+  test("detects errors using code and type keys (Issue 1 & 3)", () => {
+    expect(classifyError({ code: 429 })).toBe("rate_limit");
+    expect(classifyError({ code: "429" })).toBe("rate_limit");
+    expect(classifyError({ code: "ETIMEDOUT" })).toBe("provider_timeout");
+    expect(classifyError({ type: "rate_limit" })).toBe("rate_limit");
+  });
+
+  test("ensures 429 matches only on word boundaries (Issue 2 & 3)", () => {
+    expect(classifyError({ message: "error code 4291" })).toBe("unknown");
+    expect(classifyError({ message: "id=14290" })).toBe("unknown");
+    expect(classifyError({ code: 4291 })).toBe("unknown");
+  });
+
   test("returns unknown when a string is extractable but no pattern matches", () => {
     expect(classifyError({ message: "weird provider explosion" })).toBe("unknown");
     expect(classifyError({ error: { name: "Boom" } })).toBe("unknown");

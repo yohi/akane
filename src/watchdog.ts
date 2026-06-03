@@ -4,7 +4,6 @@ import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
 import { NoopTelemetry, type Telemetry } from "./telemetry";
 import type { HangReason } from "./errors";
-import { buildPingPrompt } from "./pinger";
 
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
 
@@ -182,6 +181,7 @@ export class Watchdog {
     // pingCount は activity 復帰時に常に 0 へリセット (design §3.4)。
     // SILENCED から WATCHING へ戻った場合に Ping 注入の余地を再度確保するため。
     if (existing && existing.pingCount > 0 && existing.state !== "SILENCED") {
+      // Activity returned after a ping was injected — the session recovered.
       this.telemetry.recordRecovery();
     }
     const entry: SessionEntry = {
@@ -261,7 +261,7 @@ export class Watchdog {
       this.telemetry.recordPing();
       entry.lastPingTime = this.clock.now();
       const reason = entry.lastErrorReason;
-      const prompt = buildPingPrompt(this.config.pingMessage, reason);
+      const prompt = this.config.pingMessage;
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
       // and state transitions due to network/API timeouts.
       this.pinger.inject(sessionId, prompt, { reason }).catch((err) =>
