@@ -264,6 +264,44 @@ describe("Watchdog - agent filtering", () => {
   });
 });
 
+describe("Watchdog - noteError and reason-aware ping", () => {
+  test("noteError stores reason and pinger is called with raw message and context", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.noteError("s1", "rate_limit");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls[0]!.message).toBe("ping?");
+    expect(pinger.calls[0]!.context).toEqual({ reason: "rate_limit" });
+  });
+
+  test("noteError on an unmonitored/unknown session is ignored (no entry created, no throw)", () => {
+    const { watchdog } = setup();
+    watchdog.noteError("ghost", "unknown");
+    expect(watchdog.activeSessionCount()).toBe(0);
+  });
+
+  test("noteError on a stopped (tombstoned) session is ignored", () => {
+    const { watchdog, pinger } = setup();
+    watchdog.onActivity("s1");
+    watchdog.stop("s1");
+    watchdog.noteError("s1", "rate_limit");
+    expect(pinger.calls.length).toBe(0);
+  });
+
+  test("ping without a noted reason uses base message unchanged", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onActivity("s1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls[0]!.message).toBe("ping?");
+    expect(pinger.calls[0]!.context).toEqual({ reason: undefined });
+  });
+});
+
 describe("Watchdog - telemetry hooks", () => {
   test("records a hangup when stage1 expires", () => {
     const { watchdog, telemetry, clock } = setup();

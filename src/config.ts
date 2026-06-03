@@ -54,15 +54,6 @@ function parsePositiveInt(value: string | undefined, key: string, warn: WarnFn):
   return n;
 }
 
-function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
-  if (value === undefined) return undefined;
-  const lower = value.toLowerCase();
-  if (lower === "true" || lower === "yes" || lower === "1") return true;
-  if (lower === "false" || lower === "no" || lower === "0") return false;
-  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
-  return undefined;
-}
-
 function parseNotifierType(
   value: string | undefined,
   key: string,
@@ -70,6 +61,15 @@ function parseNotifierType(
 ): NotifierType | undefined {
   if (value === undefined) return undefined;
   if (value === "tmux" || value === "os") return value;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
+  return undefined;
+}
+
+function parseBool(value: string | undefined, key: string, warn: WarnFn): boolean | undefined {
+  if (value === undefined) return undefined;
+  const lower = value.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1") return true;
+  if (lower === "false" || lower === "no" || lower === "0") return false;
   warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
