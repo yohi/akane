@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
   TmuxNotifier,
+  OSNotifier,
+  createNotifier,
   type NotifierStage,
   type SpawnFn,
   type WhichFn,
@@ -147,5 +149,127 @@ describe("TmuxNotifier - error containment", () => {
     };
     const n = new TmuxNotifier({ env: buildEnv(), spawn, which });
     await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
+  });
+});
+
+describe("OSNotifier - linux (notify-send)", () => {
+  test("critical maps to critical urgency, args passed as array", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "critical", "hello");
+    expect(calls[0]!.cmd).toEqual([
+      "/usr/bin/notify-send",
+      "-u",
+      "critical",
+      "Akane Watchdog",
+      "hello",
+    ]);
+  });
+
+  test("warn maps to normal urgency", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls[0]!.cmd[2]).toBe("normal");
+  });
+
+  test("silenced maps to critical urgency", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "silenced", "hi");
+    expect(calls[0]!.cmd[2]).toBe("critical");
+  });
+
+  test("disables silently when notify-send is absent", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => null;
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls.length).toBe(0);
+  });
+});
+
+describe("OSNotifier - macOS (osascript)", () => {
+  test("uses osascript and escapes double quotes, backslashes, and newlines (no shell)", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = (binary) => (binary === "osascript" ? "/usr/bin/osascript" : null);
+    const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
+    
+    // Test case 1: double quotes
+    await n.notify("s1", "warn", 'say "hi" now');
+    expect(calls[0]!.cmd[0]).toBe("osascript");
+    expect(calls[0]!.cmd[1]).toBe("-e");
+    expect(calls[0]!.cmd[2]).toBe(
+      'display notification "say \\"hi\\" now" with title "Akane Watchdog"',
+    );
+    expect(calls[0]!.cmd.length).toBe(3);
+
+    // Test case 2: backslash at the end
+    await n.notify("s1", "warn", 'foo\\');
+    expect(calls[1]!.cmd[2]).toBe(
+      'display notification "foo\\\\" with title "Akane Watchdog"',
+    );
+
+    // Test case 3: backslash and double quote (escaped quote in source)
+    await n.notify("s1", "warn", 'foo\\"');
+    expect(calls[2]!.cmd[2]).toBe(
+      'display notification "foo\\\\\\\"" with title "Akane Watchdog"',
+    );
+
+    // Test case 4: newlines
+    await n.notify("s1", "warn", "line1\nline2\r\nline3");
+    expect(calls[3]!.cmd[2]).toBe(
+      'display notification "line1 line2 line3" with title "Akane Watchdog"',
+    );
+  });
+
+  test("disables silently when osascript is absent", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => null;
+    const n = new OSNotifier({ platform: "darwin", spawn, which, log: () => {} });
+    await n.notify("s1", "warn", "hi");
+    expect(calls.length).toBe(0);
+  });
+});
+
+describe("OSNotifier - misc", () => {
+  test("clear() is a no-op (no spawn)", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.clear("s1");
+    expect(calls.length).toBe(0);
+  });
+
+  test("spawn rejection is swallowed (no throw)", async () => {
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const spawn: SpawnFn = async () => {
+      throw new Error("ENOENT");
+    };
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await expect(n.notify("s1", "warn", "m")).resolves.toBeUndefined();
+  });
+});
+
+describe("createNotifier (factory)", () => {
+  const baseDeps = {
+    env: {} as Record<string, string | undefined>,
+    spawn: (async () => ({ exitCode: 0 })) as SpawnFn,
+    which: ((): string | null => null) as WhichFn,
+    platform: "linux",
+    log: () => {},
+  };
+
+  test('type "tmux" returns a TmuxNotifier', () => {
+    const n = createNotifier("tmux", baseDeps);
+    expect(n).toBeInstanceOf(TmuxNotifier);
+  });
+
+  test('type "os" returns an OSNotifier', () => {
+    const n = createNotifier("os", baseDeps);
+    expect(n).toBeInstanceOf(OSNotifier);
   });
 });

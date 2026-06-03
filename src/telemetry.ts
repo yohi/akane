@@ -47,9 +47,7 @@ export class TelemetryCollector implements Telemetry {
   }
 
   report(): string {
-    const s = this.snapshot();
-    const rate = s.recoveryRate === null ? "n/a" : `${(s.recoveryRate * 100).toFixed(1)}%`;
-    return `[Telemetry] hangups=${s.hangupsDetected} pings=${s.pingsSent} recoveries=${s.recoveries} failures=${s.silencedFailures} recoveryRate=${rate}`;
+    return formatTelemetryReport(this.snapshot());
   }
 }
 
@@ -70,6 +68,11 @@ export class NoopTelemetry implements Telemetry {
   }
 
   report(): string {
-    return "[Telemetry] hangups=0 pings=0 recoveries=0 failures=0 recoveryRate=n/a";
+    return formatTelemetryReport(this.snapshot());
   }
+}
+
+export function formatTelemetryReport(s: TelemetrySnapshot): string {
+  const rate = s.recoveryRate === null ? "n/a" : `${(s.recoveryRate * 100).toFixed(1)}%`;
+  return `[Telemetry] hangups=${s.hangupsDetected} pings=${s.pingsSent} recoveries=${s.recoveries} failures=${s.silencedFailures} recoveryRate=${rate}`;
 }

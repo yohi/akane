@@ -118,7 +118,6 @@ export function bunWhich(): WhichFn {
   return (binary) => Bun.which(binary) ?? null;
 }
 
-
 export interface OSNotifierDeps {
   platform: string;
   spawn: SpawnFn;
@@ -132,23 +131,33 @@ const OS_URGENCY_BY_STAGE: Record<NotifierStage, "normal" | "critical"> = {
   silenced: "critical",
 };
 
+/**
+ * Cross-platform OS desktop notification backend.
+ * - linux: `notify-send -u <urgency> "Akane Watchdog" <message>`
+ * - darwin: `osascript -e 'display notification "<escaped>" with title "Akane Watchdog"'`
+ * Arguments are always passed as an array (no shell), avoiding injection. macOS
+ * message double-quotes are escaped. Detection failures disable silently.
+ */
 export class OSNotifier implements Notifier {
   private detection: "unknown" | "ok" | "disabled" = "unknown";
   private notifySendPath = "notify-send";
   private readonly log: (level: "warn" | "info", message: string) => void;
 
   constructor(private readonly deps: OSNotifierDeps) {
-    this.log = deps.log ?? ((level, message) => console[level]("[watchdog] " + message));
+    this.log = deps.log ?? ((level, message) => console[level](`[watchdog] ${message}`));
   }
 
   async notify(_sessionId: string, stage: NotifierStage, message: string): Promise<void> {
     if (!this.ensureBackend()) return;
     if (this.deps.platform === "darwin") {
-      const escaped = message.replace(/"/g, "\"");
+      const escaped = message
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\r?\n/g, " ");
       await this.safeSpawn([
         "osascript",
         "-e",
-        'display notification "' + escaped + '" with title "Akane Watchdog"',
+        `display notification "${escaped}" with title "Akane Watchdog"`,
       ]);
       return;
     }
@@ -164,6 +173,12 @@ export class OSNotifier implements Notifier {
     if (this.detection === "ok") return true;
     if (this.detection === "disabled") return false;
     if (this.deps.platform === "darwin") {
+      const path = this.deps.which("osascript");
+      if (!path) {
+        this.detection = "disabled";
+        this.log("info", "osascript not found in PATH; disabling OS notifications.");
+        return false;
+      }
       this.detection = "ok";
       return true;
     }
@@ -182,16 +197,21 @@ export class OSNotifier implements Notifier {
     try {
       const result = await this.deps.spawn(cmd);
       if (result.exitCode !== 0) {
-        this.log("warn", "OS notify failed: " + cmd[0] + " (exitCode: " + result.exitCode + ")");
+        // Log only the binary name and exit code. The full command line contains the
+        // notification message body (session id / error reason / arbitrary text),
+        // which may be sensitive and must not be persisted to logs.
+        this.log("warn", `OS notify failed: ${cmd[0]} (exitCode: ${result.exitCode})`);
       }
       return result;
     } catch (err) {
-      this.log("warn", "OS notify spawn failed: " + String(err));
+      const errKind = (err && typeof err === "object")
+        ? ((err as any).code || (err as any).name || "Error")
+        : typeof err;
+      this.log("warn", `OS notify spawn failed: ${cmd[0]} (${errKind})`);
       return null;
     }
   }
 }
-
 
 export interface CreateNotifierDeps {
   env: Record<string, string | undefined>;
@@ -209,11 +229,15 @@ export function createNotifier(type: NotifierType, deps: CreateNotifierDeps): No
       which: deps.which,
       log: deps.log,
     });
+  } else if (type === "tmux") {
+    return new TmuxNotifier({
+      env: deps.env,
+      spawn: deps.spawn,
+      which: deps.which,
+      log: deps.log,
+    });
+  } else {
+    const _exhaustive: never = type;
+    throw new Error(`Unsupported NotifierType: ${_exhaustive}`);
   }
-  return new TmuxNotifier({
-    env: deps.env,
-    spawn: deps.spawn,
-    which: deps.which,
-    log: deps.log,
-  });
 }
