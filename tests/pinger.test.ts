@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { MockPinger, OpenCodeAdapter, type Pinger } from "../src/pinger";
+import { MockPinger, OpenCodeAdapter, buildPingPrompt, type Pinger } from "../src/pinger";
 
 describe("MockPinger", () => {
   test("records each inject call", async () => {
@@ -7,14 +7,20 @@ describe("MockPinger", () => {
     await m.inject("session-1", "hello?");
     await m.inject("session-2", "still alive?");
     expect(m.calls).toEqual([
-      { sessionId: "session-1", message: "hello?" },
-      { sessionId: "session-2", message: "still alive?" },
+      { sessionId: "session-1", message: "hello?", context: undefined },
+      { sessionId: "session-2", message: "still alive?", context: undefined },
     ]);
   });
 
   test("returns a resolved promise", async () => {
     const m: Pinger = new MockPinger();
     await expect(m.inject("s", "msg")).resolves.toBeUndefined();
+  });
+
+  test("records context when provided", async () => {
+    const m = new MockPinger();
+    await m.inject("s", "msg", { reason: "rate_limit" });
+    expect(m.calls[0]!.context).toEqual({ reason: "rate_limit" });
   });
 });
 
@@ -71,5 +77,32 @@ describe("OpenCodeAdapter", () => {
 
     expect(thisContext).toBeDefined();
     expect(thisContext.name).toBe("OpenCodeSession");
+  });
+});
+
+describe("buildPingPrompt", () => {
+  test("returns base unchanged when no reason", () => {
+    expect(buildPingPrompt("base message")).toBe("base message");
+  });
+
+  test("appends Japanese reason context when rate_limit given", () => {
+    const out = buildPingPrompt("base message", "rate_limit");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("APIレート制限に到達しました");
+  });
+
+  test("appends Japanese reason context when provider_timeout given", () => {
+    const out = buildPingPrompt("base message", "provider_timeout");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("プロバイダ応答がタイムアウトしました");
+  });
+
+  test("appends Japanese reason context when unknown given", () => {
+    const out = buildPingPrompt("base message", "unknown");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("原因不明のエラーが発生しました");
   });
 });
