@@ -474,10 +474,12 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       } catch (err) {
         instLog("warn", `Error stopping watchdog: ${String(err)}`);
       }
-      try {
-        instLog("info", telemetry.report());
-      } catch (err) {
-        console.warn("[watchdog] telemetry report error in dispose:", err);
+      if (config.enabled) {
+        try {
+          instLog("info", telemetry.report());
+        } catch (err) {
+          console.warn("[watchdog] telemetry report error in dispose:", err);
+        }
       }
     },
   };
