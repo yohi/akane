@@ -45,6 +45,25 @@ describe("OpenCodeAdapter", () => {
     expect(firstPart.text).toBe("ping?");
   });
 
+  test("OpenCodeAdapter.inject includes context.reason in the generated ping message by invoking buildPingPrompt", async () => {
+    const calls: Array<{ path: { id: string }; body: { parts: Array<{ type: string; text: string }> } }> = [];
+    const fakeClient = {
+      session: {
+        prompt: async (args: any) => {
+          calls.push(args);
+        },
+      },
+    };
+    const adapter = new OpenCodeAdapter(fakeClient);
+    await adapter.inject("sess-abc", "ping?", { reason: "rate_limit" });
+
+    expect(calls.length).toBe(1);
+    const firstPart = calls[0]!.body.parts[0];
+    expect(firstPart!.type).toBe("text");
+    expect(firstPart!.text).toContain("[Watchdog]");
+    expect(firstPart!.text).toContain("APIレート制限に到達しました");
+  });
+
   test("does not throw when client method is missing (logs only)", async () => {
     const adapter = new OpenCodeAdapter({} as unknown);
     await expect(adapter.inject("s", "msg")).resolves.toBeUndefined();
