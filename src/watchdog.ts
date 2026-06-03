@@ -262,7 +262,7 @@ export class Watchdog {
       this.telemetry.recordPing();
       entry.lastPingTime = this.clock.now();
       const reason = entry.lastErrorReason;
-      const prompt = buildPingPrompt(this.config.pingMessage, reason);
+      const prompt = this.config.pingMessage;
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
       // and state transitions due to network/API timeouts.
       this.pinger.inject(sessionId, prompt, { reason }).catch((err) =>

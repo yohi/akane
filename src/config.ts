@@ -74,8 +74,6 @@ function parseBool(value: string | undefined, key: string, warn: WarnFn): boolea
   return undefined;
 }
 
-
-
 function validateNumber(
   value: number | undefined,
   key: string,
