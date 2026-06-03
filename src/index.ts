@@ -187,7 +187,7 @@ export function isNewUserMessage(messageId: string): boolean {
 }
 
 export type SessionErrorRoute =
-  | { action: "note"; reason: HangReason }
+  | { action: "note"; reason: "rate_limit" | "provider_timeout" }
   | { action: "stop" };
 
 /**
