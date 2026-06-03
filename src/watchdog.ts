@@ -207,7 +207,6 @@ export class Watchdog {
     this.log("info", `[Watchdog] Session ${sessionId} STAGE1 expired. Transitioning to STAGE1_NOTIFIED`);
     entry.state = "STAGE1_NOTIFIED";
     this.telemetry.recordHangup();
-    entry.state = "STAGE1_NOTIFIED";
     
     this.log("info", `[Watchdog] Scheduling stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {

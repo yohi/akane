@@ -53,6 +53,7 @@ class MockTelemetry implements Telemetry {
     return "";
   }
 }
+
 const baseConfig: WatchdogConfig = {
   enabled: true,
   stage1Ms: 1000,
