@@ -224,14 +224,18 @@ export interface TelemetryReporterDeps {
  */
 export function startTelemetryReporter(deps: TelemetryReporterDeps): () => void {
   let handle: TimerHandle = null;
+  let stopped = false;
   const schedule = () => {
+    if (stopped) return;
     handle = deps.clock.setTimeout(() => {
+      handle = null;
       deps.log("info", deps.telemetry.report());
       schedule();
     }, deps.intervalMs);
   };
   schedule();
   return () => {
+    stopped = true;
     if (handle !== null) deps.clock.clearTimeout(handle);
     handle = null;
   };
@@ -451,9 +455,21 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
       if (inputDir) {
         ACTIVE_INSTANCES.delete(inputDir);
       }
-      stopReporter();
-      watchdog.stopAll();
-      instLog("info", telemetry.report());
+      try {
+        stopReporter();
+      } catch (err) {
+        instLog("warn", `Error stopping telemetry reporter: ${String(err)}`);
+      }
+      try {
+        watchdog.stopAll();
+      } catch (err) {
+        instLog("warn", `Error stopping watchdog: ${String(err)}`);
+      }
+      try {
+        instLog("info", telemetry.report());
+      } catch (err) {
+        console.warn("[watchdog] telemetry report error in dispose:", err);
+      }
     },
   };
 };
