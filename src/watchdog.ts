@@ -4,7 +4,6 @@ import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
 import { NoopTelemetry, type Telemetry } from "./telemetry";
 import type { HangReason } from "./errors";
-import { buildPingPrompt } from "./pinger";
 
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
 
