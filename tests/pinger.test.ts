@@ -85,10 +85,24 @@ describe("buildPingPrompt", () => {
     expect(buildPingPrompt("base message")).toBe("base message");
   });
 
-  test("appends Japanese reason context when reason given", () => {
+  test("appends Japanese reason context when rate_limit given", () => {
     const out = buildPingPrompt("base message", "rate_limit");
     expect(out.startsWith("base message")).toBe(true);
     expect(out).toContain("[Watchdog]");
     expect(out).toContain("APIレート制限に到達しました");
+  });
+
+  test("appends Japanese reason context when provider_timeout given", () => {
+    const out = buildPingPrompt("base message", "provider_timeout");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("プロバイダ応答がタイムアウトしました");
+  });
+
+  test("appends Japanese reason context when unknown given", () => {
+    const out = buildPingPrompt("base message", "unknown");
+    expect(out.startsWith("base message")).toBe(true);
+    expect(out).toContain("[Watchdog]");
+    expect(out).toContain("原因不明のエラーが発生しました");
   });
 });
