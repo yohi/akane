@@ -92,7 +92,7 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
 ```
 
 - **telemetry フックのタイミング**:
-  - `recordHangup`: `onStage1Expire` 内で STAGE1_NOTIFIED への遷移直前に発火。
+  - `recordHangup`: `onStage1Expire` 内で STAGE1_NOTIFIED への遷移直後（遷移時）に発火。
   - `recordPing`: `onStage2Expire` 内で ping 送信直前に発火。
   - `recordRecovery`: `armOrReset` 内で、`pingCount > 0` かつ `state !== "SILENCED"` のセッションでアシスタント活動が復帰した際に発火。
   - `recordFailure`: `onStage2Expire` 内で `maxPings` 上限に達して SILENCED 状態に遷移した際に発火。
@@ -139,7 +139,7 @@ OpenCode から送られてくる `session.error` イベントのペイロード
 * **ルーティング処理 (`routeSessionError`)**:
   - **recoverable なエラー** (`rate_limit` / `provider_timeout`): `watchdog.noteError` を呼び出してセッションエントリにエラー理由を保持し、監視は `stop()` せず継続。次に発生するハングの Ping 注入時に、プロンプトの末尾に日本語のエラー原因付きヒント文（`[Watchdog] 直前に次のエラーを検出しました...`）を追記してエージェントの自己復旧を促す。
   - **terminal なエラー / 分類不能**: 従来通り `watchdog.stop(sessionId)` を呼び出し、監視を終了して Tmux/OS ハイライトをリセット。
-* **エラー継続時の終端遷移（リソース消費の上界）**: recoverable なエラーにより監視が継続された場合でも、回復応答がないままハングが継続すると `maxPings`（デフォルト 1）で頭打ちになり、SILENCED 状態に遷移してタイマーは解除されます。これにより最大監視時間は `stage1Ms + maxPings × stage2Ms` で上界が定まり、無限に ping を打ち続けてトークンを浪費することはありません。
+* **エラー継続時の終端遷移（リソース消費の上界）**: recoverable なエラーにより監視が継続された場合でも、回復応答がないままハングが継続すると `maxPings`（デフォルト 1）で頭打ちになり、SILENCED 状態に遷移してタイマーは解除されます。これにより最大監視時間は `stage1Ms + (maxPings + 1) × stage2Ms` で上界が定まり、無限に ping を打ち続けてトークンを浪費することはありません。
 * **メモリリークガード**: `noteError` は監視中のセッション（`sessions` Map 内）にのみ適用され、監視外や停止済みのセッションにエラー理由を退避・保持しないことでメモリリークを防ぐ。
 
 ---
@@ -301,7 +301,7 @@ export interface Pinger {
 ## 10. 将来拡張余地（非ゴール）
 
 - ハング原因の自動診断（LLM プロバイダ側の HTTP ステータス監視等）。
-- Tmux 以外の通知バックエンド（Slack、OS native notification 等）。
+- Tmux 以外の追加の通知バックエンド（Slack 等）。
 - 状態遷移の永続化と再起動後の復元。
 - ダッシュボード UI。
 - CI での実 tmux 結合テスト（現状は `Bun.spawn` を DI モックで代替）。

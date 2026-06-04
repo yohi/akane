@@ -6,7 +6,7 @@
 
 ## 1. Project Map & Purpose (WHY & WHAT)
 - **Goal**: Detect agent silence, color Tmux/OS indicators, and issue a ping prompt to recover.
-- **Scope**: Implements a 3-stage state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`).
+- **Scope**: Implements a 4-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`).
 - **Full Specs**: Refer to the authoritative design specs in [SPEC.md](SPEC.md) and [README.md](README.md).
 
 ---

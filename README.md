@@ -13,6 +13,7 @@
 - 👁️ **Event Bus Monitoring**: OpenCode内部のストリーム受信イベントを直接フックし、ミリ秒単位で「色相」を監視。
 - 🚨 **Multi-Backend Notification**: 沈黙（Stage1）を検知すると、Tmuxのステータスラインを警告色（Yellow/Red）にするか、OSデスクトップ通知（Linuxの `notify-send` または macOSの `osascript`）を通じて即座に警告を通知。
 - 📊 **Telemetry & Reporting**: ハングアップ回数、Ping送信、自己回復率などを自動収集し、定期的に（デフォルト1分間隔）およびプロセス終了時に稼働状況をレポート。
+- 🔫 **Auto-Intervention**: サイレンス（Stage 2）に達した場合、エージェントに対して自動Pingを注入し、再起を促します（`maxPings` 回まで）。
 - 🔍 **Error Auto-Analysis & Contextual Ping**: `session.error` 受信時に API レート制限やタイムアウトなどの一時的なエラー（recoverable）を自動解析。監視を継続したままハング発生時にエラー理由をエージェントに通知し自己復旧を支援。
 - 🛡️ **Zero-Crash Fallback**: 通知の失敗や外部プロセスのエラーが発生した場合も安全にフォールバック。絶対にプロセスを落とさない堅牢な設計。
 - ⚡ **Auto-Duplication Prevention**: プラグインが同一プロセスで重複ロードされた場合でも、自動的に2回目以降の初期化をブロックするガードレールを搭載。
