@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/yohi/akane/compare/v1.1.0...v1.1.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **docs:** プロジェクトドキュメントの整理と不要ファイルの削除 ([e37443c](https://github.com/yohi/akane/commit/e37443c5beb8ba2f85261b1f4d6b4c8ac7beae25))
+
 ## [1.1.0](https://github.com/yohi/akane/compare/v1.0.0...v1.1.0) (2026-06-04)
 
 
