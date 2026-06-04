@@ -11,9 +11,11 @@
 ## ✨ Features
 
 - 👁️ **Event Bus Monitoring**: OpenCode内部のストリーム受信イベントを直接フックし、ミリ秒単位で「色相」を監視。
-- 🚨 **Tmux Integration**: 沈黙（Stage1）を検知すると、Tmuxのステータスラインを警告色（Yellow/Red）に染め上げ、メッセージをポップアップ通知。
-- 🔫 **Auto-Intervention (Dominator)**: 危険領域（Stage2）に達した場合、エージェントに対して「現在の状況を教えてください」と自動Pingを1度だけ注入し、再起を促します。
-- 🛡️ **Zero-Crash Fallback**: Tmuxが存在しない環境下でも安全にフォールバック。絶対にプロセスを落とさない堅牢な設計。
+- 🚨 **Multi-Backend Notification**: 沈黙（Stage1）を検知すると、Tmuxのステータスラインを警告色（Yellow/Red）にするか、OSデスクトップ通知（Linuxの `notify-send` または macOSの `osascript`）を通じて即座に警告を通知。
+- 📊 **Telemetry & Reporting**: ハングアップ回数、Ping送信、自己回復率などを自動収集し、定期的に（デフォルト1分間隔）およびプロセス終了時に稼働状況をレポート。
+- 🔫 **Auto-Intervention**: サイレンス（Stage 2）に達した場合、エージェントに対して自動Pingを注入し、再起を促します（`maxPings` 回まで）。
+- 🔍 **Error Auto-Analysis & Contextual Ping**: `session.error` 受信時に API レート制限やタイムアウトなどの一時的なエラー（recoverable）を自動解析。監視を継続したままハング発生時にエラー理由をエージェントに通知し自己復旧を支援。
+- 🛡️ **Zero-Crash Fallback**: 通知の失敗や外部プロセスのエラーが発生した場合も安全にフォールバック。絶対にプロセスを落とさない堅牢な設計。
 - ⚡ **Auto-Duplication Prevention**: プラグインが同一プロセスで重複ロードされた場合でも、自動的に2回目以降の初期化をブロックするガードレールを搭載。
 - 🔄 **Manual Recovery Bypass**: 赤色警告（SILENCED）となった後も、ユーザーがチャットから新しいメッセージを入力・送信することで、即座に警告表示をクリアし監視を再始動します。
 
@@ -24,9 +26,11 @@
 | 環境変数 | 用途 | デフォルト値 |
 |---|---|---|
 | `OPENCODE_WATCHDOG_ENABLED` | プラグインの有効/無効化 | `true` |
-| `OPENCODE_WATCHDOG_STAGE1_MS` | 黄色警告（STAGE1）になるまでの応答なし時間 | `180000` (3分) |
-| `OPENCODE_WATCHDOG_STAGE2_MS` | 赤色警告（STAGE2）および自動Ping注入までの時間 | `180000` (3分) |
+| `OPENCODE_WATCHDOG_STAGE1_MS` | 警告（STAGE1）になるまでの応答なし時間 | `180000` (3分) |
+| `OPENCODE_WATCHDOG_STAGE2_MS` | Ping注入および致命的警告（STAGE2）までの時間 | `180000` (3分) |
 | `OPENCODE_WATCHDOG_MAX_PINGS` | 自動Pingを実行する上限回数 | `1` |
+| `OPENCODE_WATCHDOG_NOTIFIER_TYPE` | 通知方法の指定（`tmux` または `os`） | `tmux` |
+| `OPENCODE_WATCHDOG_REPORT_MS` | テレメトリの定期レポート出力間隔（ミリ秒） | `60000` (1分) |
 
 ## 🚀 Build & Deployment
 

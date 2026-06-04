@@ -1,102 +1,48 @@
-# AGENTS.md — Agent Developer Guide for `akane`
+# AGENTS.md — Developer & AI Agent Guide for `akane`
 
-Welcome, AI Engineer. This document serves as your guide to understanding the project context, build commands, test instructions, design constraints, and known gotchas of `akane`.
-
----
-
-## 1. Project Overview
-
-`akane` is a hang detector plugin for [OpenCode](https://github.com/anomalyco/opencode) sessions. It implements a 3-stage escalation pipeline using the `@opencode-ai/plugin` API:
-1. **Stage 1 (warn)**: Notifies Tmux with a yellow highlight when the agent response stream halts.
-2. **Stage 2 (critical)**: Automatically injects a ping message to attempt self-recovery and highlights Tmux in red.
-3. **Stage 3 (silenced)**: Halts automatic pinging when `maxPings` threshold is hit, requiring manual human intervention (red highlight remains).
+`akane` is a lightweight, zero-crash hang detector plugin for OpenCode sessions that monitors agent activity, alerts users via Tmux/OS notifications, and injects recovery pings.
 
 ---
 
-## 2. Tech Stack & Environment
-
-- **Runtime**: Bun 1.3+
-- **Language**: TypeScript (strict mode)
-- **Framework**: `@opencode-ai/plugin` SDK
-- **Testing**: `bun test` (native runner)
-- **Devcontainer**: Debian 12 + tmux (for integration tests and command verification)
+## 1. Project Map & Purpose (WHY & WHAT)
+- **Goal**: Detect agent silence, color Tmux/OS indicators, and issue a ping prompt to recover.
+- **Scope**: Implements a 4-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`).
+- **Full Specs**: Refer to the authoritative design specs in [SPEC.md](SPEC.md) and [README.md](README.md).
 
 ---
 
-## 3. Core Development Commands
+## 2. Tech Stack & Verification (HOW)
+This project is built on **Bun 1.3+** and **TypeScript** (strict mode, no `any`). All execution and tests must run inside the devcontainer environment.
 
-Always run build, check, and test commands **inside the devcontainer** for environment consistency. Git operations should be performed on the host.
+- **Build**: `bun run build` (creates `./dist/index.js` using Bun's bundler)
+- **Type Check**: `bun run typecheck` (`tsc --noEmit` validation)
+- **Test**: `bun test` (runs all unit and stress tests. Expecting **130 tests to pass** under 1500ms)
+- **Local Install**: `mkdir -p ~/.config/opencode/plugins/akane && cp -r package.json dist ~/.config/opencode/plugins/akane/`
 
-### Build the project
+---
+
+## 3. High-Leverage Rules & Constraints (CRITICAL)
+
+When modifying code, you MUST respect these strict architectural safety guidelines:
+
+### 3.1 Duplication Protection
+OpenCode may initialize plugins multiple times. Track active directories using the global `ACTIVE_INSTANCES` (`Set<string>`) at the file level. If already initialized, return a no-op hook `{ event: async () => {}, dispose: async () => {} }` and remove it upon disposal.
+
+### 3.2 Arm Lock & Manual Bypass
+After injecting a ping, enforce an arm lock duration (`Math.max(stage2Ms * 2, 30000)`) to ignore late stale assistant events. However, any manual user message (`isUserMessage` or non-empty typing with no agent name) must bypass the lock immediately to trigger recovery and return the session to the `WATCHING` state.
+
+### 3.3 Late Event Tombstoning
+To prevent delayed streaming chunks from re-arming stopped sessions (idle/error/deleted), store ended session IDs in a bounded FIFO Set (`stoppedSessions` with a limit of 10,000). Discard any activity matching these tombstones.
+
+### 3.4 Zero-Crash & Secure Logging
+- **Containment**: Wrap all external command calls (`Bun.spawn` for tmux/notify-send/osascript) in try/catch to avoid crashing OpenCode.
+- **Log Scrubbing**: Never log raw commands or session inputs. If a spawn fails, only log the binary name and exit code to prevent leakage of user data.
+- **No Concatenated Scripts**: Always pass arguments as an array (`cmd[]`) to prevent shell injection.
+
+---
+
+## 4. Tip for Claude Code Compatibility
+This project supports `CLAUDE.md` via a symbolic link. Ensure `CLAUDE.md` links to `AGENTS.md`:
 ```bash
-bun run build
+ln -sf AGENTS.md CLAUDE.md
 ```
-*Compiles `./src/index.ts` to `./dist/index.js` using Bun's bundler.*
-
-### Run type check
-```bash
-bun run typecheck
-```
-*Runs `tsc --noEmit` to verify type integrity.*
-
-### Run all tests
-```bash
-bun test
-```
-*Runs all units and stress tests. Expecting ~79 tests to pass under 600ms.*
-
-### Local plugin deployment (manual check)
-```bash
-mkdir -p ~/.config/opencode/plugins/opencode-watchdog
-cp -r package.json dist ~/.config/opencode/plugins/opencode-watchdog/
-```
-
----
-
-## 4. Codebase Structure
-
-- [src/index.ts](./src/index.ts): Plugin entry point. Dispatches incoming events to `Watchdog` and handles duplicate loading protection.
-- [src/watchdog.ts](./src/watchdog.ts): Core Watchdog engine. Manages state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`) and session timers.
-- [src/notifier.ts](./src/notifier.ts): Handles Tmux status line colorization (`bg=yellow`, `bg=red`, `default`) and display notifications.
-- [src/pinger.ts](./src/pinger.ts): Adapter for `client.session.prompt` to inject the ping message into the active session.
-- [src/clock.ts](./src/clock.ts): DI Clock wrapper (`RealClock` and `FakeClock`) enabling fast time-advance testing.
-- [src/config.ts](./src/config.ts): Merges config priorities: env > project config (jsonc) > defaults.
-
----
-
-## 5. Key Architectural Rules & Constraints
-
-### 5.1 Duplication Protection
-OpenCode has a known behavior of initializing the plugin multiple times within a single process.
-* **The Rule**: A global `ACTIVE_INSTANCES` (`Set<string>`) tracks active directory paths (`input.directory`).
-* **Implementation**: If a path is already registered, the initialization must return a no-op hook:
-  ```typescript
-  return { event: async () => {}, dispose: async () => {} };
-  ```
-  And must delete the entry from the Set in the `dispose` hook.
-
-### 5.2 Arm Lock & Manual Recovery Bypass
-* **Arm Lock**: After injecting a ping, an arm lock (`lockDuration = Math.max(stage2Ms * 2, 30000)`) is enabled to suppress delayed assistant replies or transient API errors from resetting the state.
-* **The Bypass Rule**: Fresh human intervention must bypass this lock immediately.
-* **Event Classification**:
-  * `message.updated` (role: user) and user-originated `message.part.updated` (where `agentName === undefined` and `text` is non-empty) are classified as manual user messages.
-  * These events **bypass** the arm lock checks in `src/index.ts` and call `watchdog.onUserMessage(...)` immediately to restore the session from `SILENCED` or `PINGED` to the `WATCHING` state.
-
-### 5.3 Zero-Crash Fallback
-* Watchdog errors must **never** crash the host OpenCode process.
-* Wrap all external process calls (`Bun.spawn` for Tmux) and async boundaries in try/catch blocks. Swallow rejections and log them locally.
-
-### 5.4 Injection Prevention
-* When calling `tmux`, never pass arguments as a concatenated string shell script. Always pass arguments as an array (`[this.tmuxPath, "display-message", message]`) to avoid shell command injections.
-
----
-
-## 6. Gotchas & Anti-Patterns
-
-### ⚠️ Performance Flooding in Tests
-- **Gotcha**: The core `Watchdog` defaults to log via `console.info`. If a stress test (e.g., 1000 sessions) executes, it will output hundreds of thousands of lines, causing the test runner to hang or run extremely slow.
-- **Remedy**: Always pass an empty logger (`log: () => {}`) when instantiating `Watchdog` in unit or stress tests.
-
-### ⚠️ Late Event Rearming after Session Stop
-- **Gotcha**: When a session ends via `session.idle` or `session.error`, calling `clearTimeout` and deleting the session entry from the Map is not enough. Delayed assistant stream packets arriving after stop will cause `onActivity` to re-create a phantom session.
-- **Remedy**: Sessions are tombstoned into a FIFO Set (`stoppedSessions` with a limit of 10,000) upon calling `stop()`. Any `onActivity` matching a tombstoned session is immediately discarded. The tombstone is only cleared on `onUserMessage` (new user prompt).
