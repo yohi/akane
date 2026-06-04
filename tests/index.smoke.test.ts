@@ -258,6 +258,19 @@ describe("isPingEvent", () => {
     expect(isPingEvent(partialMsgEvent2, "ping-msg")).toBe(true);
     expect(isPingEvent(partialPartEvent1, "ping-msg")).toBe(true);
     expect(isPingEvent(partialPartEvent2, "ping-msg")).toBe(true);
+
+    // Extended message matching (e.g. contains why it hung reason information)
+    const extendedMsgEvent: OpenCodeEvent = {
+      type: "message.updated",
+      properties: {
+        info: {
+          role: "user",
+          sessionID: "s",
+          parts: [{ type: "text", text: "ping-msg\n\n[Watchdog] 直前に次のエラーを検出しました..." }],
+        },
+      },
+    };
+    expect(isPingEvent(extendedMsgEvent, "ping-msg")).toBe(true);
   });
 });
 

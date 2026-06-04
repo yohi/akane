@@ -70,10 +70,12 @@ export function isPingEvent(event: OpenCodeEvent, pingMessage: string): boolean 
   
   const isMatch = (text: string | undefined) => {
     if (!text) return false;
-    // Apply unidirectional substring matching for 2 or more characters.
-    // This handles streaming chunks while avoiding false positives from user text containing pingMessage.
+    // Apply bidirectional substring matching for 2 or more characters.
+    // This handles streaming chunks (pingMessage contains text)
+    // and full/extended messages containing reasons (text contains pingMessage),
+    // while avoiding false positives from user text containing pingMessage.
     if (text.length >= 2) {
-      return pingMessage.includes(text);
+      return pingMessage.includes(text) || text.includes(pingMessage);
     }
     // For single character chunks, check if it is the start of the ping message.
     return pingMessage.startsWith(text);
