@@ -3,6 +3,7 @@ import type { Notifier } from "./notifier";
 import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
 import { NoopTelemetry, type Telemetry } from "./telemetry";
+import type { HangReason } from "./errors";
 
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
 
@@ -12,6 +13,7 @@ interface SessionEntry {
   pingCount: number;
   agentName?: string;
   lastPingTime?: number;
+  lastErrorReason?: HangReason;
 }
 
 export interface WatchdogDeps {
@@ -54,6 +56,23 @@ export class Watchdog {
 
   getLastPingTime(sessionId: string): number {
     return this.sessions.get(sessionId)?.lastPingTime ?? 0;
+  }
+
+  /**
+   * Records the last classified error reason for a monitored session so the next
+   * ping can explain why it hung. Side effects are limited to the `sessions` Map:
+   * a non-monitored / unknown session (no entry) is ignored, and the tombstone set
+   * is never modified (design §4.3).
+   */
+  noteError(sessionId: string, reason: HangReason): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    const entry = this.sessions.get(sessionId);
+    if (entry) {
+      entry.lastErrorReason = reason;
+      this.log("info", `[Watchdog] noteError: session ${sessionId} reason=${reason}`);
+    } else {
+      this.log("info", `[Watchdog] noteError ignored: session ${sessionId} not monitored`);
+    }
   }
 
   activeSessionCount(): number {
@@ -241,9 +260,11 @@ export class Watchdog {
       entry.pingCount += 1;
       this.telemetry.recordPing();
       entry.lastPingTime = this.clock.now();
+      const reason = entry.lastErrorReason;
+      const prompt = this.config.pingMessage;
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
       // and state transitions due to network/API timeouts.
-      this.pinger.inject(sessionId, this.config.pingMessage).catch((err) =>
+      this.pinger.inject(sessionId, prompt, { reason }).catch((err) =>
         this.log("warn", `Failed to inject ping to ${sessionId}: ${String(err)}`),
       );
 
