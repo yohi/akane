@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.1.0](https://github.com/yohi/akane/compare/v1.0.0...v1.1.0) (2026-06-04)
+
+
+### Features
+
+* **config:** notifierType 設定を追加（tmux/os, env 上書き対応） ([3c9d239](https://github.com/yohi/akane/commit/3c9d23990668e05a9507ecbed2413511b95925fb))
+* **config:** notifierType 設定を追加（tmux/os, env 上書き対応） ([b811eae](https://github.com/yohi/akane/commit/b811eae87559d8e4094f4e36129a665a9687b0f9))
+* **config:** notifierType 設定を追加（tmux/os, env 上書き対応） ([6cbd29a](https://github.com/yohi/akane/commit/6cbd29a4aaf63fe0960b4720362f4c10b12ac904))
+* **config:** notifierType 設定追加 ([5f2229d](https://github.com/yohi/akane/commit/5f2229d134bab63657cce7734b0a44dafd48f25d))
+* **errors:** classifyError と reasonToJa を追加 ([ee07c7d](https://github.com/yohi/akane/commit/ee07c7d4d8739bba358ebf6ec5cc11bf38edf8c3))
+* **errors:** エラー分類ヒューリスティック追加 ([4df2a5c](https://github.com/yohi/akane/commit/4df2a5cbe1dad082337e30e0fb6c6ff7556aae0a))
+* **errors:** 数値コードの抽出と429エラーの厳密な判定に対応 ([9292904](https://github.com/yohi/akane/commit/929290486eab5b1368de68ced8f85700bfc0a146))
+* **index:** notifier Factory 配線 ([5508236](https://github.com/yohi/akane/commit/5508236bcbd72a18d677b1717c71e3429aaf2ed2))
+* **index:** notifier 生成を createNotifier(config.notifierType) へ配線 ([bcf32e4](https://github.com/yohi/akane/commit/bcf32e41a7cf80bf503e8eea5987aab6488c4970))
+* **index:** session.error ルーティング（recoverable=note / terminal=stop）を実装 ([fd514f3](https://github.com/yohi/akane/commit/fd514f33f299fb2f8aaca9a07b14fb6fe90b89ee))
+* **index:** session.error ルーティング実装 ([47c64d6](https://github.com/yohi/akane/commit/47c64d6eb471c0de2e428849ec4b5868da5594db))
+* **index:** session.errorイベントのルーティング処理とテストを追加 ([464aa9e](https://github.com/yohi/akane/commit/464aa9e5b18cadc95a1fc8cd3cb0098884155228))
+* **index:** 定期テレメトリレポートと graceful shutdown を追加 ([8152d27](https://github.com/yohi/akane/commit/8152d27e7a1c124c673ad08428add415759f289f))
+* **index:** 定期レポート + graceful shutdown ([9af3086](https://github.com/yohi/akane/commit/9af3086801d67e0a3a702482823561519afa638f))
+* **notifier:** createNotifier Factory を追加（type で tmux/os を分岐） ([53ccc5b](https://github.com/yohi/akane/commit/53ccc5b60adc66df4e7b90efc397cc7434f69b65))
+* **notifier:** createNotifier Factory 追加 ([bdf9a08](https://github.com/yohi/akane/commit/bdf9a08f20cba9fa9e41309e1ec6b6730f78b296))
+* **notifier:** macOS通知機能の改行処理改善とコマンド存在チェックを追加 ([5752019](https://github.com/yohi/akane/commit/5752019f6473e0e02b98a164e6c6d6ed1fd5c18c))
+* **notifier:** OSNotifier を追加（linux notify-send / macOS osascript） ([e8124c4](https://github.com/yohi/akane/commit/e8124c4e3149828aec85c2032d9b393d1fa77640))
+* **notifier:** OSNotifier 追加 ([33dd4c8](https://github.com/yohi/akane/commit/33dd4c88ea3c3f07a78a0221cb2a2f8fd3f417ad))
+* **pinger:** injectメソッドにcontext引数を追加しエラー理由をプロンプトに埋め込む ([f19ab55](https://github.com/yohi/akane/commit/f19ab55dcb2905f8e1beadab46b83ef3cfad7916))
+* **pinger:** PingContext / buildPingPrompt 追加 ([338336e](https://github.com/yohi/akane/commit/338336e2a6552cf3ac63d8e2e2829fe99df1144b))
+* **pinger:** PingContext と buildPingPrompt を追加（reason をプロンプトに反映） ([2f3bbc1](https://github.com/yohi/akane/commit/2f3bbc1eb8811fc31b136e3db02e4eeaa8d84206))
+* **ping:** pingイベントの検出ロジックを拡張メッセージ対応に修正 ([0346b46](https://github.com/yohi/akane/commit/0346b4665f59720dd85380566e7fe36012f7e0ce))
+* **telemetry:** TelemetryCollector と NoopTelemetry を追加 ([97a497b](https://github.com/yohi/akane/commit/97a497b0f312b33381e543b3b48d4b55e3e55a06))
+* **telemetry:** TelemetryCollector と NoopTelemetry を追加 ([45f0f7a](https://github.com/yohi/akane/commit/45f0f7ab9483b45a64951a09ad16f7af9ccdd08b))
+* **telemetry:** テレメトリレポーターの設定による有効化制御と報告処理の堅牢化 ([2eba00a](https://github.com/yohi/akane/commit/2eba00a5bf65f7f84612c83bb18e8760ddc7f7d9))
+* **telemetry:** 設定が有効な場合のみテレメトリを報告するように変更 ([7b07da8](https://github.com/yohi/akane/commit/7b07da8549c4aef2be5c2059813a51f8593f8daa))
+* **telemetry:** 集計モジュール追加 ([745b8cb](https://github.com/yohi/akane/commit/745b8cb885f38c4bda32a64575405d9bb27a866a))
+* **watchdog:** noteError + reason 付き ping ([11c0d2b](https://github.com/yohi/akane/commit/11c0d2bd037fc243290fd78a97c90612193a7c27))
+* **watchdog:** noteError と reason 付き ping プロンプトを追加 ([a930fa0](https://github.com/yohi/akane/commit/a930fa0ed74abb4d3b6d30c9b77bdeddb32ac33d))
+* **watchdog:** pingメッセージ生成ロジックの修正とnoteError挙動の調整 ([647e0f8](https://github.com/yohi/akane/commit/647e0f8e965479b0466c3dcda3d155887405fc96))
+* **watchdog:** telemetry を配線（hangup/ping/recovery/failure） ([797f24d](https://github.com/yohi/akane/commit/797f24d8d1010b6ae604dfa9ace020cb94ec4265))
+* **watchdog:** telemetry 配線 ([84e3a92](https://github.com/yohi/akane/commit/84e3a92d2a07290dbc96be4447cee2c3dc078742))
+
+
+### Bug Fixes
+
+* **notifier:** macOSの通知メッセージにおけるエスケープ処理を改善しLinuxのurgency設定を追加 ([dcaaf45](https://github.com/yohi/akane/commit/dcaaf45206b57e282bc86086dedfaba8f1e149c3))
+* **notifier:** OS通知のspawn失敗時のログにコマンド名とエラー詳細を追加 ([0b0180d](https://github.com/yohi/akane/commit/0b0180d914ad660dc2932f65f9e734e436b89868))
+* **notifier:** エラーログから通知メッセージを含む可能性があるコマンドラインを除外 ([8cb9e9e](https://github.com/yohi/akane/commit/8cb9e9e67060b3d9de62dbef9ed5af3d2ddcfb17))
+
 ## 1.0.0 (2026-05-30)
 
 
