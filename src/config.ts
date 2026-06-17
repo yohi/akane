@@ -1,5 +1,7 @@
 export type NotifierType = "tmux" | "os";
 
+export type DeliveryMode = "steer" | "queue";
+
 export interface WatchdogConfig {
   enabled: boolean;
   stage1Ms: number;
@@ -7,6 +9,11 @@ export interface WatchdogConfig {
   maxPings: number;
   pingMessage: string;
   notifierType: NotifierType;
+  delivery: DeliveryMode;
+  suppressPingWhileToolRunning: boolean;
+  pauseOnInputRequest: boolean;
+  notifyWaiting: boolean;
+  verboseLog: boolean;
   tmux: {
     enabled: boolean;
     displayMessage: boolean;
@@ -36,6 +43,11 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
   pingMessage:
     "現在の状況を教えてください。ハングしているようであれば、思考プロセスを要約して次のアクションを提示してください。",
   notifierType: "tmux",
+  delivery: "steer",
+  suppressPingWhileToolRunning: true,
+  pauseOnInputRequest: true,
+  notifyWaiting: true,
+  verboseLog: false,
   tmux: {
     enabled: true,
     displayMessage: true,
@@ -61,6 +73,17 @@ function parseNotifierType(
 ): NotifierType | undefined {
   if (value === undefined) return undefined;
   if (value === "tmux" || value === "os") return value;
+  warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
+  return undefined;
+}
+
+function parseDelivery(
+  value: string | undefined,
+  key: string,
+  warn: WarnFn,
+): DeliveryMode | undefined {
+  if (value === undefined) return undefined;
+  if (value === "steer" || value === "queue") return value;
   warn(`[watchdog] Invalid value for ${key}: "${value}". Falling back to lower-priority source.`);
   return undefined;
 }
@@ -118,6 +141,13 @@ export function resolveConfig(
   const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
   const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
+  const envDelivery = parseDelivery(env.OPENCODE_WATCHDOG_DELIVERY, "OPENCODE_WATCHDOG_DELIVERY", warn);
+  const projDelivery = parseDelivery(project.delivery as string | undefined, "delivery", warn);
+  const envSuppressTool = parseBool(env.OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL, "OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL", warn);
+  const envPauseOnInput = parseBool(env.OPENCODE_WATCHDOG_PAUSE_ON_INPUT, "OPENCODE_WATCHDOG_PAUSE_ON_INPUT", warn);
+  const envNotifyWaiting = parseBool(env.OPENCODE_WATCHDOG_NOTIFY_WAITING, "OPENCODE_WATCHDOG_NOTIFY_WAITING", warn);
+  const envVerbose = parseBool(env.OPENCODE_WATCHDOG_VERBOSE, "OPENCODE_WATCHDOG_VERBOSE", warn);
+
   return {
     enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,
     stage1Ms: envStage1 ?? projStage1 ?? DEFAULT_CONFIG.stage1Ms,
@@ -125,6 +155,12 @@ export function resolveConfig(
     maxPings: envMaxPings ?? projMaxPings ?? DEFAULT_CONFIG.maxPings,
     pingMessage: project.pingMessage ?? DEFAULT_CONFIG.pingMessage,
     notifierType: envNotifierType ?? projNotifierType ?? DEFAULT_CONFIG.notifierType,
+    delivery: envDelivery ?? projDelivery ?? DEFAULT_CONFIG.delivery,
+    suppressPingWhileToolRunning:
+      envSuppressTool ?? project.suppressPingWhileToolRunning ?? DEFAULT_CONFIG.suppressPingWhileToolRunning,
+    pauseOnInputRequest: envPauseOnInput ?? project.pauseOnInputRequest ?? DEFAULT_CONFIG.pauseOnInputRequest,
+    notifyWaiting: envNotifyWaiting ?? project.notifyWaiting ?? DEFAULT_CONFIG.notifyWaiting,
+    verboseLog: envVerbose ?? project.verboseLog ?? DEFAULT_CONFIG.verboseLog,
     tmux: {
       enabled: project.tmux?.enabled ?? DEFAULT_CONFIG.tmux.enabled,
       displayMessage: project.tmux?.displayMessage ?? DEFAULT_CONFIG.tmux.displayMessage,
