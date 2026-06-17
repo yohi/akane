@@ -21,3 +21,6 @@ coverage/
 # Environment variables
 .env
 .env.*
+
+# Git worktrees
+.worktrees/
