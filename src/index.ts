@@ -161,8 +161,9 @@ function readAnySessionId(props: Record<string, unknown>): string | undefined {
   if (typeof direct === "string") return direct;
   const part = (props as { part?: { sessionID?: string } }).part;
   if (typeof part?.sessionID === "string") return part.sessionID;
-  const info = (props as { info?: { sessionID?: string } }).info;
+  const info = (props as { info?: { sessionID?: string; id?: string } }).info;
   if (typeof info?.sessionID === "string") return info.sessionID;
+  if (typeof info?.id === "string") return info.id;
   return undefined;
 }
 
@@ -174,7 +175,7 @@ export function summarizeEvent(event: OpenCodeEvent): string {
   if (event.type === "message.part.updated") {
     const part = (props as { part?: { type?: string; state?: { status?: string } } }).part;
     if (part?.type) segs.push(`partType=${part.type}`);
-    if (part?.state?.status) segs.push(`toolStatus=${part.state.status}`);
+    if (part?.state?.status) segs.push(`partStatus=${part.state.status}`);
   }
   return segs.join(" ");
 }

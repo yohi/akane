@@ -19,16 +19,27 @@ describe("logEvent verbosity (#3 log reduction)", () => {
     const logs: string[] = [];
     const ev: OpenCodeEvent = { type: "message.part.delta", properties: { sessionID: "s1", delta: "HELLO" } };
     logEvent(ev, true, (_l, m) => logs.push(m));
+    expect(logs.length).toBeGreaterThan(0);
     expect(logs[0]).toContain("HELLO");
   });
 
-  test("summarizeEvent includes part type + tool status for tool parts", () => {
+  test("summarizeEvent includes part type + status for parts", () => {
     const ev: OpenCodeEvent = {
       type: "message.part.updated",
       properties: { part: { sessionID: "s1", type: "tool", state: { status: "running" } } },
     };
     const s = summarizeEvent(ev);
     expect(s).toContain("partType=tool");
-    expect(s).toContain("toolStatus=running");
+    expect(s).toContain("partStatus=running");
+  });
+
+  test("summarizeEvent includes sessionID from info.id for session events", () => {
+    const ev: OpenCodeEvent = {
+      type: "session.created",
+      properties: { info: { id: "s-new-123" } },
+    };
+    const s = summarizeEvent(ev);
+    expect(s).toContain("type=session.created");
+    expect(s).toContain("sessionID=s-new-123");
   });
 });
