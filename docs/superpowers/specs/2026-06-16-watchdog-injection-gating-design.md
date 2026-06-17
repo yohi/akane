@@ -118,7 +118,8 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 | 実イベント | 条件 | Watchdog アクション |
 |---|---|---|
 | `message.part.delta` | — | 活性（タイマー reset）。自己 ping(`IGNORED_PING_MESSAGE_IDS`)・arm-lock を経由 |
-| `message.part.updated` | assistant | 活性（従来どおり） |
+| `message.part.updated` | `agentName` 有り（= assistant part） | 活性（従来どおり）。assistant 判定は `part.type`/`part.role` ではなく `extractAgentName`（`part.agent`/`part.agentName`）の有無で行う（現行 `index.ts` 準拠） |
+| `message.part.updated` | `part.type==="tool"`, `state.status==="pending"` | 活性扱い（`armOrReset`）。ただし runningTools には**追加しない**（未実行のため steer 抑止対象外。実行開始＝`running` 到達から計上） |
 | `message.part.updated` | `part.type==="tool"`, `state.status==="running"` | `onToolRunning`（runningTools 追加 ＋ 活性） |
 | `message.part.updated` | `part.type==="tool"`, `status` ∈ {`completed`,`error`} | `onToolSettled`（runningTools 削除 ＋ 活性） |
 | `permission.asked` / `question.asked` | — | `onInputRequested`（pending 追加 → PAUSED、user message 同格で arm-lock バイパス） |
@@ -158,7 +159,7 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 ### 6.3 `pinger.ts`（steer 配信 ＋ フォールバック）
 
 - `OpenCodeAdapter.inject` を V2 形 `prompt({ sessionID, …, delivery })` で呼び、`delivery` を config から注入。
-- runtime が `delivery` 非対応で失敗したら legacy 形（`{ path, body }`）へ try/catch フォールバック。
+- runtime が `delivery` 非対応で失敗したら legacy 形（`{ path, body }`）へ try/catch フォールバック。「失敗」は **prompt 呼出が例外を送出した場合のみ**を指す。`delivery` フィールドを黙殺して正常応答（HTTP 200）するサイレント非対応は try/catch で検出できず、その場合は実質 `queue` 相当へ縮退する（§8 のフォールバック先と同一着地点のため許容＝観測性のみ低下）。フォールバックは inject 毎の **per-call try/catch**（呼出ごとに V2 を試行）とし、恒久切替は行わない。
 - `Pinger` インタフェースは不変。変更は adapter 内に隔離（SPEC §8.2）。
 
 ### 6.4 `notifier.ts`（「入力待ち」バリアント）
@@ -195,6 +196,7 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 ## 7. エッジケースと不変条件
 
 - **pending 集合の境界**: `pendingRequests` はセッション単位で通常 1 件。`session.idle/error/deleted` でエントリごと破棄＝既存と同じ上界。`*.replied` が来なければ PAUSED 継続（＝本当に入力待ちなので正しい）。
+- **PAUSED × retry の合成**: PAUSED 中に `session.status:retry` が到達すると retry 抑止と PAUSED が併存する。retry からの復帰（`busy`/activity）時、`pendingRequests` が非空なら **PAUSED を維持**し `armOrReset`（WATCHING 復帰）させない。PAUSED 解除は `*.replied` で `pendingRequests` が空になった時のみ（activity による誤解除を禁止）。
 - **tombstone 尊重**: `permission/question.asked` が停止済み（tombstone）セッションに遅延到達したら無視（idle 後の権限要求は stale）。tombstone 解除は user message のみ（SPEC §3.4 不変）。
 - **arm-lock との関係**: `permission/question.*` は user message 同格で arm-lock バイパス。`delta`/`tool` は従来のアシスタント活性同様 arm-lock を尊重（ping 直後の stale 再アーム防止を維持）。
 - **delta × 自己 ping**: delta の `messageID` を `IGNORED_PING_MESSAGE_IDS` と照合してスキップ。
@@ -217,12 +219,12 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 
 | ファイル | 追加テスト |
 |---|---|
-| `watchdog.test.ts` | PAUSED 遷移（`onInputRequested` でタイマー停止＆ `waiting` 通知が初回 1 回）、複数 pending → 全 `Resolved` で WATCHING 復帰＆通知クリア、tool-gate（stage2 で tool running 中は inject されず critical 通知＋再スケジュール）、`onToolRunning/Settled` の活性扱い、retry 抑止、tombstone 尊重 |
+| `watchdog.test.ts` | PAUSED 遷移（`onInputRequested` でタイマー停止＆ `waiting` 通知が初回 1 回）、複数 pending → 全 `Resolved` で WATCHING 復帰＆通知クリア、tool-gate（stage2 で tool running 中は inject されず critical 通知＋再スケジュール）、`onToolRunning/Settled` の活性扱い、retry 抑止、tombstone 尊重、PAUSED × tool running 同時発生時の優先度（stage2 発火時に PAUSED が tool-gate に優先）、retry 詳細（タイマー停止/継続・`busy` 復帰での stage1 再アーム・retry 中の user message 処理） |
 | `index.test.ts` | `extractSessionId`（status/permission/question）、`extractRequestId`（id vs requestID）、ルーティング（asked→Requested / replied→Resolved / tool パート→Running/Settled / delta→活性）、delta 自己 ping 除外（messageID×IGNORED 集合）、arm-lock バイパス(input)/尊重(tool・delta) |
 | `pinger.test.ts` | `delivery:"steer"` が V2 形で渡る、steer 失敗時に legacy へフォールバック |
 | `notifier.test.ts` | `"waiting"` ステージ→ tmux 非警告色(cyan)・OS urgency=low、引数配列渡し |
 | `config.test.ts` | 新ノブ（delivery / suppressPingWhileToolRunning / pauseOnInputRequest / notifyWaiting / verboseLog）＋ env ＋不正値フォールバック |
-| `stress.test.ts` | permission/question/tool の churn 1000 セッションで `pendingRequests`/`runningTools` リークなし、idle 後に Map が 0 復帰 |
+| `stress.test.ts` | permission/question/tool の churn 1000 セッションで `pendingRequests`/`runningTools` リークなし、idle 後に Map が 0 復帰、縦統合チェーン（`permission.asked → running → settled → replied`）での gate・通知発火順の整合 |
 | (logging) | 高頻度イベントが完全 JSON ログされない（要約のみ）、`verboseLog` 時のみ完全出力 |
 
 ---
