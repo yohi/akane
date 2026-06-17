@@ -49,14 +49,20 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
     case "permission.asked":
     case "permission.replied":
     case "question.asked":
-    case "question.replied": {
-      // SDK 実測: properties.sessionID 直接。session.error は optional。
+    case "question.replied":
+    case "session.status": {
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
     }
     default:
       return undefined;
   }
+}
+
+export function extractStatusType(event: OpenCodeEvent): string | undefined {
+  if (event.type !== "session.status") return undefined;
+  const status = (event.properties as { status?: { type?: string } } | undefined)?.status;
+  return typeof status?.type === "string" ? status.type : undefined;
 }
 
 export function extractRequestId(event: OpenCodeEvent): string | undefined {
@@ -71,7 +77,6 @@ export function extractRequestId(event: OpenCodeEvent): string | undefined {
   }
   return undefined;
 }
-
 export function isUserMessage(event: OpenCodeEvent): boolean {
   if (event.type !== "message.updated") return false;
   const info = (event.properties as { info?: { role?: string; parts?: unknown[] } } | undefined)?.info;
@@ -154,7 +159,8 @@ function readProjectConfig(
     typeof candidate.pingMessage === "string" ||
     typeof candidate.notifierType === "string" ||
     typeof candidate.tmux === "object" ||
-    typeof candidate.agents === "object"
+    typeof candidate.agents === "object" ||
+    typeof candidate.suppressPingWhileToolRunning === "boolean"
   ) {
     return candidate;
   }
@@ -407,6 +413,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           return;
         }
 
+        if (event.type === "session.status") {
+          const statusType = extractStatusType(event);
+          if (statusType === "retry") {
+            watchdog.onStatusRetry(sessionId);
+          } else if (statusType === "busy") {
+            watchdog.onStatusActive(sessionId);
+          }
+          // "idle" is auxiliary; session.idle event is the primary stop signal.
+          return;
+        }
+
         // --- Input-Wait Gating (Priority 1, user-message-equivalent) ---
         if (event.type === "permission.asked" || event.type === "question.asked") {
           const requestId = extractRequestId(event);
@@ -517,6 +534,32 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         }
 
         if (event.type === "message.part.updated") {
+          const toolPart = (event.properties as {
+            part?: { type?: string; callID?: string; state?: { status?: string } };
+          } | undefined)?.part;
+          if (toolPart?.type === "tool") {
+            const status = toolPart.state?.status;
+            const callId = toolPart.callID;
+            if (status === "running" && callId) {
+              instLog("info", `Tool running for session ${sessionId} (callID: ${callId})`);
+              watchdog.onToolRunning(sessionId, callId);
+              return;
+            }
+            if ((status === "completed" || status === "error") && callId) {
+              instLog("info", `Tool settled (${status}) for session ${sessionId} (callID: ${callId})`);
+              watchdog.onToolSettled(sessionId, callId);
+              return;
+            }
+            if (status === "completed" || status === "error") {
+              // callId が欠落した settled イベントは runningTools から削除できないため警告する。
+              // 実際の OpenCode イベントでは callID は必ず存在するはずだが、防御的に記録する。
+              instLog("warn", `Tool ${status} received without callID for session ${sessionId} — runningTools not cleared`);
+            }
+            // pending = active but not yet running → refresh stage1 without tracking.
+            instLog("info", `Tool pending for session ${sessionId}`);
+            watchdog.onActivity(sessionId, { agentName });
+            return;
+          }
           // If this is an assistant event (has agent name), treat as activity to refresh stage1.
           if (agentName !== undefined) {
             instLog(

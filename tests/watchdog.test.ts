@@ -434,3 +434,166 @@ describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
     expect(watchdog.activeTimerCount()).toBe(0);
   });
 });
+
+describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
+  test("stage2 with a running tool suppresses ping, holds pingCount, notifies critical, reschedules", async () => {
+    const { watchdog, pinger, notifier, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → gate
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(0); // steer suppressed
+    expect(notifier.notifies.some((n) => n.stage === "critical")).toBe(true);
+    expect(watchdog.activeTimerCount()).toBe(1); // rescheduled
+  });
+
+  test("repeated stage2 while tool runs does not spam critical notifications", async () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 (1st gate → critical)
+    await new Promise((r) => setTimeout(r, 10));
+    const after1 = notifier.notifies.filter((n) => n.stage === "critical").length;
+    clock.advance(1000); // stage2 again (still gated)
+    await new Promise((r) => setTimeout(r, 10));
+    const after2 = notifier.notifies.filter((n) => n.stage === "critical").length;
+    expect(after2).toBe(after1); // no re-notify while still gated
+  });
+
+  test("after tool settles, normal stage2 ping resumes", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 gated
+    await new Promise((r) => setTimeout(r, 10));
+    watchdog.onToolSettled("s1", "call_1"); // re-arms WATCHING
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping now allowed
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
+  });
+
+  test("suppressPingWhileToolRunning=false lets the ping fire even with a running tool", async () => {
+    const { watchdog, pinger, clock } = setup({ suppressPingWhileToolRunning: false });
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
+  });
+
+  test("two running tools: settling one keeps suppression until both settle", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    watchdog.onToolRunning("s1", "call_2");
+    watchdog.onToolSettled("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(0); // call_2 still running
+  });
+
+  test("tool parts do NOT un-pause a session awaiting input (design §7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1"); // PAUSED, timer stopped
+    watchdog.onToolRunning("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED — not re-armed
+    watchdog.onToolSettled("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED
+  });
+});
+
+describe("Watchdog - retry suppression (design §6.1/§7)", () => {
+  test("onStatusRetry stops escalation timer; onStatusActive(busy) re-arms", async () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onStatusRetry("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    clock.advance(10_000);
+    expect(notifier.notifies.length).toBe(0); // no escalation while retrying
+    watchdog.onStatusActive("s1");
+    expect(watchdog.activeTimerCount()).toBe(1); // re-armed
+    clock.advance(1000);
+    expect(notifier.notifies.some((n) => n.stage === "warn")).toBe(true);
+  });
+
+  test("PAUSED × retry: busy recovery keeps PAUSED while input is pending (§7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1"); // busy returns, but input still pending
+    expect(watchdog.activeTimerCount()).toBe(0); // remains PAUSED, not re-armed
+  });
+
+  test("Issue 1: onActivity during retry suppression does not re-arm timer", () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onStatusRetry("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    // A stale assistant event arrives while retrying — must NOT re-arm
+    watchdog.onActivity("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    clock.advance(10_000);
+    expect(notifier.notifies.length).toBe(0);
+  });
+
+  test("Issue 1: onActivity during retry suppression preserves retrySuppressed so onStatusActive re-arms correctly", () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onStatusRetry("s1");
+    // Stale event during retry — timer must stay stopped
+    watchdog.onActivity("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    // busy arrives — must still re-arm (retrySuppressed survived)
+    watchdog.onStatusActive("s1");
+    expect(watchdog.activeTimerCount()).toBe(1);
+    clock.advance(1000);
+    expect(notifier.notifies.some((n) => n.stage === "warn")).toBe(true);
+  });
+
+  test("Issue 2: onStatusActive does not un-silence a SILENCED session (design §3.4)", async () => {
+    const { watchdog, notifier, clock } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // → SILENCED
+    await new Promise((r) => setTimeout(r, 10));
+    expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
+    expect(watchdog.activeTimerCount()).toBe(0);
+    // Snapshot before retry/busy pair
+    const countBefore = notifier.notifies.length;
+    // SDK sends retry then busy after silence — must NOT re-arm without user input
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    clock.advance(10_000);
+    // No new warn/critical notifications must have been added after the snapshot
+    const newNotifies = notifier.notifies.slice(countBefore);
+    expect(newNotifies.filter((n) => n.stage === "warn" || n.stage === "critical").length).toBe(0);
+  });
+
+  test("onStatusRetry on SILENCED session does not set retrySuppressed, so onUserMessage can still re-arm", async () => {
+    const { watchdog, notifier, clock, pinger } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // → SILENCED
+    await new Promise((r) => setTimeout(r, 10));
+    expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
+    // SDK sends retry → busy while SILENCED — must NOT corrupt retrySuppressed
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1");
+    // User sends a message — the ONLY legitimate recovery path
+    watchdog.onUserMessage("s1");
+    expect(watchdog.activeTimerCount()).toBe(1); // re-armed
+    clock.advance(1000);
+    const pingsBefore = pinger.calls.length;
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBeGreaterThan(pingsBefore); // watchdog is active again
+  });
+});

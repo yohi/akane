@@ -213,6 +213,7 @@ describe("resolveConfig", () => {
     ).toBe("steer");
   });
 
+
   test("project config sets boolean knobs; env overrides project", () => {
     const cfg = resolveConfig({
       project: {
@@ -244,7 +245,6 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("verboseLog");
     expect(warnings[0]).toContain("lower-priority source");
   });
-
   test("invalid delivery falls back to default with warn", () => {
     const warnings: string[] = [];
     const cfg = resolveConfig({ env: { OPENCODE_WATCHDOG_DELIVERY: "yeet" } }, (m) => warnings.push(m));
