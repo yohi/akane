@@ -44,14 +44,32 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
       return typeof info?.id === "string" ? info.id : undefined;
     }
     case "session.idle":
-    case "session.error": {
-      // SDK 実測: properties.sessionID 直接。session.error は optional。
+    case "session.error":
+    case "message.part.delta":
+    case "permission.asked":
+    case "permission.replied":
+    case "question.asked":
+    case "question.replied": {
+      // SDK 実測: properties.sessionID 直接。
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
     }
     default:
       return undefined;
   }
+}
+
+export function extractRequestId(event: OpenCodeEvent): string | undefined {
+  const props = event.properties ?? {};
+  if (event.type === "permission.asked" || event.type === "question.asked") {
+    const id = (props as { id?: string }).id;
+    return typeof id === "string" ? id : undefined;
+  }
+  if (event.type === "permission.replied" || event.type === "question.replied") {
+    const rid = (props as { requestID?: string }).requestID;
+    return typeof rid === "string" ? rid : undefined;
+  }
+  return undefined;
 }
 
 export function isUserMessage(event: OpenCodeEvent): boolean {
@@ -349,6 +367,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
           return;
         }
 
+        // --- Input-Wait Gating (Priority 1, user-message-equivalent) ---
+        if (event.type === "permission.asked" || event.type === "question.asked") {
+          const requestId = extractRequestId(event);
+          if (requestId) watchdog.onInputRequested(sessionId, requestId);
+          return;
+        }
+        if (event.type === "permission.replied" || event.type === "question.replied") {
+          const requestId = extractRequestId(event);
+          if (requestId) watchdog.onInputResolved(sessionId, requestId);
+          return;
+        }
         const messageId = extractMessageId(event);
 
         if (messageId && IGNORED_PING_MESSAGE_IDS.has(messageId)) {
