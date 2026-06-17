@@ -25,43 +25,55 @@ describe("MockPinger", () => {
 });
 
 describe("OpenCodeAdapter", () => {
-  test("delegates to client.session.prompt with { path: { id }, body: { parts } } shape", async () => {
-    const calls: Array<{ path: { id: string }; body: { parts: unknown[] } }> = [];
-    const fakeClient = {
-      session: {
-        prompt: async (args: { path: { id: string }; body: { parts: unknown[] } }) => {
-          calls.push(args);
-        },
-      },
-    };
-    const adapter = new OpenCodeAdapter(fakeClient);
+  test("delegates with V2 { sessionID, parts, delivery } shape", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
+    const adapter = new OpenCodeAdapter(fakeClient, "steer");
     await adapter.inject("sess-abc", "ping?");
     expect(calls.length).toBe(1);
-    expect(calls[0]!.path.id).toBe("sess-abc");
-    expect(Array.isArray(calls[0]!.body.parts)).toBe(true);
-    // Each part should be a text part carrying the message
-    const firstPart = calls[0]!.body.parts[0] as { type: string; text: string };
-    expect(firstPart.type).toBe("text");
-    expect(firstPart.text).toBe("ping?");
+    expect(calls[0]!.sessionID).toBe("sess-abc");
+    expect(calls[0]!.delivery).toBe("steer");
+    const parts = calls[0]!.parts as Array<{ type: string; text: string }>;
+    expect(parts[0]!.type).toBe("text");
+    expect(parts[0]!.text).toBe("ping?");
   });
 
-  test("OpenCodeAdapter.inject includes context.reason in the generated ping message by invoking buildPingPrompt", async () => {
-    const calls: Array<{ path: { id: string }; body: { parts: Array<{ type: string; text: string }> } }> = [];
+  test("V2 form carries the reason-enriched message (buildPingPrompt)", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
+    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    await adapter.inject("sess-abc", "ping?", { reason: "rate_limit" });
+    const parts = calls[0]!.parts as Array<{ type: string; text: string }>;
+    expect(parts[0]!.text).toContain("[Watchdog]");
+    expect(parts[0]!.text).toContain("APIレート制限に到達しました");
+  });
+
+  test("passes delivery=queue when configured so", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
+    const adapter = new OpenCodeAdapter(fakeClient, "queue");
+    await adapter.inject("s", "ping?");
+    expect(calls[0]!.delivery).toBe("queue");
+  });
+
+  test("falls back to legacy { path, body } when the V2 form throws", async () => {
+    const calls: Array<Record<string, unknown>> = [];
     const fakeClient = {
       session: {
-        prompt: async (args: any) => {
-          calls.push(args);
+        prompt: async (a: Record<string, unknown>) => {
+          calls.push(a);
+          if ("delivery" in a) throw new Error("unknown field: delivery");
+          return undefined;
         },
       },
     };
-    const adapter = new OpenCodeAdapter(fakeClient);
-    await adapter.inject("sess-abc", "ping?", { reason: "rate_limit" });
-
-    expect(calls.length).toBe(1);
-    const firstPart = calls[0]!.body.parts[0];
-    expect(firstPart!.type).toBe("text");
-    expect(firstPart!.text).toContain("[Watchdog]");
-    expect(firstPart!.text).toContain("APIレート制限に到達しました");
+    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    await adapter.inject("sess-xyz", "ping?");
+    expect(calls.length).toBe(2);
+    expect("delivery" in calls[0]!).toBe(true);
+    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
+    expect(legacy.path?.id).toBe("sess-xyz");
+    expect(Array.isArray(legacy.body?.parts)).toBe(true);
   });
 
   test("does not throw when client method is missing (logs only)", async () => {
