@@ -20,6 +20,8 @@ class MockWatchdog extends Watchdog {
   onActivityCalls: Array<{ sessionId: string; meta: any }> = [];
   onToolRunningCalls: Array<{ sessionId: string; callId: string }> = [];
   onToolSettledCalls: Array<{ sessionId: string; callId: string }> = [];
+  onStatusRetryCalls: Array<{ sessionId: string }> = [];
+  onStatusActiveCalls: Array<{ sessionId: string }> = [];
   override onActivity(sessionId: string, meta: any = {}) {
     this.onActivityCalls.push({ sessionId, meta });
   }
@@ -30,6 +32,14 @@ class MockWatchdog extends Watchdog {
   override onToolSettled(sessionId: string, callId: string) {
     this.onToolSettledCalls.push({ sessionId, callId });
     super.onToolSettled(sessionId, callId);
+  }
+  override onStatusRetry(sessionId: string) {
+    this.onStatusRetryCalls.push({ sessionId });
+    super.onStatusRetry(sessionId);
+  }
+  override onStatusActive(sessionId: string) {
+    this.onStatusActiveCalls.push({ sessionId });
+    super.onStatusActive(sessionId);
   }
 }
 
@@ -451,6 +461,22 @@ describe("session.status routing (design §5)", () => {
     } finally {
       await instance.dispose();
     }
+  });
+  test("session.status:retry routes to onStatusRetry with correct sessionId", () => {
+    const watchdog = setupMockWatchdog();
+    watchdog.onUserMessage("s1");
+    watchdog.onStatusRetry("s1");
+    expect(watchdog.onStatusRetryCalls).toHaveLength(1);
+    expect(watchdog.onStatusRetryCalls[0]!.sessionId).toBe("s1");
+    expect(watchdog.onStatusActiveCalls).toHaveLength(0);
+  });
+  test("session.status:busy routes to onStatusActive with correct sessionId", () => {
+    const watchdog = setupMockWatchdog();
+    watchdog.onUserMessage("s1");
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1");
+    expect(watchdog.onStatusActiveCalls).toHaveLength(1);
+    expect(watchdog.onStatusActiveCalls[0]!.sessionId).toBe("s1");
   });
 });
 
