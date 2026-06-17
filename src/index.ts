@@ -533,6 +533,11 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
               watchdog.onToolSettled(sessionId, callId);
               return;
             }
+            if (status === "completed" || status === "error") {
+              // callId が欠落した settled イベントは runningTools から削除できないため警告する。
+              // 実際の OpenCode イベントでは callID は必ず存在するはずだが、防御的に記録する。
+              instLog("warn", `Tool ${status} received without callID for session ${sessionId} — runningTools not cleared`);
+            }
             // pending = active but not yet running → refresh stage1 without tracking.
             instLog("info", `Tool pending for session ${sessionId}`);
             watchdog.onActivity(sessionId, { agentName });
