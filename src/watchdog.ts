@@ -16,6 +16,7 @@ interface SessionEntry {
   lastErrorReason?: HangReason;
   pendingRequests: Set<string>;
   runningTools: Set<string>;
+  toolGateNotified: boolean;
 }
 
 export interface WatchdogDeps {
@@ -145,7 +146,7 @@ export class Watchdog {
       // 監視対象外と判定される場合（include リスト使用時等）にゾンビエントリを生成しないよう
       // ここで早期リターンする (design §3.2)。
       if (!this.isAgentMonitored(undefined)) return;
-      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set(), runningTools: new Set() };
+      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set(), runningTools: new Set(), toolGateNotified: false };
       this.sessions.set(sessionId, entry);
     }
     const wasEmpty = entry.pendingRequests.size === 0;
@@ -194,7 +195,8 @@ export class Watchdog {
   onToolSettled(sessionId: string, callId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
     const existing = this.sessions.get(sessionId);
-    existing?.runningTools.delete(callId);
+    if (!existing) return;
+    existing.runningTools.delete(callId);
     // PAUSED awaiting input: untrack but do NOT re-arm (design §7).
     if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
       return;
@@ -270,6 +272,7 @@ export class Watchdog {
       agentName: effectiveName,
       pendingRequests: existing?.pendingRequests ?? new Set(),
       runningTools: existing?.runningTools ?? new Set(),
+      toolGateNotified: false,
     };
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
@@ -338,8 +341,8 @@ export class Watchdog {
     if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0) {
       this.log("info", `[Watchdog] STAGE2 gated: ${entry.runningTools.size} tool(s) running for ${sessionId}; not injecting`);
       // Notify critical only on first gate to avoid OS-notification spam while still gated.
-      if (entry.state !== "PINGED") {
-        entry.state = "PINGED";
+      if (!entry.toolGateNotified) {
+        entry.toolGateNotified = true;
         await this.notifier.notify(
           sessionId,
           "critical",
