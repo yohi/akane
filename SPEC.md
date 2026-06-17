@@ -37,13 +37,17 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
 
 ### 2.2 監視対象イベント
 
-| イベント | 用途 |
-|---|---|
-| `message.updated` (role=user) | **初期タイマー起動トリガ**。空のメッセージシェル（parts なし）は無視し、実データ送信時に起動。 |
-| `message.part.updated` | 活性シグナル。受信のたびにタイマーをリセット。ユーザー起源のものは復旧トリガとしても扱う。 |
-| `session.idle` | 正常終端。タイマーと内部状態を破棄。 |
-| `session.error` | 異常終端。タイマーを破棄し赤色ハイライト解除。 |
-| `session.deleted` | セッション破棄。同上。 |
+| イベント | 用途 | 備考 |
+|---|---|---|
+| `message.updated` (role=user) | **初期タイマー起動トリガ**。空のメッセージシェル（parts なし）は無視し、実データ送信時に起動。 | ユーザー入力時の復帰トリガとしても機能する。 |
+| `message.part.delta` | 活性シグナル。ストリームの受信毎にタイマーをリセット。 | `agentName` が非空（アシスタント応答）のみ活性扱い。自己 Ping delta は ID 除外。 |
+| `message.part.updated` | 活性およびツール追跡シグナル。 | `part.type === "tool"` の場合、`status === "running"` で tool 追跡に追加、`status` が `completed`/`error` で削除。 |
+| `permission.asked` / `question.asked` | 監視一時停止シグナル。セッションを `PAUSED` 状態へ移行。 | 監視タイマーを一時停止し、waiting 通知を発火。 |
+| `permission.replied` / `question.replied` | 監視再開シグナル。 | 全ての pending されている入力要求が解消された場合に通常監視（`WATCHING`）へ復帰。 |
+| `session.status` | 実行ステータス監視。 | `status.type === "retry"` で retry 抑止（タイマークリア）、`busy` または活性検出で抑止解除（`PAUSED` 優先）。 |
+| `session.idle` | 正常終端。タイマーと内部状態を破棄。 | |
+| `session.error` | 異常終端または recoverable エラー一時記録。 | recoverable な場合はエラー理由を記録し監視継続、その他は破棄し終了。 |
+| `session.deleted` | セッション破棄。同上。 | |
 
 ---
 
@@ -53,43 +57,48 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
 
 | モジュール | 責務 | 主な依存 |
 |---|---|---|
-| `config` | 設定ソースの優先順位解決・型安全な defaults | なし (純粋関数) |
-| `watchdog` | 各 sessionId のタイマー管理、状態遷移、活性検知、回復・ハング・ping テレメトリフック | `Notifier`, `Pinger`, `Clock`, `Telemetry` (すべて DI) |
-| `notifier` | Tmux / OS デスクトップ通知 (Factory経由で TmuxNotifier / OSNotifier を生成) | `Bun.spawn`, `Bun.which`, `process` (OS判定用), `env` |
+| `config` | 設定ソースの優先順位解決・型安全な defaults。新機能向けの 5 つのノブ (`delivery`, `suppressPingWhileToolRunning`, `pauseOnInputRequest`, `notifyWaiting`, `verboseLog`) の解析・解決をサポート。 | なし (純粋関数) |
+| `watchdog` | 各 sessionId のタイマー管理、状態遷移、活性検知、回復・ハング・ping テレメトリフック。新状態 `PAUSED` や、`pendingRequests`/`runningTools` セットを管理するゲーティング機構を追加。 | `Notifier`, `Pinger`, `Clock`, `Telemetry` (すべて DI) |
+| `notifier` | Tmux / OS デスクトップ通知 (Factory経由で TmuxNotifier / OSNotifier を生成)。非警告色（cyan/low）の `waiting` 通知ステージを追加。 | `Bun.spawn`, `Bun.which`, `process` (OS判定用), `env` |
 | `telemetry` | ハング・ping・回復・失敗の回数および回復率の収集、自己再スケジュール型定期レポートループ | `Clock` (タイマー用) |
 | `errors` | `session.error` ペイロードのヒューリスティック解析によるエラー分類 (`HangReason` の抽出と日本語化) | なし |
-| `pinger` | `Pinger` インタフェース定義と `OpenCodeAdapter` 実装 (理由付き Ping 送信対応) | OpenCode `client` SDK, `errors` |
+| `pinger` | `Pinger` インタフェース定義と `OpenCodeAdapter` 実装。割り込み注入（`steer`）用 V2 形式と、スキーマ拒否時限定の legacy 形式への try/catch フォールバックを実装。 | OpenCode `client` SDK, `errors` |
 | `clock` | `setTimeout` / `clearTimeout` の DI 化 | なし |
-| `index` | プラグインエントリ。`event` のルーティング、重複起動防止、エラー種別に基づく制御 | 上記すべて |
+| `index` | プラグインエントリ。`event` のルーティング、重複起動防止、エラー種別に基づく制御。`logEvent` による要約ログ出力（ログ肥大抑制）を実装。 | 上記すべて |
 
 ### 3.2 状態マシンと遷移
 
 ```text
-        ┌──────┐
-        │ IDLE │  ← 初期状態 (Map にエントリ無し / タイマー無し)
-        └──┬───┘
-           │ message.updated (role=user)   ※初期タイマー起動 / post-stop 再アーム
-           │ または message.part.updated   ※ユーザー発話による手動復帰
-           ▼
-                    activity (assistant)
-        ┌──────────────────────────────────────┐
-        ▼                                       │ (※復帰時に telemetry.recordRecovery() を発火)
-   ┌─────────┐  stage1 expire  ┌────────────────────┐
-   │WATCHING ├────────────────►│ STAGE1_NOTIFIED    │ (※遷移時に telemetry.recordHangup() を発火)
-   └─────────┘                 └─────────┬──────────┘
-        ▲                                │ stage2 expire
-        │                                ▼
-        │                          pingCount < max ?
-        │                          ┌─────┴─────┐
-        │                         yes          no
-        │                          │            │ (※遷移時に telemetry.recordFailure() を発火)
-        │                          ▼            ▼
-        │                     ┌─────────┐  ┌──────────┐
-        └─── user message ────┤ PINGED  │  │ SILENCED │ (※遷移時に telemetry.recordPing() を発火)
-              (bypass lock)   └─────────┘  └──────────┘
-                                   │            │
-                                   └─user msg───┘ (手動介入メッセージで WATCHING へ復帰)
+                           activity (chunk / delta / tool-update)
+    ┌──────────────────────────────────────────────────────┐
+    │                                                        │
+    ▼                                                        │
+ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool running?
+    ▲   ▲                  (yellow)              ├─ yes ─▶ steer抑止 (critical通知/据え置き, 再スケジュール)
+    │   │                                        └─ no ──▶ ◇ pingCount < max?
+    │   │                                                  ├ yes ▶ PINGED (steer注入, red)
+    │   │                                                  └ no  ▶ SILENCED (red)
+    │   │                                                              │
+    │   └──────────────── user message / *.replied ───────────────────┘
+    │
+    │  ┌─ (任意状態) ── permission.asked / question.asked ──▶ PAUSED ─┐
+    └──┤                  [タイマー停止 + 「入力待ち」通知(cyan)]        │
+       └◀── 全 *.replied で WATCHING 復帰 (stage1 再アーム + 通知クリア)─┘
+
+  (任意状態) ── session.idle / session.error / session.deleted ──▶ IDLE(停止/tombstone)
+  (任意状態) ── session.status:retry ──▶ escalation 抑止 ── status:busy / activity で復帰
 ```
+
+- **状態の説明**:
+  - `WATCHING`: 通常の監視状態。活性シグナル（`message.part.delta` やツールの更新など）を受信するたびに `stage1` タイマーが再アームされます。
+  - `STAGE1_NOTIFIED`: `stage1` タイマーが満了した状態。黄色の Tmux/OS 通知を発火させ、`stage2` タイマーを起動します。
+  - `PINGED`: `stage2` タイマーが満了し、Ping を送信（`steer` 注入）した状態。赤色の通知を出します。
+  - `SILENCED`: Ping 注入数が最大値（`maxPings`）に達し、人手による復旧メッセージ入力を待機している状態。タイマーは解除されています。
+  - `PAUSED` (新規): ユーザーへの質問・承認要求（`*.asked`）を受信し、一時的にタイマーをクリアして監視を休止している状態。青色の通知（waiting）を出します。
+
+- **2つの核心ゲート**:
+  1. **入力待ちゲート**: `permission.asked` / `question.asked` で `PAUSED` 状態に遷移し、タイマーが停止します。全ての入力要求が解決（`*.replied` により `pendingRequests` が空になる）された場合にのみ `WATCHING` に復帰します。それ以前のアクティビティによる誤解除は禁止されます。
+  2. **ツール実行ゲート**: `stage2` タイマー満了時、現在実行中のツール（`runningTools`）が存在する場合、Ping 注入を抑止してタイマーを `stage2Ms` 後に再スケジュールします。
 
 - **telemetry フックのタイミング**:
   - `recordHangup`: `onStage1Expire` 内で STAGE1_NOTIFIED への遷移直後（遷移時）に発火。
@@ -142,6 +151,23 @@ OpenCode から送られてくる `session.error` イベントのペイロード
 * **エラー継続時の終端遷移（リソース消費の上界）**: recoverable なエラーにより監視が継続された場合でも、回復応答がないままハングが継続すると `maxPings`（デフォルト 1）で頭打ちになり、SILENCED 状態に遷移してタイマーは解除されます。これにより最大監視時間は `stage1Ms + (maxPings + 1) × stage2Ms` で上界が定まり、無限に ping を打ち続けてトークンを浪費することはありません。
 * **メモリリークガード**: `noteError` は監視中のセッション（`sessions` Map 内）にのみ適用され、監視外や停止済みのセッションにエラー理由を退避・保持しないことでメモリリークを防ぐ。
 
+### 3.9 ゲーティングにおけるエッジケースと不変条件
+
+入力待ち（`PAUSED`）およびツール実行中（`steer` 抑止）の各種状態遷移について、以下のエッジケースと不変条件を定義・維持します。
+
+* **PAUSED と retry 状態の併存**:
+  セッションが `PAUSED` かつ `pendingRequests` が存在する状態で `session.status:retry` に遷移し、その後 `busy`/活性によって復帰する際、`pendingRequests` が非空である限り `PAUSED` 状態を維持し、タイマーを再スケジュール（`armOrReset`）しません。`PAUSED` の解除は `*.replied` により `pendingRequests` が空になった時のみ許可され、他イベントによるアクティビティ誤解除は禁止されます。また、入力待ち解消時点で retry 抑止中であれば、タイマーアームは抑止され続け、retry 解除時に初めてタイマーが再起動されます。
+* **Tombstone（停止済み）セッションの尊重**:
+  `session.idle` 等で一度停止された（`stoppedSessions` に入っている）セッションに対して、遅延した `permission.asked` / `question.asked` が到達した場合は無視します（tombstone の保護を優先）。
+* **アームロック（Arm Lock）との相互作用**:
+  `permission.asked` / `question.asked` および `permission.replied` / `question.replied` は、ユーザー自身によるメッセージと同様に扱い、アームロック期間であってもバイパスして即時反映します。一方、`delta` および `tool` イベントは、従来のアシスタント活性シグナルと同様にアームロック期間を尊重し、ロック中は無視されます。
+* **自己 Ping 判定**:
+  ストリーム delta（`message.part.delta`）受信時、その `messageID` を `IGNORED_PING_MESSAGE_IDS`（自己注入した Ping の ID 履歴）と照合し、一致した場合はタイマーのリセット（活性化）をスキップします。
+* **PAUSED 中の停止イベント**:
+  `PAUSED` 状態の監視中にセッションの正常終了（`session.idle`）、異常終了（`session.error`）、破棄（`session.deleted`）を受信した場合、通常と同様に監視を停止し、セッションエントリの破棄、tombstone の記録、および Tmux/OS 通知のクリアを実行します。
+* **ツールハングの割り切り**:
+  実行ステータスが `running` のまま完了（`completed` / `error`）に遷移しないハングアップしたツールプロセス（`bash` など）は、`steer` 注入では修復できないため、自動回復は行わずに critical 警告状態を維持し、人間の介入に委ねます。
+
 ---
 
 ## 4. 設定スキーマ
@@ -158,6 +184,11 @@ export interface WatchdogConfig {
   maxPings: number;
   pingMessage: string;
   notifierType: NotifierType;
+  delivery: "steer" | "queue";
+  suppressPingWhileToolRunning: boolean;
+  pauseOnInputRequest: boolean;
+  notifyWaiting: boolean;
+  verboseLog: boolean;
   tmux: {
     enabled: boolean;
     displayMessage: boolean;
@@ -180,6 +211,11 @@ export interface WatchdogConfig {
 | `maxPings` | `1` | 無限ループ・トークン浪費・レート制限の二次障害を回避 |
 | `pingMessage` | `"現在の状況を教えてください。ハングしているようであれば、思考プロセスを要約して次のアクションを提示してください。"` | 要件指定 |
 | `notifierType` | `"tmux"` | Tmux 連携をデフォルトの通知方式とする |
+| `delivery` | `"steer"` | 進行中のターンに割り込んで即注入（steer）を優先 |
+| `suppressPingWhileToolRunning` | `true` | 長時間の正当なツール実行による誤中断を防ぐ |
+| `pauseOnInputRequest` | `true` | ユーザー待ちによる正常な沈黙をハングと誤認するのを防ぐ |
+| `notifyWaiting` | `true` | 監視一時停止時（入力待ち状態）に低優先度の通知を送る |
+| `verboseLog` | `false` | ログ肥大化を防ぐため通常時は要約ログとし完全JSON出力を抑止 |
 | `tmux.enabled` | `true` | Tmux 検出時のみ実効 |
 | `tmux.displayMessage` | `true` | display-message を使用 |
 | `tmux.highlightWindow` | `true` | window-status-current-style を使用 |
@@ -194,6 +230,11 @@ export interface WatchdogConfig {
    - `OPENCODE_WATCHDOG_MAX_PINGS` (デフォルト: 1)
    - `OPENCODE_WATCHDOG_NOTIFIER_TYPE` (デフォルト: "tmux")
    - `OPENCODE_WATCHDOG_REPORT_MS` (デフォルト: 60,000ms / 1分)
+   - `OPENCODE_WATCHDOG_DELIVERY` (デフォルト: "steer")
+   - `OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL` (デフォルト: "true")
+   - `OPENCODE_WATCHDOG_PAUSE_ON_INPUT` (デフォルト: "true")
+   - `OPENCODE_WATCHDOG_NOTIFY_WAITING` (デフォルト: "true")
+   - `OPENCODE_WATCHDOG_VERBOSE` (デフォルト: "false")
 2. **`opencode.json` の `experimental.watchdog`**（または `watchdog`）
 3. **Defaults**
 
@@ -213,12 +254,13 @@ export interface WatchdogConfig {
 
 ### 5.2 通知ステージと動作
 
-| ステージ | 動作 | Tmux表示色 |
-|---|---|---|
-| `stage1` (警告) | `tmux display-message` で沈黙を通知 | `bg=yellow` (黄色) |
-| `stage2` (Ping注入) | 自動Pingメッセージを注入 | `bg=red` (赤色) |
-| `SILENCED` (停止) | 自動Pingの上限に達し、人間の介入を待機 | `bg=red` (赤色) |
-| `正常終了 / 復帰` | `tmux set-window-option window-status-current-style 'default'` | `default` (通常色) |
+| ステージ | 動作 | Tmux表示色 | OS通知 (Linux) |
+|---|---|---|---|
+| `stage1` (警告) | `tmux display-message` で沈黙を通知 | `bg=yellow` (黄色) | urgency=normal |
+| `stage2` (Ping注入) | 自動Pingメッセージを注入 | `bg=red` (赤色) | urgency=critical |
+| `SILENCED` (停止) | 自動Pingの上限に達し、人間の介入を待機 | `bg=red` (赤色) | urgency=critical |
+| `waiting` (入力待ち) | ユーザーの質問・承認待機中にタイマーを停止して通知 | `bg=cyan` (シアン) | urgency=low |
+| `正常終了 / 復帰` | `tmux set-window-option window-status-current-style 'default'` | `default` (通常色) | （OS通知なし/Tmux色クリア） |
 
 ---
 
@@ -333,17 +375,32 @@ export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Ho
 | `message.part.updated` | `event.properties.part.sessionID` | (roleなし。agentNameが存在しなければユーザー起源) |
 | `session.created` / `session.deleted` | `event.properties.info.id` | - |
 | `session.idle` / `session.error` | `event.properties.sessionID` | - |
+| `permission.asked` / `permission.replied` | `event.properties.sessionID` | - |
+| `question.asked` / `question.replied` | `event.properties.sessionID` | - |
+| `session.status` | `event.properties.sessionID` | - |
 
 > **⚠️ 重要な差異**: `session.idle` / `session.error` のセッション ID は `event.properties.sessionID`（直接）。設計初版で想定していた `event.properties.info.id` とは異なる。この差異は smoke test の fake event payload にも影響し、実 SDK の型定義に合わせる必要がある。
 
-### `client.session.prompt` 呼び出し形 (確認日: 2026-05-29, v1.15.12)
+### `client.session.prompt` 呼び出し形 (確認日: 2026-06-18, V2 割り込み対応)
 
+#### V2 形式 (優先試行形状):
+```typescript
+client.session.prompt({
+  sessionID: sessionId,
+  parts: [{ type: "text", text: message }],
+  delivery: "steer" | "queue"
+});
+```
+
+#### legacy 形式 (フォールバック形状):
 ```typescript
 client.session.prompt({
   path: { id: sessionId },
   body: { parts: [{ type: "text", text: message }] }
 });
 ```
+
+`OpenCodeAdapter` はまず V2 形式での送信を試み、ランタイムからスキーマ拒否（例外送出され、エラーメッセージに `unknown_field` や `unrecognized_field` を含む）を検知した場合のみ、 legacy 形式へ try/catch フォールバックします。それ以外の接続エラーやランタイムエラーでは二重送信を防止するためフォールバックしません。
 
 `TextPartInput` の主要フィールド:
 

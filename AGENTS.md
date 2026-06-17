@@ -1,27 +1,27 @@
 # AGENTS.md — Developer & AI Agent Guide for `akane`
 
-`akane` is a lightweight, zero-crash hang detector plugin for OpenCode sessions that monitors agent activity, alerts users via Tmux/OS notifications, and injects recovery pings.
+`akane` is a lightweight, zero-crash watchdog plugin for OpenCode sessions that monitors agent activity, colors Tmux/OS indicators, and injects recovery pings via interrupts.
 
 ---
 
-## 1. Project Map & Purpose (WHY & WHAT)
-- **Goal**: Detect agent silence, color Tmux/OS indicators, and issue a ping prompt to recover.
-- **Scope**: Implements a 4-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`).
-- **Full Specs**: Refer to the authoritative design specs in [SPEC.md](SPEC.md) and [README.md](README.md).
+## 1. Project Map & Purpose (WHY, WHAT, & WHERE)
+- **Goal**: Minimize false recovery pings during user-waiting states (`PAUSED`) and active tool executions, steer recovery pings via interrupts, and prevent disk bloat by summarizing high-frequency stream events.
+- **Architecture**: Implements a 5-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`, plus `PAUSED` for input requests).
+- **Authoritative Docs**: For detailed state transitions, edge cases, invariants, and SDK signatures, refer to [SPEC.md](SPEC.md) and [README.md](README.md) via progressive disclosure.
 
 ---
 
 ## 2. Tech Stack & Verification (HOW)
-This project is built on **Bun 1.3+** and **TypeScript** (strict mode, no `any`). All execution and tests must run inside the devcontainer environment.
+Built on **Bun 1.3+** and **TypeScript** (strict mode). All executions and tests must run inside the devcontainer environment.
 
-- **Build**: `bun run build` (creates `./dist/index.js` using Bun's bundler)
+- **Build**: `bun run build` (bundles TypeScript source into `./dist/index.js` using Bun's bundler)
 - **Type Check**: `bun run typecheck` (`tsc --noEmit` validation)
-- **Test**: `bun test` (runs all unit and stress tests. Expecting **130 tests to pass** under 1500ms)
+- **Test**: `bun test` (runs all unit, integration, and stress tests. Expecting **188 tests to pass** under 1500ms)
 - **Local Install**: `mkdir -p ~/.config/opencode/plugins/akane && cp -r package.json dist ~/.config/opencode/plugins/akane/`
 
 ---
 
-## 3. High-Leverage Rules & Constraints (CRITICAL)
+## 3. High-Leverage Constraints & Safety Rules (CRITICAL)
 
 When modifying code, you MUST respect these strict architectural safety guidelines:
 
@@ -36,7 +36,7 @@ To prevent delayed streaming chunks from re-arming stopped sessions (idle/error/
 
 ### 3.4 Zero-Crash & Secure Logging
 - **Containment**: Wrap all external command calls (`Bun.spawn` for tmux/notify-send/osascript) in try/catch to avoid crashing OpenCode.
-- **Log Scrubbing**: Never log raw commands or session inputs. If a spawn fails, only log the binary name and exit code to prevent leakage of user data.
+- **Log Scrubbing**: Never log raw commands, user inputs, or notification messages. If a spawn fails, only log the binary name and exit code to prevent leakage of user data.
 - **No Concatenated Scripts**: Always pass arguments as an array (`cmd[]`) to prevent shell injection.
 
 ---
