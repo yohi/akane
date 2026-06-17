@@ -6,8 +6,33 @@ import plugin, {
   extractMessageId,
   isNewUserMessage,
   routeSessionError,
+  extractAgentName,
   type OpenCodeEvent,
 } from "../src/index";
+import { Watchdog } from "../src/watchdog";
+import { MockPinger } from "../src/pinger";
+import { FakeClock } from "../src/clock";
+import { resolveConfig } from "../src/config";
+
+class MockWatchdog extends Watchdog {
+  onActivityCalls: Array<{ sessionId: string; meta: any }> = [];
+  override onActivity(sessionId: string, meta: any = {}) {
+    this.onActivityCalls.push({ sessionId, meta });
+  }
+}
+
+function setupMockWatchdog() {
+  const clock = new FakeClock();
+  const config = resolveConfig({ project: { enabled: true }, env: {} });
+  const watchdog = new MockWatchdog({
+    config,
+    clock,
+    pinger: new MockPinger(),
+    notifier: { notify: async () => {}, clear: async () => {} },
+    log: () => {},
+  });
+  return watchdog;
+}
 
 describe("plugin entry smoke", () => {
   test("default export is a Plugin object containing id and server", () => {
@@ -398,6 +423,58 @@ describe("message.part.delta signal (design §5)", () => {
     expect(
       extractMessageId({ type: "message.part.delta", properties: { messageID: "m-delta" } }),
     ).toBe("m-delta");
+  });
+
+  test("extractAgentName reads agent from properties.part.agent for delta", () => {
+    expect(
+      extractAgentName({ type: "message.part.delta", properties: { part: { agent: "coder" } } }),
+    ).toBe("coder");
+  });
+
+  test("event hook triggers onActivity for delta with agentName", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-act-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.delta",
+          properties: { sessionID: "s-delta", messageID: "m-delta", part: { agent: "coder" } },
+        },
+      });
+      expect(watchdog.onActivityCalls.length).toBe(1);
+      expect(watchdog.onActivityCalls[0].sessionId).toBe("s-delta");
+      expect(watchdog.onActivityCalls[0].meta.agentName).toBe("coder");
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("event hook ignores delta WITHOUT agentName (Issue 1 fix verification)", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-ign-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.delta",
+          properties: { sessionID: "s-delta", messageID: "m-delta" }, // agentName missing
+        },
+      });
+      expect(watchdog.onActivityCalls.length).toBe(0);
+    } finally {
+      await instance.dispose();
+    }
   });
 
   test("event hook does not throw on a delta payload", async () => {

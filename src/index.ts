@@ -100,7 +100,7 @@ interface AgentNameSource {
   agentName?: string;
 }
 
-function extractAgentName(event: OpenCodeEvent): string | undefined {
+export function extractAgentName(event: OpenCodeEvent): string | undefined {
   const props = event.properties as
     | {
         info?: AgentNameSource;
@@ -288,7 +288,7 @@ function parseReportMs(
 }
 
 
-const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
+const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);
@@ -329,7 +329,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
-  const watchdog = new Watchdog({
+  const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
     pinger,
@@ -470,8 +470,13 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         }
 
         if (event.type === "message.part.delta") {
-          instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
-          watchdog.onActivity(sessionId, { agentName });
+          // If this is an assistant event (has agent name), treat as activity to refresh stage1.
+          if (agentName !== undefined) {
+            instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+            watchdog.onActivity(sessionId, { agentName });
+            return;
+          }
+          instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
           return;
         }
 
