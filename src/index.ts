@@ -159,7 +159,8 @@ function readProjectConfig(
     typeof candidate.pingMessage === "string" ||
     typeof candidate.notifierType === "string" ||
     typeof candidate.tmux === "object" ||
-    typeof candidate.agents === "object"
+    typeof candidate.agents === "object" ||
+    typeof candidate.suppressPingWhileToolRunning === "boolean"
   ) {
     return candidate;
   }
