@@ -410,12 +410,20 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         // --- Input-Wait Gating (Priority 1, user-message-equivalent) ---
         if (event.type === "permission.asked" || event.type === "question.asked") {
           const requestId = extractRequestId(event);
-          if (requestId) watchdog.onInputRequested(sessionId, requestId);
+          if (requestId) {
+            watchdog.onInputRequested(sessionId, requestId);
+          } else {
+            instLog("warn", `${event.type}: requestId not found, watchdog not paused (timer continues)`);
+          }
           return;
         }
         if (event.type === "permission.replied" || event.type === "question.replied") {
           const requestId = extractRequestId(event);
-          if (requestId) watchdog.onInputResolved(sessionId, requestId);
+          if (requestId) {
+            watchdog.onInputResolved(sessionId, requestId);
+          } else {
+            instLog("warn", `${event.type}: requestId not found, watchdog not resumed`);
+          }
           return;
         }
         const messageId = extractMessageId(event);
