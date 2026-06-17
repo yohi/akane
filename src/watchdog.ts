@@ -348,6 +348,14 @@ export class Watchdog {
 
     if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0) {
       this.log("info", `[Watchdog] STAGE2 gated: ${entry.runningTools.size} tool(s) running for ${sessionId}; not injecting`);
+      // Set the timer before any await so that a concurrent armOrReset (e.g. from
+      // onToolSettled arriving while the notification is in-flight) can properly
+      // clear it — mirrors the pattern used in onStage1Expire and the ping path.
+      entry.timer = this.clock.setTimeout(() => {
+        this.onStage2Expire(sessionId).catch((err) =>
+          this.log("warn", `stage2 handler failed: ${String(err)}`),
+        );
+      }, this.config.stage2Ms);
       // Notify critical only on first gate to avoid OS-notification spam while still gated.
       if (!entry.toolGateNotified) {
         entry.toolGateNotified = true;
@@ -356,12 +364,13 @@ export class Watchdog {
           "critical",
           `[Watchdog] Agent ${sessionId} stalled but a tool is running; holding.`,
         );
+        if (this.sessions.get(sessionId) !== entry) {
+          this.log("info", `[Watchdog] Session entry changed during gate notify. Cleaning up notifier.`);
+          this.notifier.clear(sessionId).catch((err) =>
+            this.log("warn", `notifier.clear cleanup failed: ${String(err)}`),
+          );
+        }
       }
-      entry.timer = this.clock.setTimeout(() => {
-        this.onStage2Expire(sessionId).catch((err) =>
-          this.log("warn", `stage2 handler failed: ${String(err)}`),
-        );
-      }, this.config.stage2Ms);
       return;
     }
 
