@@ -49,14 +49,20 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
     case "permission.asked":
     case "permission.replied":
     case "question.asked":
-    case "question.replied": {
-      // SDK 実測: properties.sessionID 直接。session.error は optional。
+    case "question.replied":
+    case "session.status": {
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
     }
     default:
       return undefined;
   }
+}
+
+export function extractStatusType(event: OpenCodeEvent): string | undefined {
+  if (event.type !== "session.status") return undefined;
+  const status = (event.properties as { status?: { type?: string } } | undefined)?.status;
+  return typeof status?.type === "string" ? status.type : undefined;
 }
 
 export function extractRequestId(event: OpenCodeEvent): string | undefined {
@@ -71,7 +77,6 @@ export function extractRequestId(event: OpenCodeEvent): string | undefined {
   }
   return undefined;
 }
-
 export function isUserMessage(event: OpenCodeEvent): boolean {
   if (event.type !== "message.updated") return false;
   const info = (event.properties as { info?: { role?: string; parts?: unknown[] } } | undefined)?.info;
@@ -404,6 +409,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
 
         if (!sessionId) {
           instLog("info", `Event ignored (no sessionId found)`);
+          return;
+        }
+
+        if (event.type === "session.status") {
+          const statusType = extractStatusType(event);
+          if (statusType === "retry") {
+            watchdog.onStatusRetry(sessionId);
+          } else if (statusType === "busy") {
+            watchdog.onStatusActive(sessionId);
+          }
+          // "idle" is auxiliary; session.idle event is the primary stop signal.
           return;
         }
 

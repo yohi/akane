@@ -6,6 +6,7 @@ import plugin, {
   extractMessageId,
   isNewUserMessage,
   routeSessionError,
+  extractStatusType,
   extractRequestId,
   extractAgentName,
   type OpenCodeEvent,
@@ -423,6 +424,36 @@ describe("routeSessionError (recoverable vs terminal)", () => {
   });
 });
 
+describe("session.status routing (design §5)", () => {
+  test("extractSessionId reads session.status sessionID from properties.sessionID", () => {
+    expect(extractSessionId({ type: "session.status", properties: { sessionID: "s-st" } })).toBe("s-st");
+  });
+  test("extractStatusType reads properties.status.type", () => {
+    expect(extractStatusType({ type: "session.status", properties: { status: { type: "retry" } } })).toBe("retry");
+    expect(extractStatusType({ type: "session.status", properties: { status: { type: "busy" } } })).toBe("busy");
+    expect(extractStatusType({ type: "message.updated", properties: {} })).toBeUndefined();
+  });
+  test("event hook does not throw on session.status payloads", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/status-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "retry" } } } });
+      await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } } });
+      await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } } });
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
+
 describe("tool-part routing (design §5)", () => {
   test("pending status does not throw", async () => {
     const ctx = {
@@ -436,6 +467,12 @@ describe("tool-part routing (design §5)", () => {
       dispose: () => Promise<void>;
     }>)(ctx);
     try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "pending" } } },
+        },
+      });
       await instance.event({
         event: {
           type: "message.part.updated",

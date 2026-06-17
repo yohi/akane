@@ -16,6 +16,7 @@ interface SessionEntry {
   lastErrorReason?: HangReason;
   pendingRequests: Set<string>;
   runningTools: Set<string>;
+  retrySuppressed?: boolean;
   toolGateNotified: boolean;
 }
 
@@ -215,6 +216,38 @@ export class Watchdog {
   }
 
 
+  /** session.status:retry → suppress escalation, stop the running timer. */
+  onStatusRetry(sessionId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (!entry) return;
+    if (entry.state === "SILENCED") {
+      this.log("info", `[Watchdog] onStatusRetry ignored: session ${sessionId} is SILENCED (user input required per design §3.4)`);
+      return;
+    }
+    entry.retrySuppressed = true;
+    if (entry.timer !== null) {
+      this.clock.clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+    this.log("info", `[Watchdog] retry suppression ON for ${sessionId}`);
+  }
+
+  /** session.status:busy or activity → clear retry suppression and resume,
+   *  unless still PAUSED with pending input (design §7). */
+  onStatusActive(sessionId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (!entry || !entry.retrySuppressed) return;
+    if (entry.state === "SILENCED") {
+      this.log("info", `[Watchdog] onStatusActive ignored: session ${sessionId} is SILENCED (user input required per design §3.4)`);
+      return;
+    }
+    entry.retrySuppressed = false;
+    if (entry.state === "PAUSED" && entry.pendingRequests.size > 0) {
+      this.log("info", `[Watchdog] retry cleared but ${sessionId} stays PAUSED (pending input)`);
+      return;
+    }
+    this.armOrReset(sessionId, { agentName: entry.agentName });
+  }
   /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
     this.log("info", `[Watchdog] stop called for session ${sessionId}`);
@@ -247,8 +280,12 @@ export class Watchdog {
 
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
-
     const existing = this.sessions.get(sessionId);
+    if (existing?.retrySuppressed) {
+      this.log("info", `[Watchdog] armOrReset suppressed: session ${sessionId} is in retry suppression`);
+      return;
+    }
+
     const effectiveName = meta.agentName ?? existing?.agentName;
     if (!this.isAgentMonitored(effectiveName)) {
       this.log("info", `[Watchdog] Session ${sessionId} not monitored (agentName: ${effectiveName})`);
