@@ -1,4 +1,5 @@
 import { reasonToJa, type HangReason } from "./errors";
+import type { DeliveryMode } from "./config";
 
 export interface PingContext {
   reason?: HangReason;
@@ -24,18 +25,20 @@ export class MockPinger implements Pinger {
   }
 }
 
-// Shape derived from docs/SDK_NOTES.md (実測 @opencode-ai/plugin@1.15.12).
-// `client.session.prompt({ path: { id }, body: { parts: [{ type: "text", text }] } })`
-// SDK shape may diverge in future minor versions; if so, update SDK_NOTES first
-// then adjust here. The Pinger interface above is fixed regardless.
+// V2: prompt({ sessionID, parts, delivery }); legacy: prompt({ path:{id}, body:{parts} }).
+// Exact runtime shape is isolated here (SPEC §8.2). Loosely typed because two
+// shapes share the method.
 interface OpenCodeClientLike {
   session?: {
-    prompt?: (args: { path: { id: string }; body: { parts: unknown[] } }) => Promise<unknown>;
+    prompt?: (args: Record<string, unknown>) => Promise<unknown>;
   };
 }
 
 export class OpenCodeAdapter implements Pinger {
-  constructor(private readonly client: unknown) {}
+  constructor(
+    private readonly client: unknown,
+    private readonly delivery: DeliveryMode = "steer",
+  ) {}
 
   async inject(sessionId: string, message: string, context?: PingContext): Promise<void> {
     const client = this.client as OpenCodeClientLike;
@@ -46,14 +49,33 @@ export class OpenCodeAdapter implements Pinger {
       );
       return;
     }
+    const finalMessage = buildPingPrompt(message, context?.reason);
+    const parts = [{ type: "text", text: finalMessage }];
     try {
-      const finalMessage = buildPingPrompt(message, context?.reason);
-      await session.prompt({
-        path: { id: sessionId },
-        body: { parts: [{ type: "text", text: finalMessage }] },
-      });
+      // Preferred V2 interrupt delivery. Per-call attempt (no permanent switch).
+      await session.prompt({ sessionID: sessionId, parts, delivery: this.delivery });
     } catch (err) {
-      console.warn(`[watchdog] Failed to inject ping to ${sessionId}:`, err);
+      // Only fall back to legacy when V2 rejected the shape/field.
+      // Other errors (network, parse failures after delivery, etc.) must NOT
+      // proceed to legacy – doing so risks double-delivery.
+      const msg = err instanceof Error ? err.message : String(err);
+      const isShapeRejection = /unknown[_\s]field|unrecognized[_\s]field/i.test(msg);
+      if (!isShapeRejection) {
+        console.warn(
+          `[watchdog] V2 prompt threw a non-shape error for ${sessionId}; skipping legacy fallback. err=${msg}`,
+        );
+        return;
+      }
+      console.warn(
+        `[watchdog] V2 prompt rejected the request shape for ${sessionId}; falling back to legacy. err=${msg}`,
+      );
+      try {
+        await session.prompt({ path: { id: sessionId }, body: { parts } });
+      } catch (legacyErr) {
+        console.warn(
+          `[watchdog] Failed to inject ping to ${sessionId} (V2 steer and legacy both failed). err=${legacyErr instanceof Error ? legacyErr.message : String(legacyErr)}`,
+        );
+      }
     }
   }
 }
