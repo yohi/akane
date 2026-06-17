@@ -375,6 +375,9 @@ export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Ho
 | `message.part.updated` | `event.properties.part.sessionID` | (roleなし。agentNameが存在しなければユーザー起源) |
 | `session.created` / `session.deleted` | `event.properties.info.id` | - |
 | `session.idle` / `session.error` | `event.properties.sessionID` | - |
+| `permission.asked` / `permission.replied` | `event.properties.sessionID` | - |
+| `question.asked` / `question.replied` | `event.properties.sessionID` | - |
+| `session.status` | `event.properties.sessionID` | - |
 
 > **⚠️ 重要な差異**: `session.idle` / `session.error` のセッション ID は `event.properties.sessionID`（直接）。設計初版で想定していた `event.properties.info.id` とは異なる。この差異は smoke test の fake event payload にも影響し、実 SDK の型定義に合わせる必要がある。
 
