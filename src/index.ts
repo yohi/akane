@@ -429,6 +429,27 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
         }
 
         if (event.type === "message.part.updated") {
+          const toolPart = (event.properties as {
+            part?: { type?: string; callID?: string; state?: { status?: string } };
+          } | undefined)?.part;
+          if (toolPart?.type === "tool") {
+            const status = toolPart.state?.status;
+            const callId = toolPart.callID;
+            if (status === "running" && callId) {
+              instLog("info", `Tool running for session ${sessionId} (callID: ${callId})`);
+              watchdog.onToolRunning(sessionId, callId);
+              return;
+            }
+            if ((status === "completed" || status === "error") && callId) {
+              instLog("info", `Tool settled (${status}) for session ${sessionId} (callID: ${callId})`);
+              watchdog.onToolSettled(sessionId, callId);
+              return;
+            }
+            // pending = active but not yet running → refresh stage1 without tracking.
+            instLog("info", `Tool pending for session ${sessionId}`);
+            watchdog.onActivity(sessionId, { agentName });
+            return;
+          }
           // If this is an assistant event (has agent name), treat as activity to refresh stage1.
           if (agentName !== undefined) {
             instLog(

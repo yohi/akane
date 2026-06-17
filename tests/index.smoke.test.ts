@@ -386,3 +386,30 @@ describe("routeSessionError (recoverable vs terminal)", () => {
     }
   });
 });
+
+describe("tool-part routing (design §5)", () => {
+  test("event hook does not throw on tool part status transitions", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      for (const status of ["pending", "running", "completed", "error"]) {
+        await instance.event({
+          event: {
+            type: "message.part.updated",
+            properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status } } },
+          },
+        });
+      }
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
