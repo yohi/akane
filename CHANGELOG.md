@@ -1,5 +1,65 @@
 # Changelog
 
+## [1.2.0](https://github.com/yohi/akane/compare/v1.1.1...v1.2.0) (2026-06-17)
+
+
+### Features
+
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([6c54731](https://github.com/yohi/akane/commit/6c547310a30a1441240723625629a26871798dcd))
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([d825bab](https://github.com/yohi/akane/commit/d825babd9803a8a1487939a28ca5f90cc697799c))
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([19589b5](https://github.com/yohi/akane/commit/19589b548fef17f39f919c300c94f8362f202d72))
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([c77620a](https://github.com/yohi/akane/commit/c77620a382658b6588827407e02e8cc37ffc8448))
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([1c7073d](https://github.com/yohi/akane/commit/1c7073d31e76504c558776a098e0e410eb3ebd15))
+* **config:** delivery/tool-gate/pause/notify-waiting/verbose ノブを追加 ([4d144ef](https://github.com/yohi/akane/commit/4d144ef3938544dba7377987078d6b2280d1a4c3))
+* **config:** 注入ゲーティング用の設定ノブ追加 ([1c48cb7](https://github.com/yohi/akane/commit/1c48cb774ef67582c42f3dbeecfab5dcafb43b4a))
+* **index:** permission/question を入力待ちゲートへルーティング ([#2](https://github.com/yohi/akane/issues/2)) ([0e734cd](https://github.com/yohi/akane/commit/0e734cdc2743d965c88a6cc70df50de1ce4f30a6))
+* **index:** tool パートを running/settled へルーティング ([11167bd](https://github.com/yohi/akane/commit/11167bddee1be7d3c03e0cd6bb5abdd5fd4fd4b6))
+* **index:** tool ルーティング ([5d4ecb0](https://github.com/yohi/akane/commit/5d4ecb082dc407a6c9a69e6ab300582d1b6222c9))
+* **index:** 入力待ちルーティング ([#2](https://github.com/yohi/akane/issues/2)) ([4c8d824](https://github.com/yohi/akane/commit/4c8d824415d97e9186071e173768c679d2b43d91))
+* **log:** ログ肥大抑制 ([#3](https://github.com/yohi/akane/issues/3)) ([5445c9b](https://github.com/yohi/akane/commit/5445c9b75158ea4618d535d23ffc12115bf65313))
+* **log:** 高頻度イベントの完全JSONログを廃しverboseLog分岐を導入 ([#3](https://github.com/yohi/akane/issues/3)) ([b8ce626](https://github.com/yohi/akane/commit/b8ce62643d2ef4b289e20f5011e95e920ad83eb7))
+* **notifier:** waiting ステージ(cyan/urgency=low)を追加 ([e8ce57f](https://github.com/yohi/akane/commit/e8ce57fa63bc57496c124135ff0e0b193672dcae))
+* **notifier:** waiting ステージ(cyan/urgency=low)を追加 ([d613ecf](https://github.com/yohi/akane/commit/d613ecf9f00f12b8d597dad6f364a5a89b5d727f))
+* **notifier:** waiting ステージ(cyan/urgency=low)を追加 ([6e1481a](https://github.com/yohi/akane/commit/6e1481a3cea0c4ad5a9c1ca353561694098866f3))
+* **notifier:** waiting ステージ(cyan/urgency=low)を追加 ([f0be580](https://github.com/yohi/akane/commit/f0be580a92b4d7dc23bd002285e88e76c97a3e87))
+* **notifier:** waiting ステージ(cyan/urgency=low)を追加 ([e74a41d](https://github.com/yohi/akane/commit/e74a41d3d74605241c4108606f5d957ce0d0571e))
+* **notifier:** waiting 通知 ([a11f13c](https://github.com/yohi/akane/commit/a11f13cd4b61d5bbe08926601105c22f1c620c1d))
+* **pinger:** delivery:steer 注入とlegacyフォールバックを実装 ([#1](https://github.com/yohi/akane/issues/1)) ([b092989](https://github.com/yohi/akane/commit/b09298936e1b432b4619861f55e1dce557893714))
+* **pinger:** steer 注入 ([#1](https://github.com/yohi/akane/issues/1)) ([be76ea7](https://github.com/yohi/akane/commit/be76ea7022a167e980b4abe369efa16db0739d2c))
+* **signal:** delta 活性化 ([af01c0f](https://github.com/yohi/akane/commit/af01c0fe7a72edb122f92f40e11c0e6bf4907aa5))
+* **signal:** message.part.delta をストリーム活性として扱う ([3c770d7](https://github.com/yohi/akane/commit/3c770d72e9ae55010af232222f5aaaab8f60a744))
+* **watchdog:** PAUSED ゲート ([#2](https://github.com/yohi/akane/issues/2)) ([b0bf76d](https://github.com/yohi/akane/commit/b0bf76d94ff2b53f775240b80cfddb8822c3e218))
+* **watchdog:** PAUSED 状態と入力待ちゲートを追加 ([#2](https://github.com/yohi/akane/issues/2)) ([aec2b7f](https://github.com/yohi/akane/commit/aec2b7f05312d4415d840f04c9591b5be29bac5f))
+* **watchdog:** PAUSED 状態と入力待ちゲートを追加 ([#2](https://github.com/yohi/akane/issues/2)) ([919920a](https://github.com/yohi/akane/commit/919920aa2ffb1efd9089a5ed2b6bb51de8dbb55d))
+* **watchdog:** PAUSED 状態と入力待ちゲートを追加 ([#2](https://github.com/yohi/akane/issues/2)) ([b5fe376](https://github.com/yohi/akane/commit/b5fe376a0db90cb2d13969149752c4311a45a6cf))
+* **watchdog:** PAUSED 状態と入力待ちゲートを追加 ([#2](https://github.com/yohi/akane/issues/2)) ([a7da342](https://github.com/yohi/akane/commit/a7da3427bc0d0bc280a975cc18a7f10afb211e44))
+* **watchdog:** retry 抑止 ([d2df2d2](https://github.com/yohi/akane/commit/d2df2d29d6eca57ded201429b6bfc79bded4ea9a))
+* **watchdog:** session.status:retry のescalation抑止を追加 ([fa16345](https://github.com/yohi/akane/commit/fa16345c21443c892f388a7a02c8ba81d759f10e))
+* **watchdog:** tool-gate ([db34fd7](https://github.com/yohi/akane/commit/db34fd72e16e6412a38412600673156209cc5f91))
+* **watchdog:** tool実行中のsteer抑止ゲートを追加 ([b55b1d4](https://github.com/yohi/akane/commit/b55b1d406cb9920ebe8160a0fcf6c9c7195583b1))
+* **watchdog:** tool実行中のsteer抑止ゲートを追加 ([58f057f](https://github.com/yohi/akane/commit/58f057f861f7b6934dc41dbf4439af39a2db3952))
+* **watchdog:** tool実行中のsteer抑止ゲートを追加 ([f16655d](https://github.com/yohi/akane/commit/f16655d3662f0cfac48ef1f9484f23ab868c9c85))
+
+
+### Bug Fixes
+
+* **log:** サマリーログのセッションID取得ロジック改善とフィールド名の汎用化 ([0b7fe95](https://github.com/yohi/akane/commit/0b7fe9541c54478c812f90248baac564cb54fbdb))
+* **notifier:** OSNotifier の safeSpawn エラー分類で as any を除去 ([0cae478](https://github.com/yohi/akane/commit/0cae47877c6047301a4c4bc5a1326c553624298d))
+* **pinger:** V2フォールバックを形状拒否エラーのみに限定し警告ログを追加 ([5036851](https://github.com/yohi/akane/commit/5036851632de8c5e7f3e4adf31c1483ca306b4f6))
+* readProjectConfig に suppressPingWhileToolRunning のバリデーション追加 ([5cac187](https://github.com/yohi/akane/commit/5cac187e3bd1dacfcc62948e3233a2f8830afe8d))
+* requestIdが未取得時にwarnログを出力する ([12c04f7](https://github.com/yohi/akane/commit/12c04f7c0c2534309699935dcfd26017e5e4c005))
+* **routing:** コードレビュー指摘3件に対応 ([f911c61](https://github.com/yohi/akane/commit/f911c6164e923ceaf5c7c1752edb7de996ed6a59))
+* **test:** resolve 'Object is possibly undefined' error in smoke test ([7b2a0c6](https://github.com/yohi/akane/commit/7b2a0c6c7cdc3d6b9819240273b919fa6bd3bf74))
+* **watchdog:** message.part.delta における agentName チェックの追加とテストの強化 ([344329c](https://github.com/yohi/akane/commit/344329c87e5d9db36ddefe1f05a9b5b01526c40f))
+* **watchdog:** onToolSettled のファントムセッション生成とツールゲート通知フラグ流用を修正 ([aac476d](https://github.com/yohi/akane/commit/aac476da2dd12cc47d4d903a95bbb59da502aaf1))
+* **watchdog:** pauseOnInputRequest=false 時の誤タイマーリセットを修正し delivery TODO を追記 ([3a8d917](https://github.com/yohi/akane/commit/3a8d91754c630c487267b1c1a6cffb7c0282f122))
+* **watchdog:** retry抑止中のタイマー再起動とSILENCEDの不正解除を修正 ([401bade](https://github.com/yohi/akane/commit/401bade35cda46bd1fa96d5e14cf2ce826ef4126))
+* **watchdog:** SILENCED セッションへのツールイベントによる不正リセットを修正 ([69741b0](https://github.com/yohi/akane/commit/69741b0a1e6aabc23070c49917b4a341e3ccd529))
+* **watchdog:** SILENCED 状態のセッションが入力要求によって遷移する問題を修正 ([58ffc3d](https://github.com/yohi/akane/commit/58ffc3d6a0e93518d9f77e4220a323134e2a30bf))
+* **watchdog:** SILENCEDセッションへのonStatusRetryでretrySuppressedが永続化する問題を修正 ([17d2773](https://github.com/yohi/akane/commit/17d277323413ac8a51256b0a02d60bfaf2e4017f))
+* **watchdog:** SILENCEDバイパスと非監視エージェントのゾンビエントリを修正 ([274c929](https://github.com/yohi/akane/commit/274c929c19b2c57c5bed984a623cd77aa88c4cc3))
+* **watchdog:** ゲートパスの再スケジュールタイマーを await 前に移動 ([140b3a8](https://github.com/yohi/akane/commit/140b3a87f103abec2836f8464e2c222b5d89ef3d))
+
 ## [1.1.1](https://github.com/yohi/akane/compare/v1.1.0...v1.1.1) (2026-06-04)
 
 
