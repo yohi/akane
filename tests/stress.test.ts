@@ -137,3 +137,46 @@ describe("Acceptance §10 - empty session no false trigger", () => {
     expect(watchdog.activeSessionCount()).toBe(0);
   });
 });
+
+describe("Watchdog - input/tool churn leak (design §7.4)", () => {
+  test("1000 sessions of asked→running→settled→replied leave no leaks", () => {
+    const clock = new FakeClock();
+    const watchdog = new Watchdog({
+      config: cfg, clock, pinger: new MockPinger(), notifier: new NoopNotifier(), log: () => {},
+    });
+    for (let s = 0; s < 1000; s++) {
+      const sid = `sess-${s}`;
+      watchdog.onActivity(sid);
+      watchdog.onInputRequested(sid, `per_${s}`);
+      watchdog.onInputResolved(sid, `per_${s}`);
+      watchdog.onToolRunning(sid, `call_${s}`);
+      watchdog.onToolSettled(sid, `call_${s}`);
+    }
+    expect(watchdog.activeSessionCount()).toBe(1000);
+    for (let s = 0; s < 1000; s++) watchdog.stop(`sess-${s}`);
+    expect(watchdog.activeSessionCount()).toBe(0);
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(clock.pendingTimerCount()).toBe(0);
+  });
+
+  test("vertical chain: permission.asked→tool running→settled→replied keeps gate+pause order", async () => {
+    const clock = new FakeClock();
+    const pinger = new MockPinger();
+    const notifies: NotifierStage[] = [];
+    const notifier: Notifier = { async notify(_id, s) { notifies.push(s); }, async clear() {} };
+    const watchdog = new Watchdog({ config: cfg, clock, pinger, notifier, log: () => {} });
+
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1"); // PAUSED
+    clock.advance(5000);
+    expect(pinger.calls.length).toBe(0); // paused: no ping
+    watchdog.onToolRunning("s1", "call_1"); // tracked but stays PAUSED (design §7)
+    watchdog.onToolSettled("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // tool parts did not un-pause
+    watchdog.onInputResolved("s1", "per_1"); // resume WATCHING
+    clock.advance(cfg.stage1Ms);
+    clock.advance(cfg.stage2Ms);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1); // pings after resume
+  });
+});
