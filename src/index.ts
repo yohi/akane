@@ -277,7 +277,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir})`);
 
   const clock = new RealClock();
-  const pinger = new OpenCodeAdapter(input?.client);
+  const pinger = new OpenCodeAdapter(input?.client, config.delivery);
   const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
