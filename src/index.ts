@@ -44,8 +44,13 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
       return typeof info?.id === "string" ? info.id : undefined;
     }
     case "session.idle":
-    case "session.error": {
-      // SDK 実測: properties.sessionID 直接。session.error は optional。
+    case "session.error":
+    case "message.part.delta":
+    case "permission.asked":
+    case "permission.replied":
+    case "question.asked":
+    case "question.replied":
+    case "session.status": {
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
     }
@@ -54,6 +59,11 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
   }
 }
 
+export function extractStatusType(event: OpenCodeEvent): string | undefined {
+  if (event.type !== "session.status") return undefined;
+  const status = (event.properties as { status?: { type?: string } } | undefined)?.status;
+  return typeof status?.type === "string" ? status.type : undefined;
+}
 export function isUserMessage(event: OpenCodeEvent): boolean {
   if (event.type !== "message.updated") return false;
   const info = (event.properties as { info?: { role?: string; parts?: unknown[] } } | undefined)?.info;
@@ -349,6 +359,16 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
           return;
         }
 
+        if (event.type === "session.status") {
+          const statusType = extractStatusType(event);
+          if (statusType === "retry") {
+            watchdog.onStatusRetry(sessionId);
+          } else if (statusType === "busy") {
+            watchdog.onStatusActive(sessionId);
+          }
+          // "idle" is auxiliary; session.idle event is the primary stop signal.
+          return;
+        }
         const messageId = extractMessageId(event);
 
         if (messageId && IGNORED_PING_MESSAGE_IDS.has(messageId)) {

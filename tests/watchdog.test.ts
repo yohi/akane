@@ -484,3 +484,27 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED
   });
 });
+
+describe("Watchdog - retry suppression (design §6.1/§7)", () => {
+  test("onStatusRetry stops escalation timer; onStatusActive(busy) re-arms", async () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onStatusRetry("s1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    clock.advance(10_000);
+    expect(notifier.notifies.length).toBe(0); // no escalation while retrying
+    watchdog.onStatusActive("s1");
+    expect(watchdog.activeTimerCount()).toBe(1); // re-armed
+    clock.advance(1000);
+    expect(notifier.notifies.some((n) => n.stage === "warn")).toBe(true);
+  });
+
+  test("PAUSED × retry: busy recovery keeps PAUSED while input is pending (§7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1"); // busy returns, but input still pending
+    expect(watchdog.activeTimerCount()).toBe(0); // remains PAUSED, not re-armed
+  });
+});

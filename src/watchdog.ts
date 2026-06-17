@@ -16,6 +16,7 @@ interface SessionEntry {
   lastErrorReason?: HangReason;
   pendingRequests: Set<string>;
   runningTools: Set<string>;
+  retrySuppressed?: boolean;
 }
 
 export interface WatchdogDeps {
@@ -201,6 +202,30 @@ export class Watchdog {
   }
 
 
+  /** session.status:retry → suppress escalation, stop the running timer. */
+  onStatusRetry(sessionId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (!entry) return;
+    entry.retrySuppressed = true;
+    if (entry.timer !== null) {
+      this.clock.clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+    this.log("info", `[Watchdog] retry suppression ON for ${sessionId}`);
+  }
+
+  /** session.status:busy or activity → clear retry suppression and resume,
+   *  unless still PAUSED with pending input (design §7). */
+  onStatusActive(sessionId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (!entry || !entry.retrySuppressed) return;
+    entry.retrySuppressed = false;
+    if (entry.state === "PAUSED" && entry.pendingRequests.size > 0) {
+      this.log("info", `[Watchdog] retry cleared but ${sessionId} stays PAUSED (pending input)`);
+      return;
+    }
+    this.armOrReset(sessionId, { agentName: entry.agentName });
+  }
   /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
     this.log("info", `[Watchdog] stop called for session ${sessionId}`);
