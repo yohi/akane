@@ -7,8 +7,44 @@ import plugin, {
   isNewUserMessage,
   routeSessionError,
   extractStatusType,
+  extractRequestId,
+  extractAgentName,
   type OpenCodeEvent,
 } from "../src/index";
+import { Watchdog } from "../src/watchdog";
+import { MockPinger } from "../src/pinger";
+import { FakeClock } from "../src/clock";
+import { resolveConfig } from "../src/config";
+
+class MockWatchdog extends Watchdog {
+  onActivityCalls: Array<{ sessionId: string; meta: any }> = [];
+  onToolRunningCalls: Array<{ sessionId: string; callId: string }> = [];
+  onToolSettledCalls: Array<{ sessionId: string; callId: string }> = [];
+  override onActivity(sessionId: string, meta: any = {}) {
+    this.onActivityCalls.push({ sessionId, meta });
+  }
+  override onToolRunning(sessionId: string, callId: string) {
+    this.onToolRunningCalls.push({ sessionId, callId });
+    super.onToolRunning(sessionId, callId);
+  }
+  override onToolSettled(sessionId: string, callId: string) {
+    this.onToolSettledCalls.push({ sessionId, callId });
+    super.onToolSettled(sessionId, callId);
+  }
+}
+
+function setupMockWatchdog() {
+  const clock = new FakeClock();
+  const config = resolveConfig({ project: { enabled: true }, env: {} });
+  const watchdog = new MockWatchdog({
+    config,
+    clock,
+    pinger: new MockPinger(),
+    notifier: { notify: async () => {}, clear: async () => {} },
+    log: () => {},
+  });
+  return watchdog;
+}
 
 describe("plugin entry smoke", () => {
   test("default export is a Plugin object containing id and server", () => {
@@ -412,6 +448,315 @@ describe("session.status routing (design §5)", () => {
       await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "retry" } } } });
       await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } } });
       await instance.event({ event: { type: "session.status", properties: { sessionID: "s1", status: { type: "idle" } } } });
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
+
+describe("tool-part routing (design §5)", () => {
+  test("pending status does not throw", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "pending" } } },
+        },
+      });
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "pending" } } },
+        },
+      });
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("running → completed transition does not throw", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      for (const status of ["running", "completed"]) {
+        await instance.event({
+          event: {
+            type: "message.part.updated",
+            properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status } } },
+          },
+        });
+      }
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("running → error transition does not throw", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      for (const status of ["running", "error"]) {
+        await instance.event({
+          event: {
+            type: "message.part.updated",
+            properties: { part: { sessionID: "s1", type: "tool", callID: "call_2", state: { status } } },
+          },
+        });
+      }
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("running event routes to onToolRunning with correct sessionId and callId", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown, o?: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "running" } } },
+        },
+      });
+      expect(watchdog.onToolRunningCalls).toEqual([{ sessionId: "s1", callId: "call_1" }]);
+      expect(watchdog.onToolSettledCalls).toEqual([]);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("completed event routes to onToolSettled with correct sessionId and callId", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown, o?: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "completed" } } },
+        },
+      });
+      expect(watchdog.onToolSettledCalls).toEqual([{ sessionId: "s1", callId: "call_1" }]);
+      expect(watchdog.onToolRunningCalls).toEqual([]);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("error event routes to onToolSettled with correct sessionId and callId", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown, o?: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_2", state: { status: "error" } } },
+        },
+      });
+      expect(watchdog.onToolSettledCalls).toEqual([{ sessionId: "s1", callId: "call_2" }]);
+      expect(watchdog.onToolRunningCalls).toEqual([]);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("pending event routes to onActivity, not onToolRunning/onToolSettled", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/tool-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown, o?: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.updated",
+          properties: { part: { sessionID: "s1", type: "tool", callID: "call_1", state: { status: "pending" } } },
+        },
+      });
+      expect(watchdog.onToolRunningCalls).toEqual([]);
+      expect(watchdog.onToolSettledCalls).toEqual([]);
+      expect(watchdog.onActivityCalls.some((c) => c.sessionId === "s1")).toBe(true);
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
+
+describe("input-wait routing (design §5/§6.2)", () => {
+  test("extractSessionId reads permission/question sessionID from properties.sessionID", () => {
+    for (const t of ["permission.asked", "permission.replied", "question.asked", "question.replied"]) {
+      expect(extractSessionId({ type: t, properties: { sessionID: "s-in" } })).toBe("s-in");
+    }
+  });
+
+  test("extractRequestId: asked→properties.id, replied→properties.requestID", () => {
+    expect(extractRequestId({ type: "permission.asked", properties: { id: "per_1" } })).toBe("per_1");
+    expect(extractRequestId({ type: "question.asked", properties: { id: "que_1" } })).toBe("que_1");
+    expect(extractRequestId({ type: "permission.replied", properties: { requestID: "per_1" } })).toBe("per_1");
+    expect(extractRequestId({ type: "question.replied", properties: { requestID: "que_1" } })).toBe("que_1");
+    expect(extractRequestId({ type: "message.updated", properties: {} })).toBeUndefined();
+  });
+
+  test("event hook does not throw on asked/replied payloads", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/input-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({ event: { type: "permission.asked", properties: { sessionID: "s1", id: "per_1" } } });
+      await instance.event({ event: { type: "permission.replied", properties: { sessionID: "s1", requestID: "per_1" } } });
+      await instance.event({ event: { type: "question.asked", properties: { sessionID: "s1", id: "que_1" } } });
+      await instance.event({ event: { type: "question.replied", properties: { sessionID: "s1", requestID: "que_1" } } });
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
+
+describe("message.part.delta signal (design §5)", () => {
+  test("extractSessionId reads delta sessionID from properties.sessionID", () => {
+    expect(
+      extractSessionId({ type: "message.part.delta", properties: { sessionID: "s-delta" } }),
+    ).toBe("s-delta");
+  });
+
+  test("extractMessageId reads delta messageID from properties.messageID", () => {
+    expect(
+      extractMessageId({ type: "message.part.delta", properties: { messageID: "m-delta" } }),
+    ).toBe("m-delta");
+  });
+
+  test("extractAgentName reads agent from properties.part.agent for delta", () => {
+    expect(
+      extractAgentName({ type: "message.part.delta", properties: { part: { agent: "coder" } } }),
+    ).toBe("coder");
+  });
+
+  test("event hook triggers onActivity for delta with agentName", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-act-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.delta",
+          properties: { sessionID: "s-delta", messageID: "m-delta", part: { agent: "coder" } },
+        },
+      });
+      expect(watchdog.onActivityCalls.length).toBe(1);
+      expect(watchdog.onActivityCalls[0]!.sessionId).toBe("s-delta");
+      expect(watchdog.onActivityCalls[0]!.meta.agentName).toBe("coder");
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("event hook ignores delta WITHOUT agentName (Issue 1 fix verification)", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-ign-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({
+        event: {
+          type: "message.part.delta",
+          properties: { sessionID: "s-delta", messageID: "m-delta" }, // agentName missing
+        },
+      });
+      expect(watchdog.onActivityCalls.length).toBe(0);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  test("event hook does not throw on a delta payload", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({
+        event: { type: "message.part.delta", properties: { sessionID: "s1", messageID: "m1", delta: "hi" } },
+      });
     } finally {
       await instance.dispose();
     }
