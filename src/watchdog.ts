@@ -140,6 +140,10 @@ export class Watchdog {
     }
     let entry = this.sessions.get(sessionId);
     if (!entry) {
+      // エントリ未作成のセッションは agentName が未確定。isAgentMonitored(undefined) で
+      // 監視対象外と判定される場合（include リスト使用時等）にゾンビエントリを生成しないよう
+      // ここで早期リターンする (design §3.2)。
+      if (!this.isAgentMonitored(undefined)) return;
       entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set() };
       this.sessions.set(sessionId, entry);
     }
@@ -163,7 +167,7 @@ export class Watchdog {
     const entry = this.sessions.get(sessionId);
     if (!entry) return;
     entry.pendingRequests.delete(requestId);
-    if (entry.pendingRequests.size === 0) {
+    if (entry.state === "PAUSED" && entry.pendingRequests.size === 0) {
       this.log("info", `[Watchdog] onInputResolved: all input resolved for ${sessionId}, resuming WATCHING`);
       this.armOrReset(sessionId, { agentName: entry.agentName });
     }
