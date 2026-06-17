@@ -76,6 +76,44 @@ describe("OpenCodeAdapter", () => {
     expect(Array.isArray(legacy.body?.parts)).toBe(true);
   });
 
+  test("falls back to legacy when V2 throws 'unrecognized field' (space variant)", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fakeClient = {
+      session: {
+        prompt: async (a: Record<string, unknown>) => {
+          calls.push(a);
+          if ("delivery" in a) throw new Error("unrecognized field: delivery");
+          return undefined;
+        },
+      },
+    };
+    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    await adapter.inject("sess-xyz", "ping?");
+    expect(calls.length).toBe(2);
+    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
+    expect(legacy.path?.id).toBe("sess-xyz");
+    expect(Array.isArray(legacy.body?.parts)).toBe(true);
+  });
+
+  test("falls back to legacy when V2 throws 'unrecognized_field' (underscore variant)", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fakeClient = {
+      session: {
+        prompt: async (a: Record<string, unknown>) => {
+          calls.push(a);
+          if ("delivery" in a) throw new Error("unrecognized_field: delivery");
+          return undefined;
+        },
+      },
+    };
+    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    await adapter.inject("sess-xyz", "ping?");
+    expect(calls.length).toBe(2);
+    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
+    expect(legacy.path?.id).toBe("sess-xyz");
+    expect(Array.isArray(legacy.body?.parts)).toBe(true);
+  });
+
   test("does not throw when client method is missing (logs only)", async () => {
     const adapter = new OpenCodeAdapter({} as unknown);
     await expect(adapter.inject("s", "msg")).resolves.toBeUndefined();
