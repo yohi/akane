@@ -115,6 +115,15 @@ function validateNumber(
   return value;
 }
 
+function validateBool(value: boolean | undefined, key: string, warn: WarnFn): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    warn(`[watchdog] Invalid value for ${key}: ${value}. Falling back to lower-priority source.`);
+    return undefined;
+  }
+  return value;
+}
+
 export function resolveConfig(
   sources: ConfigSources,
   warn: WarnFn = (msg) => console.warn(msg),
@@ -123,9 +132,12 @@ export function resolveConfig(
   const project = sources.project ?? {};
 
   const envEnabled = parseBool(env.OPENCODE_WATCHDOG_ENABLED, "OPENCODE_WATCHDOG_ENABLED", warn);
+  const projEnabled = validateBool(project.enabled, "enabled", warn);
+
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
+
   const envNotifierType = parseNotifierType(
     env.OPENCODE_WATCHDOG_NOTIFIER_TYPE,
     "OPENCODE_WATCHDOG_NOTIFIER_TYPE",
@@ -142,14 +154,22 @@ export function resolveConfig(
   const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
 
   const envDelivery = parseDelivery(env.OPENCODE_WATCHDOG_DELIVERY, "OPENCODE_WATCHDOG_DELIVERY", warn);
-  const projDelivery = parseDelivery(project.delivery as string | undefined, "delivery", warn);
+  const projDelivery = parseDelivery(project.delivery, "delivery", warn);
+
   const envSuppressTool = parseBool(env.OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL, "OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL", warn);
+  const projSuppressTool = validateBool(project.suppressPingWhileToolRunning, "suppressPingWhileToolRunning", warn);
+
   const envPauseOnInput = parseBool(env.OPENCODE_WATCHDOG_PAUSE_ON_INPUT, "OPENCODE_WATCHDOG_PAUSE_ON_INPUT", warn);
+  const projPauseOnInput = validateBool(project.pauseOnInputRequest, "pauseOnInputRequest", warn);
+
   const envNotifyWaiting = parseBool(env.OPENCODE_WATCHDOG_NOTIFY_WAITING, "OPENCODE_WATCHDOG_NOTIFY_WAITING", warn);
+  const projNotifyWaiting = validateBool(project.notifyWaiting, "notifyWaiting", warn);
+
   const envVerbose = parseBool(env.OPENCODE_WATCHDOG_VERBOSE, "OPENCODE_WATCHDOG_VERBOSE", warn);
+  const projVerbose = validateBool(project.verboseLog, "verboseLog", warn);
 
   return {
-    enabled: envEnabled ?? project.enabled ?? DEFAULT_CONFIG.enabled,
+    enabled: envEnabled ?? projEnabled ?? DEFAULT_CONFIG.enabled,
     stage1Ms: envStage1 ?? projStage1 ?? DEFAULT_CONFIG.stage1Ms,
     stage2Ms: envStage2 ?? projStage2 ?? DEFAULT_CONFIG.stage2Ms,
     maxPings: envMaxPings ?? projMaxPings ?? DEFAULT_CONFIG.maxPings,
@@ -157,10 +177,10 @@ export function resolveConfig(
     notifierType: envNotifierType ?? projNotifierType ?? DEFAULT_CONFIG.notifierType,
     delivery: envDelivery ?? projDelivery ?? DEFAULT_CONFIG.delivery,
     suppressPingWhileToolRunning:
-      envSuppressTool ?? project.suppressPingWhileToolRunning ?? DEFAULT_CONFIG.suppressPingWhileToolRunning,
-    pauseOnInputRequest: envPauseOnInput ?? project.pauseOnInputRequest ?? DEFAULT_CONFIG.pauseOnInputRequest,
-    notifyWaiting: envNotifyWaiting ?? project.notifyWaiting ?? DEFAULT_CONFIG.notifyWaiting,
-    verboseLog: envVerbose ?? project.verboseLog ?? DEFAULT_CONFIG.verboseLog,
+      envSuppressTool ?? projSuppressTool ?? DEFAULT_CONFIG.suppressPingWhileToolRunning,
+    pauseOnInputRequest: envPauseOnInput ?? projPauseOnInput ?? DEFAULT_CONFIG.pauseOnInputRequest,
+    notifyWaiting: envNotifyWaiting ?? projNotifyWaiting ?? DEFAULT_CONFIG.notifyWaiting,
+    verboseLog: envVerbose ?? projVerbose ?? DEFAULT_CONFIG.verboseLog,
     tmux: {
       enabled: project.tmux?.enabled ?? DEFAULT_CONFIG.tmux.enabled,
       displayMessage: project.tmux?.displayMessage ?? DEFAULT_CONFIG.tmux.displayMessage,
