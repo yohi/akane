@@ -414,4 +414,23 @@ describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
     expect(watchdog.activeTimerCount()).toBe(0);
     expect(notifier.notifies.some((n) => n.stage === "waiting")).toBe(false);
   });
+
+  test("onInputRequested does NOT transition from SILENCED to PAUSED", async () => {
+    const { watchdog, clock, notifier } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 -> ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // stage2 again -> SILENCED
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
+
+    // Try to trigger input request (should be ignored for SILENCED session)
+    watchdog.onInputRequested("s1", "per_1");
+    // Resolve should not trigger re-arm
+    watchdog.onInputResolved("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+  });
 });

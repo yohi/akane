@@ -139,6 +139,10 @@ export class Watchdog {
       return;
     }
     let entry = this.sessions.get(sessionId);
+    if (entry && entry.state === "SILENCED") {
+      this.log("info", `[Watchdog] onInputRequested ignored: session ${sessionId} is SILENCED`);
+      return;
+    }
     if (!entry) {
       // エントリ未作成のセッションは agentName が未確定。isAgentMonitored(undefined) で
       // 監視対象外と判定される場合（include リスト使用時等）にゾンビエントリを生成しないよう
