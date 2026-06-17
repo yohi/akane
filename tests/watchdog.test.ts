@@ -415,3 +415,72 @@ describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
     expect(notifier.notifies.some((n) => n.stage === "waiting")).toBe(false);
   });
 });
+
+describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
+  test("stage2 with a running tool suppresses ping, holds pingCount, notifies critical, reschedules", async () => {
+    const { watchdog, pinger, notifier, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → gate
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(0); // steer suppressed
+    expect(notifier.notifies.some((n) => n.stage === "critical")).toBe(true);
+    expect(watchdog.activeTimerCount()).toBe(1); // rescheduled
+  });
+
+  test("repeated stage2 while tool runs does not spam critical notifications", async () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 (1st gate → critical)
+    await new Promise((r) => setTimeout(r, 10));
+    const after1 = notifier.notifies.filter((n) => n.stage === "critical").length;
+    clock.advance(1000); // stage2 again (still gated)
+    await new Promise((r) => setTimeout(r, 10));
+    const after2 = notifier.notifies.filter((n) => n.stage === "critical").length;
+    expect(after2).toBe(after1); // no re-notify while still gated
+  });
+
+  test("after tool settles, normal stage2 ping resumes", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 gated
+    await new Promise((r) => setTimeout(r, 10));
+    watchdog.onToolSettled("s1", "call_1"); // re-arms WATCHING
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping now allowed
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
+  });
+
+  test("suppressPingWhileToolRunning=false lets the ping fire even with a running tool", async () => {
+    const { watchdog, pinger, clock } = setup({ suppressPingWhileToolRunning: false });
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
+  });
+
+  test("two running tools: settling one keeps suppression until both settle", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    watchdog.onToolRunning("s1", "call_2");
+    watchdog.onToolSettled("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(0); // call_2 still running
+  });
+
+  test("tool parts do NOT un-pause a session awaiting input (design §7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1"); // PAUSED, timer stopped
+    watchdog.onToolRunning("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED — not re-armed
+    watchdog.onToolSettled("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED
+  });
+});
