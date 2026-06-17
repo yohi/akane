@@ -220,6 +220,10 @@ export class Watchdog {
   onStatusRetry(sessionId: string): void {
     const entry = this.sessions.get(sessionId);
     if (!entry) return;
+    if (entry.state === "SILENCED") {
+      this.log("info", `[Watchdog] onStatusRetry ignored: session ${sessionId} is SILENCED (user input required per design §3.4)`);
+      return;
+    }
     entry.retrySuppressed = true;
     if (entry.timer !== null) {
       this.clock.clearTimeout(entry.timer);

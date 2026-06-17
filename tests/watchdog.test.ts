@@ -555,4 +555,26 @@ describe("Watchdog - retry suppression (design §6.1/§7)", () => {
     const newNotifies = notifier.notifies.slice(countBefore);
     expect(newNotifies.filter((n) => n.stage === "warn" || n.stage === "critical").length).toBe(0);
   });
+
+  test("onStatusRetry on SILENCED session does not set retrySuppressed, so onUserMessage can still re-arm", async () => {
+    const { watchdog, notifier, clock, pinger } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 → ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // → SILENCED
+    await new Promise((r) => setTimeout(r, 10));
+    expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
+    // SDK sends retry → busy while SILENCED — must NOT corrupt retrySuppressed
+    watchdog.onStatusRetry("s1");
+    watchdog.onStatusActive("s1");
+    // User sends a message — the ONLY legitimate recovery path
+    watchdog.onUserMessage("s1");
+    expect(watchdog.activeTimerCount()).toBe(1); // re-armed
+    clock.advance(1000);
+    const pingsBefore = pinger.calls.length;
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBeGreaterThan(pingsBefore); // watchdog is active again
+  });
 });
