@@ -15,6 +15,7 @@ interface SessionEntry {
   lastPingTime?: number;
   lastErrorReason?: HangReason;
   pendingRequests: Set<string>;
+  runningTools: Set<string>;
 }
 
 export interface WatchdogDeps {
@@ -140,7 +141,7 @@ export class Watchdog {
     }
     let entry = this.sessions.get(sessionId);
     if (!entry) {
-      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set() };
+      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set(), runningTools: new Set() };
       this.sessions.set(sessionId, entry);
     }
     const wasEmpty = entry.pendingRequests.size === 0;
@@ -168,6 +169,37 @@ export class Watchdog {
       this.armOrReset(sessionId, { agentName: entry.agentName });
     }
   }
+  /** tool part reached `running` — active + tracked for steer suppression. */
+  onToolRunning(sessionId: string, callId: string): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    // PAUSED awaiting input: track the tool but do NOT re-arm — a tool part is
+    // assistant activity and must not un-pause the session (design §7; mirrors
+    // the onActivity PAUSED guard). The tracked callId survives into WATCHING
+    // because armOrReset preserves runningTools when the input later resolves.
+    const paused = this.sessions.get(sessionId);
+    if (paused && paused.state === "PAUSED" && paused.pendingRequests.size > 0) {
+      paused.runningTools.add(callId);
+      return;
+    }
+    this.armOrReset(sessionId, {});
+    const entry = this.sessions.get(sessionId);
+    if (entry) entry.runningTools.add(callId);
+  }
+
+  /** tool part reached `completed`/`error` — untrack + active. */
+  onToolSettled(sessionId: string, callId: string): void {
+    if (this.stoppedSessions.has(sessionId)) return;
+    const existing = this.sessions.get(sessionId);
+    existing?.runningTools.delete(callId);
+    // PAUSED awaiting input: untrack but do NOT re-arm (design §7).
+    if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      return;
+    }
+    // armOrReset carries over the (now reduced) runningTools set by reference,
+    // so no manual re-copy of the remaining ids is needed.
+    this.armOrReset(sessionId, {});
+  }
+
 
   /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
@@ -233,6 +265,7 @@ export class Watchdog {
       pingCount: 0,
       agentName: effectiveName,
       pendingRequests: existing?.pendingRequests ?? new Set(),
+      runningTools: existing?.runningTools ?? new Set(),
     };
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
@@ -295,6 +328,25 @@ export class Watchdog {
     const entry = this.sessions.get(sessionId);
     if (!entry) {
       this.log("info", `[Watchdog] onStage2Expire ignored: session ${sessionId} no longer exists`);
+      return;
+    }
+
+    if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0) {
+      this.log("info", `[Watchdog] STAGE2 gated: ${entry.runningTools.size} tool(s) running for ${sessionId}; not injecting`);
+      // Notify critical only on first gate to avoid OS-notification spam while still gated.
+      if (entry.state !== "PINGED") {
+        entry.state = "PINGED";
+        await this.notifier.notify(
+          sessionId,
+          "critical",
+          `[Watchdog] Agent ${sessionId} stalled but a tool is running; holding.`,
+        );
+      }
+      entry.timer = this.clock.setTimeout(() => {
+        this.onStage2Expire(sessionId).catch((err) =>
+          this.log("warn", `stage2 handler failed: ${String(err)}`),
+        );
+      }, this.config.stage2Ms);
       return;
     }
 
