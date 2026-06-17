@@ -448,8 +448,8 @@ describe("message.part.delta signal (design §5)", () => {
         },
       });
       expect(watchdog.onActivityCalls.length).toBe(1);
-      expect(watchdog.onActivityCalls[0].sessionId).toBe("s-delta");
-      expect(watchdog.onActivityCalls[0].meta.agentName).toBe("coder");
+      expect(watchdog.onActivityCalls[0]!.sessionId).toBe("s-delta");
+      expect(watchdog.onActivityCalls[0]!.meta.agentName).toBe("coder");
     } finally {
       await instance.dispose();
     }
