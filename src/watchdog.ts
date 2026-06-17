@@ -5,7 +5,7 @@ import type { WatchdogConfig } from "./config";
 import { NoopTelemetry, type Telemetry } from "./telemetry";
 import type { HangReason } from "./errors";
 
-type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED";
+type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED";
 
 interface SessionEntry {
   state: State;
@@ -14,6 +14,7 @@ interface SessionEntry {
   agentName?: string;
   lastPingTime?: number;
   lastErrorReason?: HangReason;
+  pendingRequests: Set<string>;
 }
 
 export interface WatchdogDeps {
@@ -123,7 +124,53 @@ export class Watchdog {
       // SILENCED state can ONLY be reset by onUserMessage (fresh user input) per design §3.4.
       return;
     }
+    if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      this.log("info", `[Watchdog] onActivity ignored: session ${sessionId} is PAUSED (awaiting input)`);
+      return;
+    }
     this.armOrReset(sessionId, meta);
+  }
+
+  /** permission/question asked → pause (design §4/§6.1). */
+  onInputRequested(sessionId: string, requestId: string): void {
+    if (!this.config.pauseOnInputRequest) return;
+    if (this.stoppedSessions.has(sessionId)) {
+      this.log("info", `[Watchdog] onInputRequested ignored: session ${sessionId} tombstoned`);
+      return;
+    }
+    let entry = this.sessions.get(sessionId);
+    if (!entry) {
+      // エントリ未作成のセッションは agentName が未確定。isAgentMonitored(undefined) で
+      // 監視対象外と判定される場合（include リスト使用時等）にゾンビエントリを生成しないよう
+      // ここで早期リターンする (design §3.2)。
+      if (!this.isAgentMonitored(undefined)) return;
+      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set() };
+      this.sessions.set(sessionId, entry);
+    }
+    const wasEmpty = entry.pendingRequests.size === 0;
+    entry.pendingRequests.add(requestId);
+    if (entry.timer !== null) {
+      this.clock.clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+    entry.state = "PAUSED";
+    this.log("info", `[Watchdog] onInputRequested: session ${sessionId} PAUSED (pending=${entry.pendingRequests.size})`);
+    if (wasEmpty && this.config.notifyWaiting) {
+      this.notifier
+        .notify(sessionId, "waiting", "[Watchdog] Agent is waiting for your input")
+        .catch((err) => this.log("warn", `notifier.notify(waiting) failed: ${String(err)}`));
+    }
+  }
+
+  /** permission/question replied → resume when all pending cleared. */
+  onInputResolved(sessionId: string, requestId: string): void {
+    const entry = this.sessions.get(sessionId);
+    if (!entry) return;
+    entry.pendingRequests.delete(requestId);
+    if (entry.state === "PAUSED" && entry.pendingRequests.size === 0) {
+      this.log("info", `[Watchdog] onInputResolved: all input resolved for ${sessionId}, resuming WATCHING`);
+      this.armOrReset(sessionId, { agentName: entry.agentName });
+    }
   }
 
   /** Session terminated normally or with error. Tombstones the sessionId. */
@@ -189,6 +236,7 @@ export class Watchdog {
       timer: null,
       pingCount: 0,
       agentName: effectiveName,
+      pendingRequests: existing?.pendingRequests ?? new Set(),
     };
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
