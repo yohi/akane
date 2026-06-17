@@ -44,7 +44,8 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
       return typeof info?.id === "string" ? info.id : undefined;
     }
     case "session.idle":
-    case "session.error": {
+    case "session.error":
+    case "message.part.delta": {
       // SDK 実測: properties.sessionID 直接。session.error は optional。
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
@@ -99,7 +100,7 @@ interface AgentNameSource {
   agentName?: string;
 }
 
-function extractAgentName(event: OpenCodeEvent): string | undefined {
+export function extractAgentName(event: OpenCodeEvent): string | undefined {
   const props = event.properties as
     | {
         info?: AgentNameSource;
@@ -152,6 +153,10 @@ export function extractMessageId(event: OpenCodeEvent): string | undefined {
   if (event.type === "message.part.updated") {
     const part = (props as { part?: { messageID?: string } }).part;
     return typeof part?.messageID === "string" ? part.messageID : undefined;
+  }
+  if (event.type === "message.part.delta") {
+    const mid = (props as { messageID?: string }).messageID;
+    return typeof mid === "string" ? mid : undefined;
   }
   return undefined;
 }
@@ -283,7 +288,7 @@ function parseReportMs(
 }
 
 
-const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
+const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);
@@ -324,7 +329,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
-  const watchdog = new Watchdog({
+  const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
     pinger,
@@ -462,6 +467,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
             instLog("info", `Event ignored (empty user message update shell)`);
             return;
           }
+        }
+
+        if (event.type === "message.part.delta") {
+          // If this is an assistant event (has agent name), treat as activity to refresh stage1.
+          if (agentName !== undefined) {
+            instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+            watchdog.onActivity(sessionId, { agentName });
+            return;
+          }
+          instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
+          return;
         }
 
         if (event.type === "message.part.updated") {
