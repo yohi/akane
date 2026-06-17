@@ -120,8 +120,8 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 | `message.part.delta` | — | 活性（タイマー reset）。自己 ping(`IGNORED_PING_MESSAGE_IDS`)・arm-lock を経由 |
 | `message.part.updated` | `agentName` 有り（= assistant part） | 活性（従来どおり）。assistant 判定は `part.type`/`part.role` ではなく `extractAgentName`（`part.agent`/`part.agentName`）の有無で行う（現行 `index.ts` 準拠） |
 | `message.part.updated` | `part.type==="tool"`, `state.status==="pending"` | 活性扱い（`armOrReset`）。ただし runningTools には**追加しない**（未実行のため steer 抑止対象外。実行開始＝`running` 到達から計上） |
-| `message.part.updated` | `part.type==="tool"`, `state.status==="running"` | `onToolRunning`（runningTools 追加 ＋ 活性） |
-| `message.part.updated` | `part.type==="tool"`, `status` ∈ {`completed`,`error`} | `onToolSettled`（runningTools 削除 ＋ 活性） |
+| `message.part.updated` | `part.type==="tool"`, `state.status==="running"` | `onToolRunning`（runningTools 追加 ＋ 活性。ただし PAUSED 中は追跡のみで再アームしない＝§7） |
+| `message.part.updated` | `part.type==="tool"`, `status` ∈ {`completed`,`error`} | `onToolSettled`（runningTools 削除 ＋ 活性。ただし PAUSED 中は削除のみで再アームしない＝§7） |
 | `permission.asked` / `question.asked` | — | `onInputRequested`（pending 追加 → PAUSED、user message 同格で arm-lock バイパス） |
 | `permission.replied` / `question.replied` | — | `onInputResolved`（pending 削除 → 空なら WATCHING 復帰） |
 | `session.status` | `retry` | escalation 抑止 |
@@ -139,8 +139,8 @@ WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool ru
 - 新メソッド（permission と question は挙動同一のため統合）:
   - `onInputRequested(sessionId, requestId)`: pending に追加 → `PAUSED` 遷移、タイマー停止、初回のみ `notifier.notify(…, "waiting", …)`。
   - `onInputResolved(sessionId, requestId)`: pending から削除 → 空なら `armOrReset`（WATCHING 復帰・通知クリア）。
-  - `onToolRunning(sessionId, callId)`: runningTools 追加 ＋ 活性扱い（`armOrReset`）。
-  - `onToolSettled(sessionId, callId)`: runningTools 削除 ＋ 活性扱い。
+  - `onToolRunning(sessionId, callId)`: runningTools 追加 ＋ 活性扱い（`armOrReset`）。ただし PAUSED（入力待ち）中は runningTools への追加のみ行い `armOrReset` は呼ばず PAUSED を維持する（§7「activity による誤解除を禁止」。tool パートもアシスタント活性＝同規則の対象）。追跡した callID は input 解決後の `armOrReset` で runningTools が引き継がれるため WATCHING 復帰後の steer 抑止ゲートに反映される。
+  - `onToolSettled(sessionId, callId)`: runningTools 削除 ＋ 活性扱い。PAUSED 中は削除のみで再アームしない（§7）。`armOrReset` が runningTools を参照で引き継ぐため、削除後の再アーム経路で残存集合を手動再コピーする必要はない。
 - `onStage2Expire` に **steer 抑止ゲート**を追加: `runningTools.size > 0` なら `inject` せず・`pingCount` 据え置き・critical 通知（初回のみ。再スケジュール中は再通知しない＝OS通知スパム防止）・stage2 再スケジュール。
 - `session.status:retry` 抑止フラグ（軽量）: retry 中は escalation せず、`busy`/活性で復帰。
 
