@@ -186,6 +186,10 @@ export class Watchdog {
       paused.runningTools.add(callId);
       return;
     }
+    if (paused && paused.state === "SILENCED") {
+      this.log("info", `[Watchdog] onToolRunning ignored: session ${sessionId} is SILENCED`);
+      return;
+    }
     this.armOrReset(sessionId, {});
     const entry = this.sessions.get(sessionId);
     if (entry) entry.runningTools.add(callId);
@@ -199,6 +203,10 @@ export class Watchdog {
     existing.runningTools.delete(callId);
     // PAUSED awaiting input: untrack but do NOT re-arm (design §7).
     if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      return;
+    }
+    if (existing.state === "SILENCED") {
+      this.log("info", `[Watchdog] onToolSettled ignored: session ${sessionId} is SILENCED`);
       return;
     }
     // armOrReset carries over the (now reduced) runningTools set by reference,
