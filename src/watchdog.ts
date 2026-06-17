@@ -233,6 +233,10 @@ export class Watchdog {
   onStatusActive(sessionId: string): void {
     const entry = this.sessions.get(sessionId);
     if (!entry || !entry.retrySuppressed) return;
+    if (entry.state === "SILENCED") {
+      this.log("info", `[Watchdog] onStatusActive ignored: session ${sessionId} is SILENCED (user input required per design §3.4)`);
+      return;
+    }
     entry.retrySuppressed = false;
     if (entry.state === "PAUSED" && entry.pendingRequests.size > 0) {
       this.log("info", `[Watchdog] retry cleared but ${sessionId} stays PAUSED (pending input)`);
@@ -272,8 +276,12 @@ export class Watchdog {
 
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
     if (!this.config.enabled) return;
-
     const existing = this.sessions.get(sessionId);
+    if (existing?.retrySuppressed) {
+      this.log("info", `[Watchdog] armOrReset suppressed: session ${sessionId} is in retry suppression`);
+      return;
+    }
+
     const effectiveName = meta.agentName ?? existing?.agentName;
     if (!this.isAgentMonitored(effectiveName)) {
       this.log("info", `[Watchdog] Session ${sessionId} not monitored (agentName: ${effectiveName})`);
