@@ -54,13 +54,26 @@ export class OpenCodeAdapter implements Pinger {
     try {
       // Preferred V2 interrupt delivery. Per-call attempt (no permanent switch).
       await session.prompt({ sessionID: sessionId, parts, delivery: this.delivery });
-    } catch {
-      // V2 threw → runtime rejected the shape/field. Fall back to legacy queue form.
+    } catch (err) {
+      // Only fall back to legacy when V2 rejected the shape/field.
+      // Other errors (network, parse failures after delivery, etc.) must NOT
+      // proceed to legacy – doing so risks double-delivery.
+      const msg = err instanceof Error ? err.message : String(err);
+      const isShapeRejection = /unknown[_\s]field|unrecognized[_\s]field/i.test(msg);
+      if (!isShapeRejection) {
+        console.warn(
+          `[watchdog] V2 prompt threw a non-shape error for ${sessionId}; skipping legacy fallback. err=${msg}`,
+        );
+        return;
+      }
+      console.warn(
+        `[watchdog] V2 prompt rejected the request shape for ${sessionId}; falling back to legacy. err=${msg}`,
+      );
       try {
         await session.prompt({ path: { id: sessionId }, body: { parts } });
-      } catch {
+      } catch (legacyErr) {
         console.warn(
-          `[watchdog] Failed to inject ping to ${sessionId} (V2 steer and legacy both failed).`,
+          `[watchdog] Failed to inject ping to ${sessionId} (V2 steer and legacy both failed). err=${legacyErr instanceof Error ? legacyErr.message : String(legacyErr)}`,
         );
       }
     }
