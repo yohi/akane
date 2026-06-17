@@ -386,3 +386,37 @@ describe("routeSessionError (recoverable vs terminal)", () => {
     }
   });
 });
+
+describe("message.part.delta signal (design §5)", () => {
+  test("extractSessionId reads delta sessionID from properties.sessionID", () => {
+    expect(
+      extractSessionId({ type: "message.part.delta", properties: { sessionID: "s-delta" } }),
+    ).toBe("s-delta");
+  });
+
+  test("extractMessageId reads delta messageID from properties.messageID", () => {
+    expect(
+      extractMessageId({ type: "message.part.delta", properties: { messageID: "m-delta" } }),
+    ).toBe("m-delta");
+  });
+
+  test("event hook does not throw on a delta payload", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/delta-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({
+        event: { type: "message.part.delta", properties: { sessionID: "s1", messageID: "m1", delta: "hi" } },
+      });
+    } finally {
+      await instance.dispose();
+    }
+  });
+});

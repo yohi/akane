@@ -44,7 +44,8 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
       return typeof info?.id === "string" ? info.id : undefined;
     }
     case "session.idle":
-    case "session.error": {
+    case "session.error":
+    case "message.part.delta": {
       // SDK 実測: properties.sessionID 直接。session.error は optional。
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
@@ -152,6 +153,10 @@ export function extractMessageId(event: OpenCodeEvent): string | undefined {
   if (event.type === "message.part.updated") {
     const part = (props as { part?: { messageID?: string } }).part;
     return typeof part?.messageID === "string" ? part.messageID : undefined;
+  }
+  if (event.type === "message.part.delta") {
+    const mid = (props as { messageID?: string }).messageID;
+    return typeof mid === "string" ? mid : undefined;
   }
   return undefined;
 }
@@ -426,6 +431,12 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
             instLog("info", `Event ignored (empty user message update shell)`);
             return;
           }
+        }
+
+        if (event.type === "message.part.delta") {
+          instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+          watchdog.onActivity(sessionId, { agentName });
+          return;
         }
 
         if (event.type === "message.part.updated") {
