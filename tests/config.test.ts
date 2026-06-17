@@ -180,4 +180,76 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("OPENCODE_WATCHDOG_NOTIFIER_TYPE");
     expect(warnings[0]).toContain("lower-priority source");
   });
+  test("new knobs default correctly", () => {
+    const cfg = resolveConfig({});
+    expect(cfg.delivery).toBe("steer");
+    expect(cfg.suppressPingWhileToolRunning).toBe(true);
+    expect(cfg.pauseOnInputRequest).toBe(true);
+    expect(cfg.notifyWaiting).toBe(true);
+    expect(cfg.verboseLog).toBe(false);
+  });
+
+  test("env overrides delivery and boolean knobs", () => {
+    const cfg = resolveConfig({
+      env: {
+        OPENCODE_WATCHDOG_DELIVERY: "queue",
+        OPENCODE_WATCHDOG_SUPPRESS_PING_WHILE_TOOL: "false",
+        OPENCODE_WATCHDOG_PAUSE_ON_INPUT: "no",
+        OPENCODE_WATCHDOG_NOTIFY_WAITING: "0",
+        OPENCODE_WATCHDOG_VERBOSE: "true",
+      },
+    });
+    expect(cfg.delivery).toBe("queue");
+    expect(cfg.suppressPingWhileToolRunning).toBe(false);
+    expect(cfg.pauseOnInputRequest).toBe(false);
+    expect(cfg.notifyWaiting).toBe(false);
+    expect(cfg.verboseLog).toBe(true);
+  });
+
+  test("project config sets delivery; env overrides project", () => {
+    expect(resolveConfig({ project: { delivery: "queue" } }).delivery).toBe("queue");
+    expect(
+      resolveConfig({ project: { delivery: "queue" }, env: { OPENCODE_WATCHDOG_DELIVERY: "steer" } }).delivery,
+    ).toBe("steer");
+  });
+
+  test("project config sets boolean knobs; env overrides project", () => {
+    const cfg = resolveConfig({
+      project: {
+        suppressPingWhileToolRunning: false,
+        pauseOnInputRequest: false,
+        notifyWaiting: false,
+        verboseLog: true,
+      },
+    });
+    expect(cfg.suppressPingWhileToolRunning).toBe(false);
+    expect(cfg.pauseOnInputRequest).toBe(false);
+    expect(cfg.notifyWaiting).toBe(false);
+    expect(cfg.verboseLog).toBe(true);
+
+    const cfgOverride = resolveConfig({
+      project: { verboseLog: true },
+      env: { OPENCODE_WATCHDOG_VERBOSE: "false" },
+    });
+    expect(cfgOverride.verboseLog).toBe(false);
+  });
+
+  test("invalid project boolean falls back to default with warn", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { project: { verboseLog: "not-a-bool" as any } },
+      (m) => warnings.push(m),
+    );
+    expect(cfg.verboseLog).toBe(DEFAULT_CONFIG.verboseLog);
+    expect(warnings[0]).toContain("verboseLog");
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("invalid delivery falls back to default with warn", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig({ env: { OPENCODE_WATCHDOG_DELIVERY: "yeet" } }, (m) => warnings.push(m));
+    expect(cfg.delivery).toBe("steer");
+    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_DELIVERY");
+    expect(warnings[0]).toContain("lower-priority source");
+  });
 });
