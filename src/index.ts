@@ -44,7 +44,12 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
       return typeof info?.id === "string" ? info.id : undefined;
     }
     case "session.idle":
-    case "session.error": {
+    case "session.error":
+    case "message.part.delta":
+    case "permission.asked":
+    case "permission.replied":
+    case "question.asked":
+    case "question.replied": {
       // SDK 実測: properties.sessionID 直接。session.error は optional。
       const sid = (props as { sessionID?: string }).sessionID;
       return typeof sid === "string" ? sid : undefined;
@@ -52,6 +57,19 @@ export function extractSessionId(event: OpenCodeEvent): string | undefined {
     default:
       return undefined;
   }
+}
+
+export function extractRequestId(event: OpenCodeEvent): string | undefined {
+  const props = event.properties ?? {};
+  if (event.type === "permission.asked" || event.type === "question.asked") {
+    const id = (props as { id?: string }).id;
+    return typeof id === "string" ? id : undefined;
+  }
+  if (event.type === "permission.replied" || event.type === "question.replied") {
+    const rid = (props as { requestID?: string }).requestID;
+    return typeof rid === "string" ? rid : undefined;
+  }
+  return undefined;
 }
 
 export function isUserMessage(event: OpenCodeEvent): boolean {
@@ -99,7 +117,7 @@ interface AgentNameSource {
   agentName?: string;
 }
 
-function extractAgentName(event: OpenCodeEvent): string | undefined {
+export function extractAgentName(event: OpenCodeEvent): string | undefined {
   const props = event.properties as
     | {
         info?: AgentNameSource;
@@ -153,7 +171,47 @@ export function extractMessageId(event: OpenCodeEvent): string | undefined {
     const part = (props as { part?: { messageID?: string } }).part;
     return typeof part?.messageID === "string" ? part.messageID : undefined;
   }
+  if (event.type === "message.part.delta") {
+    const mid = (props as { messageID?: string }).messageID;
+    return typeof mid === "string" ? mid : undefined;
+  }
   return undefined;
+}
+
+function readAnySessionId(props: Record<string, unknown>): string | undefined {
+  const direct = (props as { sessionID?: string }).sessionID;
+  if (typeof direct === "string") return direct;
+  const part = (props as { part?: { sessionID?: string } }).part;
+  if (typeof part?.sessionID === "string") return part.sessionID;
+  const info = (props as { info?: { sessionID?: string; id?: string } }).info;
+  if (typeof info?.sessionID === "string") return info.sessionID;
+  if (typeof info?.id === "string") return info.id;
+  return undefined;
+}
+
+export function summarizeEvent(event: OpenCodeEvent): string {
+  const props = (event.properties ?? {}) as Record<string, unknown>;
+  const segs: string[] = [`type=${event.type}`];
+  const sid = readAnySessionId(props);
+  if (sid) segs.push(`sessionID=${sid}`);
+  if (event.type === "message.part.updated") {
+    const part = (props as { part?: { type?: string; state?: { status?: string } } }).part;
+    if (part?.type) segs.push(`partType=${part.type}`);
+    if (part?.state?.status) segs.push(`partStatus=${part.state.status}`);
+  }
+  return segs.join(" ");
+}
+
+export function logEvent(
+  event: OpenCodeEvent,
+  verbose: boolean,
+  log: (level: "info" | "warn", message: string) => void,
+): void {
+  if (verbose) {
+    log("info", `Event received (verbose): ${JSON.stringify(event)}`);
+    return;
+  }
+  log("info", `Event: ${summarizeEvent(event)}`);
 }
 
 class BoundedSet<T> {
@@ -247,7 +305,7 @@ function parseReportMs(
 }
 
 
-const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
+const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);
@@ -277,7 +335,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir})`);
 
   const clock = new RealClock();
-  const pinger = new OpenCodeAdapter(input?.client);
+  const pinger = new OpenCodeAdapter(input?.client, config.delivery);
   const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
@@ -288,7 +346,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
-  const watchdog = new Watchdog({
+  const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
     pinger,
@@ -310,7 +368,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   return {
     event: async ({ event }: { event: OpenCodeEvent }) => {
       try {
-        instLog("info", `Event received: ${JSON.stringify(event)}`);
+        logEvent(event, config.verboseLog, instLog);
         if (!config.enabled) {
           instLog("info", `Event ignored (disabled)`);
           return;
@@ -349,6 +407,25 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
           return;
         }
 
+        // --- Input-Wait Gating (Priority 1, user-message-equivalent) ---
+        if (event.type === "permission.asked" || event.type === "question.asked") {
+          const requestId = extractRequestId(event);
+          if (requestId) {
+            watchdog.onInputRequested(sessionId, requestId);
+          } else {
+            instLog("warn", `${event.type}: requestId not found, watchdog not paused (timer continues)`);
+          }
+          return;
+        }
+        if (event.type === "permission.replied" || event.type === "question.replied") {
+          const requestId = extractRequestId(event);
+          if (requestId) {
+            watchdog.onInputResolved(sessionId, requestId);
+          } else {
+            instLog("warn", `${event.type}: requestId not found, watchdog not resumed`);
+          }
+          return;
+        }
         const messageId = extractMessageId(event);
 
         if (messageId && IGNORED_PING_MESSAGE_IDS.has(messageId)) {
@@ -426,6 +503,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
             instLog("info", `Event ignored (empty user message update shell)`);
             return;
           }
+        }
+
+        if (event.type === "message.part.delta") {
+          // If this is an assistant event (has agent name), treat as activity to refresh stage1.
+          if (agentName !== undefined) {
+            instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+            watchdog.onActivity(sessionId, { agentName });
+            return;
+          }
+          instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
+          return;
         }
 
         if (event.type === "message.part.updated") {
