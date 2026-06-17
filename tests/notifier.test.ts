@@ -143,6 +143,7 @@ describe("TmuxNotifier - actions", () => {
     const exact = "[Watchdog] Agent is waiting for your input";
     await notifier.notify("sess-1", "waiting", exact);
     const displayCall = calls.find((c) => c.cmd.length === 3 && c.cmd[1] === "display-message");
+    expect(displayCall).toBeDefined();
     expect(displayCall!.cmd).toEqual(["/usr/bin/tmux", "display-message", exact]);
     expect(
       calls.some((c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=cyan")),
