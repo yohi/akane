@@ -1,6 +1,6 @@
 import type { NotifierType } from "./config";
 
-export type NotifierStage = "warn" | "critical" | "silenced";
+export type NotifierStage = "warn" | "critical" | "silenced" | "waiting";
 
 export interface Notifier {
   notify(sessionId: string, stage: NotifierStage, message: string): Promise<void>;
@@ -22,6 +22,7 @@ const STYLE_BY_STAGE: Record<NotifierStage, string> = {
   warn: "bg=yellow",
   critical: "bg=red",
   silenced: "bg=red",
+  waiting: "bg=cyan",
 };
 
 export class TmuxNotifier implements Notifier {
@@ -125,10 +126,11 @@ export interface OSNotifierDeps {
   log?: (level: "warn" | "info", message: string) => void;
 }
 
-const OS_URGENCY_BY_STAGE: Record<NotifierStage, "normal" | "critical"> = {
+const OS_URGENCY_BY_STAGE: Record<NotifierStage, "low" | "normal" | "critical"> = {
   warn: "normal",
   critical: "critical",
   silenced: "critical",
+  waiting: "low",
 };
 
 /**
