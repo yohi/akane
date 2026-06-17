@@ -156,6 +156,42 @@ export function extractMessageId(event: OpenCodeEvent): string | undefined {
   return undefined;
 }
 
+function readAnySessionId(props: Record<string, unknown>): string | undefined {
+  const direct = (props as { sessionID?: string }).sessionID;
+  if (typeof direct === "string") return direct;
+  const part = (props as { part?: { sessionID?: string } }).part;
+  if (typeof part?.sessionID === "string") return part.sessionID;
+  const info = (props as { info?: { sessionID?: string; id?: string } }).info;
+  if (typeof info?.sessionID === "string") return info.sessionID;
+  if (typeof info?.id === "string") return info.id;
+  return undefined;
+}
+
+export function summarizeEvent(event: OpenCodeEvent): string {
+  const props = (event.properties ?? {}) as Record<string, unknown>;
+  const segs: string[] = [`type=${event.type}`];
+  const sid = readAnySessionId(props);
+  if (sid) segs.push(`sessionID=${sid}`);
+  if (event.type === "message.part.updated") {
+    const part = (props as { part?: { type?: string; state?: { status?: string } } }).part;
+    if (part?.type) segs.push(`partType=${part.type}`);
+    if (part?.state?.status) segs.push(`partStatus=${part.state.status}`);
+  }
+  return segs.join(" ");
+}
+
+export function logEvent(
+  event: OpenCodeEvent,
+  verbose: boolean,
+  log: (level: "info" | "warn", message: string) => void,
+): void {
+  if (verbose) {
+    log("info", `Event received (verbose): ${JSON.stringify(event)}`);
+    return;
+  }
+  log("info", `Event: ${summarizeEvent(event)}`);
+}
+
 class BoundedSet<T> {
   private set = new Set<T>();
   constructor(private limit: number) {}
@@ -310,7 +346,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike) => {
   return {
     event: async ({ event }: { event: OpenCodeEvent }) => {
       try {
-        instLog("info", `Event received: ${JSON.stringify(event)}`);
+        logEvent(event, config.verboseLog, instLog);
         if (!config.enabled) {
           instLog("info", `Event ignored (disabled)`);
           return;
