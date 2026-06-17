@@ -1182,6 +1182,16 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(pinger.calls.length).toBe(0); // call_2 still running
   });
+
+  test("tool parts do NOT un-pause a session awaiting input (design §7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1"); // PAUSED, timer stopped
+    watchdog.onToolRunning("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED — not re-armed
+    watchdog.onToolSettled("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED
+  });
 });
 ```
 
@@ -1216,6 +1226,15 @@ Add the methods (after `onInputResolved`):
   /** tool part reached `running` — active + tracked for steer suppression. */
   onToolRunning(sessionId: string, callId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
+    // PAUSED awaiting input: track the tool but do NOT re-arm — a tool part is
+    // assistant activity and must not un-pause the session (design §7; mirrors
+    // the onActivity PAUSED guard). The tracked callId survives into WATCHING
+    // because armOrReset preserves runningTools when the input later resolves.
+    const paused = this.sessions.get(sessionId);
+    if (paused && paused.state === "PAUSED" && paused.pendingRequests.size > 0) {
+      paused.runningTools.add(callId);
+      return;
+    }
     this.armOrReset(sessionId, {});
     const entry = this.sessions.get(sessionId);
     if (entry) entry.runningTools.add(callId);
@@ -1226,22 +1245,23 @@ Add the methods (after `onInputResolved`):
     if (this.stoppedSessions.has(sessionId)) return;
     const existing = this.sessions.get(sessionId);
     existing?.runningTools.delete(callId);
-    this.armOrReset(sessionId, {});
-    const entry = this.sessions.get(sessionId);
-    if (entry && existing) {
-      for (const id of existing.runningTools) entry.runningTools.add(id);
+    // PAUSED awaiting input: untrack but do NOT re-arm (design §7).
+    if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      return;
     }
+    // armOrReset carries over the (now reduced) runningTools set by reference,
+    // so no manual re-copy of the remaining ids is needed.
+    this.armOrReset(sessionId, {});
   }
 ```
 
-> `armOrReset` preserves `runningTools` from `existing`, so `onToolRunning` adding after re-arm is safe; in `onToolSettled` we delete first, then re-arm (which carries over the remaining set).
+> Both `onToolRunning`/`onToolSettled` respect the PAUSED guard (design §7): while input is pending they only mutate `runningTools` and return without re-arming, so a tool part cannot un-pause a session awaiting user input. Outside PAUSED, `armOrReset` preserves `runningTools` from `existing` by reference, so `onToolSettled` deletes the settled callId first and lets the re-arm carry over the remaining set (no manual re-copy).
 
 Add the **steer-suppression gate** at the top of `onStage2Expire` (after the `if (!entry) return;` guard, before the `pingCount < maxPings` block):
 
 ```ts
     if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0) {
       this.log("info", `[Watchdog] STAGE2 gated: ${entry.runningTools.size} tool(s) running for ${sessionId}; not injecting`);
-      const reNotify = entry.state !== "STAGE1_NOTIFIED" && entry.state !== "PINGED";
       // Notify critical only on first gate to avoid OS-notification spam while still gated.
       if (entry.state !== "PINGED") {
         entry.state = "PINGED";
@@ -1251,7 +1271,6 @@ Add the **steer-suppression gate** at the top of `onStage2Expire` (after the `if
           `[Watchdog] Agent ${sessionId} stalled but a tool is running; holding.`,
         );
       }
-      void reNotify;
       entry.timer = this.clock.setTimeout(() => {
         this.onStage2Expire(sessionId).catch((err) =>
           this.log("warn", `stage2 handler failed: ${String(err)}`),
@@ -1583,8 +1602,9 @@ describe("Watchdog - input/tool churn leak (design §7.4)", () => {
     watchdog.onInputRequested("s1", "per_1"); // PAUSED
     clock.advance(5000);
     expect(pinger.calls.length).toBe(0); // paused: no ping
-    watchdog.onToolRunning("s1", "call_1"); // still paused (activity ignored while pending)
+    watchdog.onToolRunning("s1", "call_1"); // tracked but stays PAUSED (design §7)
     watchdog.onToolSettled("s1", "call_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // tool parts did not un-pause
     watchdog.onInputResolved("s1", "per_1"); // resume WATCHING
     clock.advance(cfg.stage1Ms);
     clock.advance(cfg.stage2Ms);
@@ -1647,6 +1667,6 @@ Run in the devcontainer unless noted; the final integration check uses a real te
 
 ## Self-Review (writing-plans)
 
-- **Spec coverage:** §6.1 watchdog (Tasks 3.2/4.1/4.3) · §6.2 index signal layer (1.2/1.3/3.3/4.2/4.3) · §6.3 pinger steer (2.1) · §6.4 notifier waiting (3.1) · §6.5 config (1.1) · §6.6 logging (1.2) · §6.7 telemetry (5.2, optional). §7 edge cases (PAUSED guard, PAUSED×retry, tombstone, arm-lock bypass, delta self-ping) covered in 3.2/4.3/3.3/1.3. §9 tests mapped per file. §10 acceptance section above.
+- **Spec coverage:** §6.1 watchdog (Tasks 3.2/4.1/4.3) · §6.2 index signal layer (1.2/1.3/3.3/4.2/4.3) · §6.3 pinger steer (2.1) · §6.4 notifier waiting (3.1) · §6.5 config (1.1) · §6.6 logging (1.2) · §6.7 telemetry (5.2, optional). §7 edge cases (PAUSED guard〔onActivity=3.2 / tool パート=4.1〕, PAUSED×retry, tombstone, arm-lock bypass, delta self-ping) covered in 3.2/4.1/4.3/3.3/1.3. §9 tests mapped per file. §10 acceptance section above.
 - **Placeholders:** none — every code step shows full code; only the optional 5.2 references reading `telemetry.ts` first (it is gated as optional and instructs reading the existing pattern before writing, by design).
 - **Type consistency:** `DeliveryMode` (config) reused in pinger; `NotifierStage` extended once; `SessionEntry.pendingRequests` (Phase 3) and `runningTools` (Phase 4) added additively and preserved in `armOrReset`; method names `onInputRequested/onInputResolved/onToolRunning/onToolSettled/onStatusRetry/onStatusActive` used consistently between watchdog impl and index routing.
