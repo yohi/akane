@@ -345,3 +345,92 @@ describe("Watchdog - telemetry hooks", () => {
     expect(telemetry.recoveries).toBe(1);
   });
 });
+
+describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
+  test("onInputRequested stops timer, transitions to PAUSED, notifies waiting once", () => {
+    const { watchdog, notifier } = setup();
+    watchdog.onActivity("s1");
+    expect(watchdog.activeTimerCount()).toBe(1);
+    watchdog.onInputRequested("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(notifier.notifies.filter((n) => n.stage === "waiting").length).toBe(1);
+    watchdog.onInputRequested("s1", "que_2"); // second pending → no second notify
+    expect(notifier.notifies.filter((n) => n.stage === "waiting").length).toBe(1);
+  });
+
+  test("PAUSED suppresses stage1/stage2 (no notify, no ping)", async () => {
+    const { watchdog, notifier, pinger, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    clock.advance(10_000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(notifier.notifies.some((n) => n.stage === "warn" || n.stage === "critical")).toBe(false);
+    expect(pinger.calls.length).toBe(0);
+  });
+
+  test("partial resolve keeps PAUSED; full resolve returns to WATCHING and clears notifier", () => {
+    const { watchdog, notifier, clock } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    watchdog.onInputRequested("s1", "que_2");
+    watchdog.onInputResolved("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(0); // still PAUSED
+    watchdog.onInputResolved("s1", "que_2");
+    expect(watchdog.activeTimerCount()).toBe(1); // re-armed WATCHING
+    expect(notifier.cleared).toContain("s1");
+    clock.advance(1000);
+    expect(notifier.notifies.some((n) => n.stage === "warn")).toBe(true);
+  });
+
+  test("assistant activity does NOT un-pause while pending (design §7)", () => {
+    const { watchdog } = setup();
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    watchdog.onActivity("s1"); // must be ignored
+    expect(watchdog.activeTimerCount()).toBe(0);
+  });
+
+  test("onInputRequested respects tombstone (stopped session ignored)", () => {
+    const { watchdog, notifier } = setup();
+    watchdog.onActivity("s1");
+    watchdog.stop("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    expect(notifier.notifies.some((n) => n.stage === "waiting")).toBe(false);
+    expect(watchdog.activeSessionCount()).toBe(0);
+  });
+
+  test("pauseOnInputRequest=false makes onInputRequested a no-op", () => {
+    const { watchdog, notifier } = setup({ pauseOnInputRequest: false });
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(1); // unchanged
+    expect(notifier.notifies.some((n) => n.stage === "waiting")).toBe(false);
+  });
+
+  test("notifyWaiting=false pauses without a waiting notification", () => {
+    const { watchdog, notifier } = setup({ notifyWaiting: false });
+    watchdog.onActivity("s1");
+    watchdog.onInputRequested("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(notifier.notifies.some((n) => n.stage === "waiting")).toBe(false);
+  });
+
+  test("onInputRequested does NOT transition from SILENCED to PAUSED", async () => {
+    const { watchdog, clock, notifier } = setup({ maxPings: 1 });
+    watchdog.onActivity("s1");
+    clock.advance(1000); // stage1
+    clock.advance(1000); // stage2 -> ping
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000); // stage2 again -> SILENCED
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(watchdog.activeTimerCount()).toBe(0);
+    expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
+
+    // Try to trigger input request (should be ignored for SILENCED session)
+    watchdog.onInputRequested("s1", "per_1");
+    // Resolve should not trigger re-arm
+    watchdog.onInputResolved("s1", "per_1");
+    expect(watchdog.activeTimerCount()).toBe(0);
+  });
+});

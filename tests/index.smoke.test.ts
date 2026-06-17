@@ -6,6 +6,7 @@ import plugin, {
   extractMessageId,
   isNewUserMessage,
   routeSessionError,
+  extractRequestId,
   extractAgentName,
   type OpenCodeEvent,
 } from "../src/index";
@@ -406,6 +407,43 @@ describe("routeSessionError (recoverable vs terminal)", () => {
           },
         },
       });
+    } finally {
+      await instance.dispose();
+    }
+  });
+});
+
+describe("input-wait routing (design §5/§6.2)", () => {
+  test("extractSessionId reads permission/question sessionID from properties.sessionID", () => {
+    for (const t of ["permission.asked", "permission.replied", "question.asked", "question.replied"]) {
+      expect(extractSessionId({ type: t, properties: { sessionID: "s-in" } })).toBe("s-in");
+    }
+  });
+
+  test("extractRequestId: asked→properties.id, replied→properties.requestID", () => {
+    expect(extractRequestId({ type: "permission.asked", properties: { id: "per_1" } })).toBe("per_1");
+    expect(extractRequestId({ type: "question.asked", properties: { id: "que_1" } })).toBe("que_1");
+    expect(extractRequestId({ type: "permission.replied", properties: { requestID: "per_1" } })).toBe("per_1");
+    expect(extractRequestId({ type: "question.replied", properties: { requestID: "que_1" } })).toBe("que_1");
+    expect(extractRequestId({ type: "message.updated", properties: {} })).toBeUndefined();
+  });
+
+  test("event hook does not throw on asked/replied payloads", async () => {
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      $: () => undefined,
+      directory: `${process.cwd()}/input-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as (c: unknown) => Promise<{
+      event: (e: { event: unknown }) => Promise<void>;
+      dispose: () => Promise<void>;
+    }>)(ctx);
+    try {
+      await instance.event({ event: { type: "permission.asked", properties: { sessionID: "s1", id: "per_1" } } });
+      await instance.event({ event: { type: "permission.replied", properties: { sessionID: "s1", requestID: "per_1" } } });
+      await instance.event({ event: { type: "question.asked", properties: { sessionID: "s1", id: "que_1" } } });
+      await instance.event({ event: { type: "question.replied", properties: { sessionID: "s1", requestID: "que_1" } } });
     } finally {
       await instance.dispose();
     }

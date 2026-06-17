@@ -139,6 +139,16 @@ describe("TmuxNotifier - actions", () => {
       expect(Array.isArray(c.cmd)).toBe(true);
     }
   });
+  test("notify(waiting) passes message verbatim and applies cyan highlight", async () => {
+    const exact = "[Watchdog] Agent is waiting for your input";
+    await notifier.notify("sess-1", "waiting", exact);
+    const displayCall = calls.find((c) => c.cmd.length === 3 && c.cmd[1] === "display-message");
+    expect(displayCall).toBeDefined();
+    expect(displayCall!.cmd).toEqual(["/usr/bin/tmux", "display-message", exact]);
+    expect(
+      calls.some((c) => c.cmd[1] === "set-window-option" && c.cmd.includes("bg=cyan")),
+    ).toBe(true);
+  });
 });
 
 describe("TmuxNotifier - error containment", () => {
@@ -181,6 +191,13 @@ describe("OSNotifier - linux (notify-send)", () => {
     const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
     await n.notify("s1", "silenced", "hi");
     expect(calls[0]!.cmd[2]).toBe("critical");
+  });
+  test("waiting maps to low urgency", async () => {
+    const { spawn, calls } = buildSpawn({});
+    const which: WhichFn = () => "/usr/bin/notify-send";
+    const n = new OSNotifier({ platform: "linux", spawn, which, log: () => {} });
+    await n.notify("s1", "waiting", "hi");
+    expect(calls[0]!.cmd).toEqual(["/usr/bin/notify-send", "-u", "low", "Akane Watchdog", "hi"]);
   });
 
   test("disables silently when notify-send is absent", async () => {
