@@ -17,6 +17,11 @@ const cfg: WatchdogConfig = {
   maxPings: 1,
   pingMessage: "p",
   notifierType: "tmux",
+  delivery: "steer",
+  suppressPingWhileToolRunning: true,
+  pauseOnInputRequest: true,
+  notifyWaiting: true,
+  verboseLog: false,
   tmux: { enabled: true, displayMessage: true, highlightWindow: true },
   agents: {},
 };
