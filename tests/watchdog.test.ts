@@ -106,7 +106,7 @@ describe("Watchdog - basic timer behavior", () => {
     const { watchdog, notifier, clock } = setup();
     watchdog.onActivity("s1");
     clock.advance(1000);
-    expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies).toHaveLength(1);
     expect(notifier.notifies[0]!.stage).toBe("warn");
   });
 
@@ -117,7 +117,7 @@ describe("Watchdog - basic timer behavior", () => {
     clock.advance(1000); // stage2
     // Wait for async ping
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
     expect(pinger.calls[0]!.sessionId).toBe("s1");
     expect(pinger.calls[0]!.message).toBe("ping?");
     expect(notifier.notifies.some((n) => n.stage === "critical")).toBe(true);
@@ -127,13 +127,13 @@ describe("Watchdog - basic timer behavior", () => {
     const { watchdog, notifier, clock } = setup();
     watchdog.onActivity("s1");
     clock.advance(1000); // stage1 fires
-    expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies).toHaveLength(1);
     notifier.notifies.length = 0;
     watchdog.onActivity("s1"); // back to WATCHING
     clock.advance(999); // not yet stage1
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
     clock.advance(1); // stage1 again
-    expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies).toHaveLength(1);
   });
 });
 
@@ -144,10 +144,10 @@ describe("Watchdog - maxPings ceiling", () => {
     clock.advance(1000); // stage1
     clock.advance(1000); // stage2 → ping #1
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
     clock.advance(1000); // stage2 fires again with no activity
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1); // still 1, no new ping
+    expect(pinger.calls).toHaveLength(1); // still 1, no new ping
     expect(notifier.notifies.some((n) => n.stage === "silenced")).toBe(true);
   });
 
@@ -164,7 +164,7 @@ describe("Watchdog - maxPings ceiling", () => {
     clock.advance(1000); // stage1 again
     clock.advance(1000); // stage2 → ping again because pingCount reset
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(2);
+    expect(pinger.calls).toHaveLength(2);
   });
 });
 
@@ -176,7 +176,7 @@ describe("Watchdog - lifecycle cleanup", () => {
     watchdog.stop("s1");
     expect(watchdog.activeSessionCount()).toBe(0);
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
   });
 
   test("late message.part.updated after stop() is ignored (no timer rearm)", () => {
@@ -190,7 +190,7 @@ describe("Watchdog - lifecycle cleanup", () => {
     watchdog.stop("s1");
     watchdog.onActivity("s1"); // simulated late part event
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
     expect(watchdog.activeSessionCount()).toBe(0);
   });
 
@@ -202,7 +202,7 @@ describe("Watchdog - lifecycle cleanup", () => {
     watchdog.stop("s1");
     watchdog.onUserMessage("s1"); // explicit user-driven re-entry
     clock.advance(1000);
-    expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies).toHaveLength(1);
     expect(notifier.notifies[0]!.stage).toBe("warn");
   });
 
@@ -218,7 +218,7 @@ describe("Watchdog - lifecycle cleanup", () => {
     expect(watchdog.activeTimerCount()).toBe(0);
 
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
   });
 });
 
@@ -228,10 +228,10 @@ describe("Watchdog - initial hang detection (design §3.4)", () => {
     watchdog.onUserMessage("s1");
     expect(watchdog.activeSessionCount()).toBe(1);
     clock.advance(1000); // stage1
-    expect(notifier.notifies.length).toBe(1);
+    expect(notifier.notifies).toHaveLength(1);
     clock.advance(1000); // stage2 ping
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
   });
 });
 
@@ -241,7 +241,7 @@ describe("Watchdog - empty session no false trigger", () => {
     watchdog.onSessionCreated("s1");
     clock.advance(60_000);
     expect(watchdog.activeSessionCount()).toBe(0);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
   });
 });
 
@@ -253,7 +253,7 @@ describe("Watchdog - agent filtering", () => {
     watchdog.onActivity("s1", { agentName: "debug" });
     expect(watchdog.activeSessionCount()).toBe(0);
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
   });
 
   test("include list restricts monitoring to listed agents only", () => {
@@ -263,7 +263,7 @@ describe("Watchdog - agent filtering", () => {
     watchdog.onActivity("s1", { agentName: "secondary" });
     expect(watchdog.activeSessionCount()).toBe(0);
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
 
     watchdog.onActivity("s2", { agentName: "main" });
     expect(watchdog.activeSessionCount()).toBe(1);
@@ -278,7 +278,7 @@ describe("Watchdog - noteError and reason-aware ping", () => {
     clock.advance(1000); // stage1
     clock.advance(1000); // stage2 → ping
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
     expect(pinger.calls[0]!.message).toBe("ping?");
     expect(pinger.calls[0]!.context).toEqual({ reason: "rate_limit" });
   });
@@ -294,7 +294,7 @@ describe("Watchdog - noteError and reason-aware ping", () => {
     watchdog.onActivity("s1");
     watchdog.stop("s1");
     watchdog.noteError("s1", "rate_limit");
-    expect(pinger.calls.length).toBe(0);
+    expect(pinger.calls).toHaveLength(0);
   });
 
   test("ping without a noted reason uses base message unchanged", async () => {
@@ -354,9 +354,9 @@ describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
     expect(watchdog.activeTimerCount()).toBe(1);
     watchdog.onInputRequested("s1", "per_1");
     expect(watchdog.activeTimerCount()).toBe(0);
-    expect(notifier.notifies.filter((n) => n.stage === "waiting").length).toBe(1);
+    expect(notifier.notifies.filter((n) => n.stage === "waiting")).toHaveLength(1);
     watchdog.onInputRequested("s1", "que_2"); // second pending → no second notify
-    expect(notifier.notifies.filter((n) => n.stage === "waiting").length).toBe(1);
+    expect(notifier.notifies.filter((n) => n.stage === "waiting")).toHaveLength(1);
   });
 
   test("PAUSED suppresses stage1/stage2 (no notify, no ping)", async () => {
@@ -366,7 +366,7 @@ describe("Watchdog - PAUSED input-wait gating (design §4/§6.1)", () => {
     clock.advance(10_000);
     await new Promise((r) => setTimeout(r, 10));
     expect(notifier.notifies.some((n) => n.stage === "warn" || n.stage === "critical")).toBe(false);
-    expect(pinger.calls.length).toBe(0);
+    expect(pinger.calls).toHaveLength(0);
   });
 
   test("partial resolve keeps PAUSED; full resolve returns to WATCHING and clears notifier", () => {
@@ -443,7 +443,7 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     clock.advance(1000); // stage1
     clock.advance(1000); // stage2 → gate
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(0); // steer suppressed
+    expect(pinger.calls).toHaveLength(0); // steer suppressed
     expect(notifier.notifies.some((n) => n.stage === "critical")).toBe(true);
     expect(watchdog.activeTimerCount()).toBe(1); // rescheduled
   });
@@ -455,12 +455,12 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     clock.advance(1000); // stage2 (1st gate → critical)
     await new Promise((r) => setTimeout(r, 10));
     const after1 = notifier.notifies.filter((n) => n.stage === "critical").length;
-    expect(pinger.calls.length).toBe(0);
+    expect(pinger.calls).toHaveLength(0);
     clock.advance(1000); // stage2 again (gate limit reached → ping injected)
     await new Promise((r) => setTimeout(r, 10));
     const after2 = notifier.notifies.filter((n) => n.stage === "critical").length;
     expect(after2).toBe(after1 + 1); // ping injected triggers one critical notification
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
   });
 
   test("maxToolGateCycles=2 suppresses two stage2 cycles before injecting", async () => {
@@ -471,11 +471,11 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     await new Promise((r) => setTimeout(r, 10));
     clock.advance(1000);
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(0);
-    expect(notifier.notifies.filter((n) => n.stage === "critical").length).toBe(1);
+    expect(pinger.calls).toHaveLength(0);
+    expect(notifier.notifies.filter((n) => n.stage === "critical")).toHaveLength(1);
     clock.advance(1000);
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
   });
 
   test("after tool settles, normal stage2 ping resumes", async () => {
@@ -488,7 +488,7 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     clock.advance(1000); // stage1
     clock.advance(1000); // stage2 → ping now allowed
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
   });
 
   test("suppressPingWhileToolRunning=false lets the ping fire even with a running tool", async () => {
@@ -497,7 +497,7 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     clock.advance(1000);
     clock.advance(1000);
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(1);
+    expect(pinger.calls).toHaveLength(1);
   });
 
   test("two running tools: settling one keeps suppression until both settle", async () => {
@@ -508,7 +508,7 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     clock.advance(1000);
     clock.advance(1000);
     await new Promise((r) => setTimeout(r, 10));
-    expect(pinger.calls.length).toBe(0); // call_2 still running
+    expect(pinger.calls).toHaveLength(0); // call_2 still running
   });
 
   test("tool parts do NOT un-pause a session awaiting input (design §7)", () => {
@@ -529,7 +529,7 @@ describe("Watchdog - retry suppression (design §6.1/§7)", () => {
     watchdog.onStatusRetry("s1");
     expect(watchdog.activeTimerCount()).toBe(0);
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0); // no escalation while retrying
+    expect(notifier.notifies).toHaveLength(0); // no escalation while retrying
     watchdog.onStatusActive("s1");
     expect(watchdog.activeTimerCount()).toBe(1); // re-armed
     clock.advance(1000);
@@ -554,7 +554,7 @@ describe("Watchdog - retry suppression (design §6.1/§7)", () => {
     watchdog.onActivity("s1");
     expect(watchdog.activeTimerCount()).toBe(0);
     clock.advance(10_000);
-    expect(notifier.notifies.length).toBe(0);
+    expect(notifier.notifies).toHaveLength(0);
   });
 
   test("Issue 1: onActivity during retry suppression preserves retrySuppressed so onStatusActive re-arms correctly", () => {
@@ -590,7 +590,7 @@ describe("Watchdog - retry suppression (design §6.1/§7)", () => {
     clock.advance(10_000);
     // No new warn/critical notifications must have been added after the snapshot
     const newNotifies = notifier.notifies.slice(countBefore);
-    expect(newNotifies.filter((n) => n.stage === "warn" || n.stage === "critical").length).toBe(0);
+    expect(newNotifies.filter((n) => n.stage === "warn" || n.stage === "critical")).toHaveLength(0);
   });
 
   test("onStatusRetry on SILENCED session does not set retrySuppressed, so onUserMessage can still re-arm", async () => {
