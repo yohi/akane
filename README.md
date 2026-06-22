@@ -78,6 +78,8 @@ cp -r package.json dist ~/.config/opencode/plugins/akane/
       "stage1Ms": 180000,
       "stage2Ms": 180000,
       "maxPings": 1,
+      "maxToolGateCycles": 1,
+      "delivery": "steer",
       "delivery": "steer",
       "suppressPingWhileToolRunning": true,
       "pauseOnInputRequest": true,
