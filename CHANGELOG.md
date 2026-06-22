@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/yohi/akane/compare/v1.2.0...v1.3.0) (2026-06-22)
+
+
+### Features
+
+* **config:** maxToolGateCycles設定を追加しツール実行中ゲートに猶予上限を設ける ([9a1a0da](https://github.com/yohi/akane/commit/9a1a0dab312fb4ae58289ca67b960145bf63ee22))
+* **watchdog:** ツール実行中のStage2ゲートにmaxToolGateCycles上限を追加 ([3fe56a5](https://github.com/yohi/akane/commit/3fe56a557802f40fc93e850eea7d42a1632e0762))
+* **watchdog:** ツール実行中のStage2ゲートにツールゲートサイクル上限を実装 ([54af22e](https://github.com/yohi/akane/commit/54af22ec3979a249fe5ff579c821bdf76a32f481))
+
+
+### Bug Fixes
+
+* コードレビュー指摘事項の修正（重複行削除、コメント修正） ([d319e52](https://github.com/yohi/akane/commit/d319e52eb5ca2919af500f5a361f144252d62b67))
+
 ## [1.2.0](https://github.com/yohi/akane/compare/v1.1.1...v1.2.0) (2026-06-17)
 
 
