@@ -74,7 +74,6 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
     │                                                        │
     ▼                                                        │
  WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool running?
- WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool running?
     ▲   ▲   (yellow)              ├─ yes ─▶ ◇ toolGateCycles < maxToolGateCycles?
     │   │                         │         ├ yes ▶ steer抑止 (critical通知/据え置き, 再スケジュール, toolGateCycles++)
     │   │                         │         └ no  ▶ ◇ pingCount < max?
@@ -83,9 +82,6 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
     │   │                         └─ no ──▶ ◇ pingCount < max?
     │   │                                      ├ yes ▶ PINGED (steer注入, red)
     │   │                                      └ no  ▶ SILENCED (red)
-    │   │                                        └─ no ──▶ ◇ pingCount < max?
-    │   │                                                  ├ yes ▶ PINGED (steer注入, red)
-    │   │                                                  └ no  ▶ SILENCED (red)
     │   │                                                              │
     │   └──────────────── user message / *.replied ───────────────────┘
     │
@@ -192,7 +188,6 @@ export interface WatchdogConfig {
   maxPings: number;
   maxToolGateCycles: number;
   pingMessage: string;
-  pingMessage: string;
   notifierType: NotifierType;
   delivery: "steer" | "queue";
   suppressPingWhileToolRunning: boolean;
@@ -240,7 +235,6 @@ export interface WatchdogConfig {
    - `OPENCODE_WATCHDOG_STAGE2_MS` (デフォルト: 180,000ms / 3分)
    - `OPENCODE_WATCHDOG_MAX_PINGS` (デフォルト: 1)
    - `OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES` (デフォルト: 1)
-   - `OPENCODE_WATCHDOG_NOTIFIER_TYPE` (デフォルト: "tmux")
    - `OPENCODE_WATCHDOG_NOTIFIER_TYPE` (デフォルト: "tmux")
    - `OPENCODE_WATCHDOG_REPORT_MS` (デフォルト: 60,000ms / 1分)
    - `OPENCODE_WATCHDOG_DELIVERY` (デフォルト: "steer")

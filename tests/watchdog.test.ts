@@ -456,7 +456,7 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     await new Promise((r) => setTimeout(r, 10));
     const after1 = notifier.notifies.filter((n) => n.stage === "critical").length;
     expect(pinger.calls.length).toBe(0);
-    clock.advance(1000); // stage2 again (still gated)
+    clock.advance(1000); // stage2 again (gate limit reached → ping injected)
     await new Promise((r) => setTimeout(r, 10));
     const after2 = notifier.notifies.filter((n) => n.stage === "critical").length;
     expect(after2).toBe(after1 + 1); // ping injected triggers one critical notification
