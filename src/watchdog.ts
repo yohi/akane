@@ -18,6 +18,7 @@ interface SessionEntry {
   runningTools: Set<string>;
   retrySuppressed?: boolean;
   toolGateNotified: boolean;
+  toolGateCycles: number;
 }
 
 export interface WatchdogDeps {
@@ -152,7 +153,7 @@ export class Watchdog {
       // 監視対象外と判定される場合（include リスト使用時等）にゾンビエントリを生成しないよう
       // ここで早期リターンする (design §3.2)。
       if (!this.isAgentMonitored(undefined)) return;
-      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set(), runningTools: new Set(), toolGateNotified: false };
+      entry = { state: "PAUSED", timer: null, pingCount: 0, pendingRequests: new Set(), runningTools: new Set(), toolGateNotified: false, toolGateCycles: 0 };
       this.sessions.set(sessionId, entry);
     }
     const wasEmpty = entry.pendingRequests.size === 0;
@@ -324,6 +325,7 @@ export class Watchdog {
       pendingRequests: existing?.pendingRequests ?? new Set(),
       runningTools: existing?.runningTools ?? new Set(),
       toolGateNotified: false,
+      toolGateCycles: 0,
     };
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
@@ -389,8 +391,9 @@ export class Watchdog {
       return;
     }
 
-    if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0) {
+    if (this.config.suppressPingWhileToolRunning && entry.runningTools.size > 0 && entry.toolGateCycles < this.config.maxToolGateCycles) {
       this.log("info", `[Watchdog] STAGE2 gated: ${entry.runningTools.size} tool(s) running for ${sessionId}; not injecting`);
+      entry.toolGateCycles += 1;
       // Set the timer before any await so that a concurrent armOrReset (e.g. from
       // onToolSettled arriving while the notification is in-flight) can properly
       // clear it — mirrors the pattern used in onStage1Expire and the ping path.

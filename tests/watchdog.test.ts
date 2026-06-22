@@ -59,6 +59,7 @@ const baseConfig: WatchdogConfig = {
   stage1Ms: 1000,
   stage2Ms: 1000,
   maxPings: 1,
+  maxToolGateCycles: 1,
   pingMessage: "ping?",
   notifierType: "tmux",
   delivery: "steer",
@@ -447,17 +448,34 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     expect(watchdog.activeTimerCount()).toBe(1); // rescheduled
   });
 
-  test("repeated stage2 while tool runs does not spam critical notifications", async () => {
-    const { watchdog, notifier, clock } = setup();
+  test("second stage2 while tool still runs injects ping without spamming critical notifications", async () => {
+    const { watchdog, pinger, notifier, clock } = setup();
     watchdog.onToolRunning("s1", "call_1");
     clock.advance(1000); // stage1
     clock.advance(1000); // stage2 (1st gate → critical)
     await new Promise((r) => setTimeout(r, 10));
     const after1 = notifier.notifies.filter((n) => n.stage === "critical").length;
+    expect(pinger.calls.length).toBe(0);
     clock.advance(1000); // stage2 again (still gated)
     await new Promise((r) => setTimeout(r, 10));
     const after2 = notifier.notifies.filter((n) => n.stage === "critical").length;
-    expect(after2).toBe(after1); // no re-notify while still gated
+    expect(after2).toBe(after1 + 1); // ping injected triggers one critical notification
+    expect(pinger.calls.length).toBe(1);
+  });
+
+  test("maxToolGateCycles=2 suppresses two stage2 cycles before injecting", async () => {
+    const { watchdog, pinger, notifier, clock } = setup({ maxToolGateCycles: 2 });
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(0);
+    expect(notifier.notifies.filter((n) => n.stage === "critical").length).toBe(1);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pinger.calls.length).toBe(1);
   });
 
   test("after tool settles, normal stage2 ping resumes", async () => {

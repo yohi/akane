@@ -15,6 +15,7 @@ const cfg: WatchdogConfig = {
   stage1Ms: 1000,
   stage2Ms: 1000,
   maxPings: 1,
+  maxToolGateCycles: 1,
   pingMessage: "p",
   notifierType: "tmux",
   delivery: "steer",
