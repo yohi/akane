@@ -7,6 +7,7 @@ export interface WatchdogConfig {
   stage1Ms: number;
   stage2Ms: number;
   maxPings: number;
+  maxToolGateCycles: number;
   pingMessage: string;
   notifierType: NotifierType;
   delivery: DeliveryMode;
@@ -40,6 +41,7 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
   stage1Ms: 180_000,
   stage2Ms: 180_000,
   maxPings: 1,
+  maxToolGateCycles: 1,
   pingMessage:
     "現在の状況を教えてください。ハングしているようであれば、思考プロセスを要約して次のアクションを提示してください。",
   notifierType: "tmux",
@@ -137,6 +139,11 @@ export function resolveConfig(
   const envStage1 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE1_MS, "OPENCODE_WATCHDOG_STAGE1_MS", warn);
   const envStage2 = parsePositiveInt(env.OPENCODE_WATCHDOG_STAGE2_MS, "OPENCODE_WATCHDOG_STAGE2_MS", warn);
   const envMaxPings = parsePositiveInt(env.OPENCODE_WATCHDOG_MAX_PINGS, "OPENCODE_WATCHDOG_MAX_PINGS", warn);
+  const envMaxToolGateCycles = parsePositiveInt(
+    env.OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES,
+    "OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES",
+    warn,
+  );
 
   const envNotifierType = parseNotifierType(
     env.OPENCODE_WATCHDOG_NOTIFIER_TYPE,
@@ -152,6 +159,7 @@ export function resolveConfig(
   const projStage1 = validateNumber(project.stage1Ms, "stage1Ms", warn, true);
   const projStage2 = validateNumber(project.stage2Ms, "stage2Ms", warn, true);
   const projMaxPings = validateNumber(project.maxPings, "maxPings", warn, true);
+  const projMaxToolGateCycles = validateNumber(project.maxToolGateCycles, "maxToolGateCycles", warn, true);
 
   const envDelivery = parseDelivery(env.OPENCODE_WATCHDOG_DELIVERY, "OPENCODE_WATCHDOG_DELIVERY", warn);
   const projDelivery = parseDelivery(project.delivery, "delivery", warn);
@@ -173,6 +181,8 @@ export function resolveConfig(
     stage1Ms: envStage1 ?? projStage1 ?? DEFAULT_CONFIG.stage1Ms,
     stage2Ms: envStage2 ?? projStage2 ?? DEFAULT_CONFIG.stage2Ms,
     maxPings: envMaxPings ?? projMaxPings ?? DEFAULT_CONFIG.maxPings,
+    maxToolGateCycles:
+      envMaxToolGateCycles ?? projMaxToolGateCycles ?? DEFAULT_CONFIG.maxToolGateCycles,
     pingMessage: project.pingMessage ?? DEFAULT_CONFIG.pingMessage,
     notifierType: envNotifierType ?? projNotifierType ?? DEFAULT_CONFIG.notifierType,
     delivery: envDelivery ?? projDelivery ?? DEFAULT_CONFIG.delivery,
