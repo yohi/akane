@@ -74,10 +74,14 @@ OpenCode の Plugin API (`event` フックや `client` SDK) を利用する。
     │                                                        │
     ▼                                                        │
  WATCHING ──stage1──▶ STAGE1_NOTIFIED ──stage2──▶ ◇ tool running?
-    ▲   ▲                  (yellow)              ├─ yes ─▶ steer抑止 (critical通知/据え置き, 再スケジュール)
-    │   │                                        └─ no ──▶ ◇ pingCount < max?
-    │   │                                                  ├ yes ▶ PINGED (steer注入, red)
-    │   │                                                  └ no  ▶ SILENCED (red)
+    ▲   ▲   (yellow)              ├─ yes ─▶ ◇ toolGateCycles < maxToolGateCycles?
+    │   │                         │         ├ yes ▶ steer抑止 (critical通知/据え置き, 再スケジュール, toolGateCycles++)
+    │   │                         │         └ no  ▶ ◇ pingCount < max?
+    │   │                         │                   ├ yes ▶ PINGED (steer注入, red)
+    │   │                         │                   └ no  ▶ SILENCED (red)
+    │   │                         └─ no ──▶ ◇ pingCount < max?
+    │   │                                      ├ yes ▶ PINGED (steer注入, red)
+    │   │                                      └ no  ▶ SILENCED (red)
     │   │                                                              │
     │   └──────────────── user message / *.replied ───────────────────┘
     │
@@ -182,6 +186,7 @@ export interface WatchdogConfig {
   stage1Ms: number;
   stage2Ms: number;
   maxPings: number;
+  maxToolGateCycles: number;
   pingMessage: string;
   notifierType: NotifierType;
   delivery: "steer" | "queue";
@@ -209,6 +214,7 @@ export interface WatchdogConfig {
 | `stage1Ms` | `180000` (3 min) | 要件指定 |
 | `stage2Ms` | `180000` (3 min) | stage1 と対称。トータル 6 min で Ping |
 | `maxPings` | `1` | 無限ループ・トークン浪費・レート制限の二次障害を回避 |
+| `maxToolGateCycles` | `1` | ツール実行中の誤介入を1回まで許容し、それ以上は通常のPing経路へ進める |
 | `pingMessage` | `"現在の状況を教えてください。ハングしているようであれば、思考プロセスを要約して次のアクションを提示してください。"` | 要件指定 |
 | `notifierType` | `"tmux"` | Tmux 連携をデフォルトの通知方式とする |
 | `delivery` | `"steer"` | 進行中のターンに割り込んで即注入（steer）を優先 |
@@ -228,6 +234,7 @@ export interface WatchdogConfig {
    - `OPENCODE_WATCHDOG_STAGE1_MS` (デフォルト: 180,000ms / 3分)
    - `OPENCODE_WATCHDOG_STAGE2_MS` (デフォルト: 180,000ms / 3分)
    - `OPENCODE_WATCHDOG_MAX_PINGS` (デフォルト: 1)
+   - `OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES` (デフォルト: 1)
    - `OPENCODE_WATCHDOG_NOTIFIER_TYPE` (デフォルト: "tmux")
    - `OPENCODE_WATCHDOG_REPORT_MS` (デフォルト: 60,000ms / 1分)
    - `OPENCODE_WATCHDOG_DELIVERY` (デフォルト: "steer")

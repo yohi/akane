@@ -160,7 +160,8 @@ function readProjectConfig(
     typeof candidate.notifierType === "string" ||
     typeof candidate.tmux === "object" ||
     typeof candidate.agents === "object" ||
-    typeof candidate.suppressPingWhileToolRunning === "boolean"
+    typeof candidate.suppressPingWhileToolRunning === "boolean" ||
+    typeof candidate.maxToolGateCycles === "number"
   ) {
     return candidate;
   }

@@ -31,6 +31,7 @@
 | `OPENCODE_WATCHDOG_STAGE1_MS` | 警告（STAGE1）になるまでの応答なし時間 | `180000` (3分) |
 | `OPENCODE_WATCHDOG_STAGE2_MS` | Ping注入および致命的警告（STAGE2）までの時間 | `180000` (3分) |
 | `OPENCODE_WATCHDOG_MAX_PINGS` | 自動Pingを実行する上限回数 | `1` |
+| `OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES` | ツール実行中に Stage2 に達した場合、Ping 注入を抑止する回数 | `1` |
 | `OPENCODE_WATCHDOG_NOTIFIER_TYPE` | 通知方法の指定（`tmux` または `os`） | `tmux` |
 | `OPENCODE_WATCHDOG_REPORT_MS` | テレメトリの定期レポート出力間隔（ミリ秒） | `60000` (1分) |
 | `OPENCODE_WATCHDOG_DELIVERY` | 注入時の配信モードの指定（`steer` または `queue`） | `steer` |
@@ -78,6 +79,7 @@ cp -r package.json dist ~/.config/opencode/plugins/akane/
       "stage1Ms": 180000,
       "stage2Ms": 180000,
       "maxPings": 1,
+      "maxToolGateCycles": 1,
       "delivery": "steer",
       "suppressPingWhileToolRunning": true,
       "pauseOnInputRequest": true,

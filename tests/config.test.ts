@@ -8,6 +8,7 @@ describe("resolveConfig", () => {
     expect(cfg.stage1Ms).toBe(180_000);
     expect(cfg.stage2Ms).toBe(180_000);
     expect(cfg.maxPings).toBe(1);
+    expect(cfg.maxToolGateCycles).toBe(1);
     expect(cfg.pingMessage).toBe(DEFAULT_CONFIG.pingMessage);
     expect(cfg.tmux.enabled).toBe(true);
     expect(cfg.tmux.displayMessage).toBe(true);
@@ -16,21 +17,23 @@ describe("resolveConfig", () => {
 
   test("project config overrides defaults", () => {
     const sources: ConfigSources = {
-      project: { stage1Ms: 60_000, maxPings: 3 },
+      project: { stage1Ms: 60_000, maxPings: 3, maxToolGateCycles: 2 },
     };
     const cfg = resolveConfig(sources);
     expect(cfg.stage1Ms).toBe(60_000);
     expect(cfg.maxPings).toBe(3);
+    expect(cfg.maxToolGateCycles).toBe(2);
     expect(cfg.stage2Ms).toBe(180_000); // default preserved
   });
 
   test("env overrides project config", () => {
     const sources: ConfigSources = {
-      project: { stage1Ms: 60_000 },
-      env: { OPENCODE_WATCHDOG_STAGE1_MS: "30000" },
+      project: { stage1Ms: 60_000, maxToolGateCycles: 3 },
+      env: { OPENCODE_WATCHDOG_STAGE1_MS: "30000", OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES: "2" },
     };
     const cfg = resolveConfig(sources);
     expect(cfg.stage1Ms).toBe(30_000);
+    expect(cfg.maxToolGateCycles).toBe(2);
   });
 
   test("env OPENCODE_WATCHDOG_ENABLED=false disables", () => {
@@ -69,6 +72,18 @@ describe("resolveConfig", () => {
     );
     expect(cfg.maxPings).toBe(1);
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("lower-priority source");
+  });
+
+  test("env OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES=0 falls back to default", () => {
+    const warnings: string[] = [];
+    const cfg = resolveConfig(
+      { env: { OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES: "0" } },
+      (msg) => warnings.push(msg),
+    );
+    expect(cfg.maxToolGateCycles).toBe(1);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("OPENCODE_WATCHDOG_MAX_TOOL_GATE_CYCLES");
     expect(warnings[0]).toContain("lower-priority source");
   });
 
