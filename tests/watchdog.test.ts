@@ -463,6 +463,20 @@ describe("Watchdog - tool-aware steer suppression (design §4/§6.1)", () => {
     expect(pinger.calls).toHaveLength(1);
   });
 
+  test("repeated running update for the same tool does not reset the gate cycle", async () => {
+    const { watchdog, pinger, clock } = setup();
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000);
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+
+    watchdog.onToolRunning("s1", "call_1");
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(pinger.calls).toHaveLength(1);
+  });
+
   test("maxToolGateCycles=2 suppresses two stage2 cycles before injecting", async () => {
     const { watchdog, pinger, notifier, clock } = setup({ maxToolGateCycles: 2 });
     watchdog.onToolRunning("s1", "call_1");
