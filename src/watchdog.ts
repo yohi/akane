@@ -189,13 +189,17 @@ export class Watchdog {
     // assistant activity and must not un-pause the session (design §7; mirrors
     // the onActivity PAUSED guard). The tracked callId survives into WATCHING
     // because armOrReset preserves runningTools when the input later resolves.
-    const paused = this.sessions.get(sessionId);
-    if (paused && paused.state === "PAUSED" && paused.pendingRequests.size > 0) {
-      paused.runningTools.add(callId);
+    const existing = this.sessions.get(sessionId);
+    if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      existing.runningTools.add(callId);
       return;
     }
-    if (paused && paused.state === "SILENCED") {
+    if (existing && existing.state === "SILENCED") {
       this.log("info", `[Watchdog] onToolRunning ignored: session ${sessionId} is SILENCED`);
+      return;
+    }
+    if (existing?.runningTools.has(callId)) {
+      this.log("info", `[Watchdog] onToolRunning ignored: call ${callId} is already running for ${sessionId}`);
       return;
     }
     this.armOrReset(sessionId, {});
@@ -484,4 +488,3 @@ export class Watchdog {
     return true;
   }
 }
-
