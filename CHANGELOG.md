@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/yohi/akane/compare/v1.3.0...v1.3.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* 重複するtool runningでゲートがリセットされる問題を修正 ([9bf9b95](https://github.com/yohi/akane/commit/9bf9b958282e6fad51b908be1ce3f44a4fd39d38))
+* 重複するtool runningでゲートがリセットされる問題を修正 ([d33dd58](https://github.com/yohi/akane/commit/d33dd58e60045ad9ffc3f9b57b29531ff12d2a3d))
+
 ## [1.3.0](https://github.com/yohi/akane/compare/v1.2.0...v1.3.0) (2026-06-22)
 
 
