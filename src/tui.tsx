@@ -13,6 +13,12 @@ interface AgentEntry {
   lastSeen: number;
 }
 
+interface SubagentEntry {
+  key: string;
+  name: string;
+  source: "session" | "event";
+}
+
 interface SidebarProps {
   api: TuiPluginApi;
   sessionId: string;
@@ -116,11 +122,25 @@ function Sidebar(props: SidebarProps) {
     );
   };
 
-  const activeSubagentNames = (): string[] => {
-    const fromSessions = activeSubagentSessions().map((session) => session.agent!);
-    const fromEvents = activeEventAgents().map((entry) => entry.name);
-    const combined = Array.from(new Set([...fromSessions, ...fromEvents]));
-    return combined.sort();
+  const activeSubagentNames = (): SubagentEntry[] => {
+    const fromSessions: SubagentEntry[] = activeSubagentSessions().map((session) => ({
+      key: session.id,
+      name: session.agent!,
+      source: "session",
+    }));
+    const fromEvents: SubagentEntry[] = activeEventAgents().map((entry) => ({
+      key: `event:${entry.name}`,
+      name: entry.name,
+      source: "event",
+    }));
+    const seen = new Set<string>();
+    const combined: SubagentEntry[] = [];
+    for (const entry of [...fromSessions, ...fromEvents]) {
+      if (seen.has(entry.key)) continue;
+      seen.add(entry.key);
+      combined.push(entry);
+    }
+    return combined.sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const branch = () => props.api.state.vcs?.branch ?? "-";
@@ -176,9 +196,9 @@ function Sidebar(props: SidebarProps) {
           <br />
         </Show>
         <For each={activeSubagentNames()}>
-          {(name) => (
+          {(entry) => (
             <span>
-              <span>• {name}</span>
+              <span>• {entry.name}{entry.source === "session" ? ` (${entry.key.slice(-6)})` : ""}</span>
               <br />
             </span>
           )}
