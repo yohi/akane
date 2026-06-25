@@ -275,6 +275,7 @@ export function routeSessionError(properties: unknown): SessionErrorRoute {
 }
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 const LOG_FILE = (typeof process !== "undefined" ? process.env.HOME ?? "." : ".") + "/opencode-watchdog.log";
 
@@ -344,6 +345,18 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
 
   instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir}, stateDir: ${stateDir})`);
 
+  const debugLog = (message: string) => {
+    if (!stateDir) return;
+    try {
+      const dir = path.join(stateDir, ".akane");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.appendFileSync(path.join(dir, "watchdog-debug.log"), `${new Date().toISOString()} ${message}\n`);
+    } catch {
+      // ignore debug logging errors
+    }
+  };
+  debugLog(`INIT inputDir=${inputDir} stateDir=${stateDir} config=${JSON.stringify(config)}`);
+
   const clock = new RealClock();
   const pinger = new OpenCodeAdapter(input?.client, config.delivery);
   const notifier = createNotifier(config.notifierType, {
@@ -386,6 +399,8 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           return;
         }
         const sessionId = extractSessionId(event);
+        debugLog(`EVENT type=${event.type} sessionId=${sessionId ?? "-"}`);
+
 
         if (event.type === "session.created" || event.type === "session.updated") {
           instLog("info", `Event ignored (informational session event)`);
@@ -483,6 +498,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
             "info",
             `Event triggered onUserMessage (bypassing arm lock) for session ${sessionId} (messageId: ${messageId})`,
           );
+          debugLog(`ACTION onUserMessage sessionId=${sessionId} source=${isManualUserMessage ? "manual" : "typing"}`);
           watchdog.onUserMessage(sessionId, { agentName });
           return;
         }
@@ -532,6 +548,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           // If this is an assistant event (has agent name), treat as activity to refresh stage1.
           if (agentName !== undefined) {
             instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+            debugLog(`ACTION onActivity (delta) sessionId=${sessionId} agentName=${agentName}`);
             watchdog.onActivity(sessionId, { agentName });
             return;
           }
@@ -539,6 +556,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           const deltaText = (event.properties as { delta?: string } | undefined)?.delta;
           if (typeof deltaText === "string" && deltaText.length > 0) {
             instLog("info", `Event triggered onUserMessage (stream delta) for session ${sessionId}`);
+            debugLog(`ACTION onUserMessage (delta) sessionId=${sessionId}`);
             watchdog.onUserMessage(sessionId, { agentName });
             return;
           }
@@ -579,6 +597,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
               "info",
               `Event triggered onActivity (assistant part update) for session ${sessionId}`,
             );
+            debugLog(`ACTION onActivity (part) sessionId=${sessionId} agentName=${agentName}`);
             watchdog.onActivity(sessionId, { agentName });
             return;
           }
