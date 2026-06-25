@@ -32,4 +32,5 @@ coverage/
 .opencode/node_modules/
 .opencode/bun.lock
 .opencode/bun.lockb
-.opencode/plugins/akane/dist/
+.opencode/plugins/akane.server.js
+.opencode/plugins/akane.tui.js
