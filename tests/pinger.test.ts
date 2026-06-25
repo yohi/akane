@@ -25,93 +25,29 @@ describe("MockPinger", () => {
 });
 
 describe("OpenCodeAdapter", () => {
-  test("delegates with V2 { sessionID, parts, delivery } shape", async () => {
+  test("delegates with legacy { path: { id }, body: { parts } } shape", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
-    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    const adapter = new OpenCodeAdapter(fakeClient);
     await adapter.inject("sess-abc", "ping?");
     expect(calls.length).toBe(1);
-    expect(calls[0]!.sessionID).toBe("sess-abc");
-    expect(calls[0]!.delivery).toBe("steer");
-    const parts = calls[0]!.parts as Array<{ type: string; text: string }>;
+    const legacy = calls[0] as { path?: { id?: string }; body?: { parts?: unknown[] } };
+    expect(legacy.path?.id).toBe("sess-abc");
+    expect(Array.isArray(legacy.body?.parts)).toBe(true);
+    const parts = legacy.body?.parts as Array<{ type: string; text: string }>;
     expect(parts[0]!.type).toBe("text");
     expect(parts[0]!.text).toBe("ping?");
   });
 
-  test("V2 form carries the reason-enriched message (buildPingPrompt)", async () => {
+  test("legacy form carries the reason-enriched message (buildPingPrompt)", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
-    const adapter = new OpenCodeAdapter(fakeClient, "steer");
+    const adapter = new OpenCodeAdapter(fakeClient);
     await adapter.inject("sess-abc", "ping?", { reason: "rate_limit" });
-    const parts = calls[0]!.parts as Array<{ type: string; text: string }>;
-    expect(parts[0]!.text).toContain("[Watchdog]");
-    expect(parts[0]!.text).toContain("APIレート制限に到達しました");
-  });
-
-  test("passes delivery=queue when configured so", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const fakeClient = { session: { prompt: async (a: Record<string, unknown>) => { calls.push(a); } } };
-    const adapter = new OpenCodeAdapter(fakeClient, "queue");
-    await adapter.inject("s", "ping?");
-    expect(calls[0]!.delivery).toBe("queue");
-  });
-
-  test("falls back to legacy { path, body } when the V2 form throws", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const fakeClient = {
-      session: {
-        prompt: async (a: Record<string, unknown>) => {
-          calls.push(a);
-          if ("delivery" in a) throw new Error("unknown field: delivery");
-          return undefined;
-        },
-      },
-    };
-    const adapter = new OpenCodeAdapter(fakeClient, "steer");
-    await adapter.inject("sess-xyz", "ping?");
-    expect(calls.length).toBe(2);
-    expect("delivery" in calls[0]!).toBe(true);
-    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
-    expect(legacy.path?.id).toBe("sess-xyz");
-    expect(Array.isArray(legacy.body?.parts)).toBe(true);
-  });
-
-  test("falls back to legacy when V2 throws 'unrecognized field' (space variant)", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const fakeClient = {
-      session: {
-        prompt: async (a: Record<string, unknown>) => {
-          calls.push(a);
-          if ("delivery" in a) throw new Error("unrecognized field: delivery");
-          return undefined;
-        },
-      },
-    };
-    const adapter = new OpenCodeAdapter(fakeClient, "steer");
-    await adapter.inject("sess-xyz", "ping?");
-    expect(calls.length).toBe(2);
-    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
-    expect(legacy.path?.id).toBe("sess-xyz");
-    expect(Array.isArray(legacy.body?.parts)).toBe(true);
-  });
-
-  test("falls back to legacy when V2 throws 'unrecognized_field' (underscore variant)", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const fakeClient = {
-      session: {
-        prompt: async (a: Record<string, unknown>) => {
-          calls.push(a);
-          if ("delivery" in a) throw new Error("unrecognized_field: delivery");
-          return undefined;
-        },
-      },
-    };
-    const adapter = new OpenCodeAdapter(fakeClient, "steer");
-    await adapter.inject("sess-xyz", "ping?");
-    expect(calls.length).toBe(2);
-    const legacy = calls[1] as { path?: { id?: string }; body?: { parts?: unknown[] } };
-    expect(legacy.path?.id).toBe("sess-xyz");
-    expect(Array.isArray(legacy.body?.parts)).toBe(true);
+    const legacy = calls[0] as { body?: { parts?: Array<{ type: string; text: string }> } };
+    const parts = legacy.body?.parts;
+    expect(parts?.[0]!.text).toContain("[Watchdog]");
+    expect(parts?.[0]!.text).toContain("APIレート制限に到達しました");
   });
 
   test("does not throw when client method is missing (logs only)", async () => {
@@ -132,7 +68,7 @@ describe("OpenCodeAdapter", () => {
   });
 
   test("maintains 'this' binding when calling prompt", async () => {
-    let thisContext: any = null;
+    let thisContext: unknown = null;
     const fakeClient = {
       session: {
         name: "OpenCodeSession",
@@ -145,7 +81,7 @@ describe("OpenCodeAdapter", () => {
     await adapter.inject("sess-abc", "ping?");
 
     expect(thisContext).toBeDefined();
-    expect(thisContext.name).toBe("OpenCodeSession");
+    expect((thisContext as { name?: string }).name).toBe("OpenCodeSession");
   });
 });
 

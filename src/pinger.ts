@@ -1,5 +1,4 @@
 import { reasonToJa, type HangReason } from "./errors";
-import type { DeliveryMode } from "./config";
 
 export interface PingContext {
   reason?: HangReason;
@@ -37,11 +36,11 @@ interface OpenCodeClientLike {
 export class OpenCodeAdapter implements Pinger {
   constructor(
     private readonly client: unknown,
-    private readonly delivery: DeliveryMode = "steer",
     private readonly log: (message: string) => void = () => {},
   ) {}
+
   async inject(sessionId: string, message: string, context?: PingContext): Promise<void> {
-    this.log(`PINGER inject called sessionId=${sessionId} delivery=${this.delivery}`);
+    this.log(`PINGER inject called sessionId=${sessionId}`);
     const client = this.client as OpenCodeClientLike;
     const session = client?.session;
     if (typeof session?.prompt !== "function") {
@@ -53,27 +52,16 @@ export class OpenCodeAdapter implements Pinger {
     const finalMessage = buildPingPrompt(message, context?.reason);
     const parts = [{ type: "text", text: finalMessage }];
     try {
-      this.log(`PINGER V2 attempt sessionId=${sessionId}`);
-      // Preferred V2 interrupt delivery. Per-call attempt (no permanent switch).
-      await session.prompt({ sessionID: sessionId, parts, delivery: this.delivery });
-      this.log(`PINGER V2 success sessionId=${sessionId}`);
+      this.log(`PINGER legacy attempt sessionId=${sessionId}`);
+      // The installed @opencode-ai/sdk@1.15.12 `session.prompt` expects the
+      // legacy { path: { id }, body: { parts } } shape. The V2 interrupt shape
+      // is not supported by this SDK version and resolves without injecting.
+      await session.prompt({ path: { id: sessionId }, body: { parts } });
+      this.log(`PINGER legacy success sessionId=${sessionId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.log(`PINGER V2 failed sessionId=${sessionId} err=${msg}`);
-      console.warn(
-        `[watchdog] V2 prompt failed for ${sessionId}; falling back to legacy. err=${msg}`,
-      );
-      try {
-        this.log(`PINGER legacy attempt sessionId=${sessionId}`);
-        await session.prompt({ path: { id: sessionId }, body: { parts } });
-        this.log(`PINGER legacy success sessionId=${sessionId}`);
-      } catch (legacyErr) {
-        const legacyMsg = legacyErr instanceof Error ? legacyErr.message : String(legacyErr);
-        this.log(`PINGER legacy failed sessionId=${sessionId} err=${legacyMsg}`);
-        console.warn(
-          `[watchdog] Failed to inject ping to ${sessionId} (V2 steer and legacy both failed). err=${legacyMsg}`,
-        );
-      }
+      this.log(`PINGER legacy failed sessionId=${sessionId} err=${msg}`);
+      console.warn(`[watchdog] Failed to inject ping to ${sessionId}. err=${msg}`);
     }
   }
 }

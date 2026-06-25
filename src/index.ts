@@ -358,7 +358,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
   debugLog(`INIT inputDir=${inputDir} stateDir=${stateDir} config=${JSON.stringify(config)}`);
 
   const clock = new RealClock();
-  const pinger = new OpenCodeAdapter(input?.client, config.delivery, debugLog);
+  const pinger = new OpenCodeAdapter(input?.client, debugLog);
   const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
