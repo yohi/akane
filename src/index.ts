@@ -141,6 +141,7 @@ export function extractAgentName(event: OpenCodeEvent): string | undefined {
 interface PluginInputLike {
   client?: unknown;
   directory?: string;
+  worktree?: string;
 }
 
 type PluginOptionsLike = Record<string, unknown>;
@@ -329,7 +330,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
   const config = resolveConfig({ project: projectConfig, env });
   const metaUrl = import.meta.url;
   const inputDir = input.directory;
-
+  const stateDir = input.worktree ?? input.directory;
   if (inputDir && ACTIVE_INSTANCES.has(inputDir)) {
     instLog("warn", `Duplicate plugin initialization blocked for directory: ${inputDir} (metaUrl: ${metaUrl})`);
     return {
@@ -341,7 +342,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     ACTIVE_INSTANCES.add(inputDir);
   }
 
-  instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir})`);
+  instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir}, stateDir: ${stateDir})`);
 
   const clock = new RealClock();
   const pinger = new OpenCodeAdapter(input?.client, config.delivery);
@@ -355,7 +356,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
-  const stateStore = inputDir ? getStateStore(inputDir) : undefined;
+  const stateStore = stateDir ? getStateStore(stateDir) : undefined;
   const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
