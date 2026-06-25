@@ -1,0 +1,10 @@
+{
+  "name": "akane-project-plugins",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.15.12",
+    "@opentui/solid": "0.2.16",
+    "solid-js": "1.9.12"
+  }
+}
