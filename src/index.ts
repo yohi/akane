@@ -552,14 +552,8 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
             watchdog.onActivity(sessionId, { agentName });
             return;
           }
-          // User typing / streaming user input should arm the watchdog for the current turn.
-          const deltaText = (event.properties as { delta?: string } | undefined)?.delta;
-          if (typeof deltaText === "string" && deltaText.length > 0) {
-            instLog("info", `Event triggered onUserMessage (stream delta) for session ${sessionId}`);
-            debugLog(`ACTION onUserMessage (delta) sessionId=${sessionId}`);
-            watchdog.onUserMessage(sessionId, { agentName });
-            return;
-          }
+          instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
+          return;
           instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
           return;
         }
