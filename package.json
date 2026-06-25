@@ -4,6 +4,10 @@
   "description": "OpenCode session hang detector with tmux notification and self-recovery ping injection",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./tui": "./dist/tui.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yohi/akane.git"
@@ -12,7 +16,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outfile ./dist/index.js --target node --external node:fs",
+    "build": "bun run build.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
@@ -20,7 +24,9 @@
     "@opencode-ai/plugin": "1.15.12"
   },
   "devDependencies": {
+    "@opentui/solid": "0.2.16",
     "@types/bun": "1.3.14",
+    "solid-js": "1.9.12",
     "typescript": "^5.6.0"
   },
   "peerDependencies": {
