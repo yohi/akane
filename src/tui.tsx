@@ -1,5 +1,6 @@
 import type { PluginOptions } from "@opencode-ai/plugin";
 import type { TuiPlugin, TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui";
+import type { Session } from "@opencode-ai/sdk/v2";
 import type { SharedWatchdogState, SharedSessionState } from "./shared-state";
 import { formatSessionState, formatTimestamp, readSharedState, stateFilePath } from "./tui-state";
 import { For, Show, createSignal, onCleanup } from "solid-js";
@@ -17,19 +18,17 @@ interface SidebarProps {
   sessionId: string;
 }
 
-interface AgentEntry {
-  name: string;
-  lastSeen: number;
-}
-
-interface SidebarProps {
-  api: TuiPluginApi;
-  sessionId: string;
+function recordAgent(
+  record: Record<string, AgentEntry>,
+  name: string,
+): Record<string, AgentEntry> {
+  return { ...record, [name]: { name, lastSeen: Date.now() } };
 }
 
 function Sidebar(props: SidebarProps) {
   const [state, setState] = createSignal<SharedWatchdogState | undefined>(undefined);
   const [agents, setAgents] = createSignal<Record<string, AgentEntry>>({});
+  const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [now, setNow] = createSignal(Date.now());
 
   const directory = () => props.api.state.path.directory;
@@ -59,7 +58,7 @@ function Sidebar(props: SidebarProps) {
     }
     if (!name) return;
 
-    setAgents((prev) => ({ ...prev, [name]: { name, lastSeen: Date.now() } }));
+    setAgents((prev) => recordAgent(prev, name));
   });
   onCleanup(unsubPartUpdated);
 
@@ -67,18 +66,61 @@ function Sidebar(props: SidebarProps) {
     if (event.properties.sessionID !== props.sessionId) return;
     const name = event.properties.agent;
     if (!name) return;
-    setAgents((prev) => ({ ...prev, [name]: { name, lastSeen: Date.now() } }));
+    setAgents((prev) => recordAgent(prev, name));
   });
   onCleanup(unsubAgentSwitched);
+
+  const updateSession = (info: Session) => {
+    setSessions((prev) => ({ ...prev, [info.id]: info }));
+  };
+  const removeSession = (sessionID: string) => {
+    setSessions((prev) => {
+      const next = { ...prev };
+      delete next[sessionID];
+      return next;
+    });
+  };
+
+  const unsubSessionCreated = props.api.event.on("session.created", (event) => {
+    updateSession(event.properties.info);
+  });
+  onCleanup(unsubSessionCreated);
+
+  const unsubSessionUpdated = props.api.event.on("session.updated", (event) => {
+    updateSession(event.properties.info);
+  });
+  onCleanup(unsubSessionUpdated);
+
+  const unsubSessionDeleted = props.api.event.on("session.deleted", (event) => {
+    removeSession(event.properties.info.id);
+  });
+  onCleanup(unsubSessionDeleted);
 
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
   const activeSessions = (): number => Object.keys(state()?.sessions ?? {}).length;
 
-  const activeAgents = (): AgentEntry[] => {
+  const activeEventAgents = (): AgentEntry[] => {
     const cutoff = now() - SUBAGENT_IDLE_MS;
     return Object.values(agents())
       .filter((entry) => entry.lastSeen >= cutoff)
       .sort((a, b) => b.lastSeen - a.lastSeen);
+  };
+
+  const activeSubagentSessions = (): Session[] => {
+    return Object.values(sessions()).filter(
+      (session) =>
+        session.parentID === props.sessionId &&
+        session.agent &&
+        session.agent !== "user" &&
+        session.agent !== "system",
+    );
+  };
+
+  const activeSubagentNames = (): string[] => {
+    const fromSessions = activeSubagentSessions().map((session) => session.agent!);
+    const fromEvents = activeEventAgents().map((entry) => entry.name);
+    const combined = Array.from(new Set([...fromSessions, ...fromEvents]));
+    return combined.sort();
   };
 
   const branch = () => props.api.state.vcs?.branch ?? "-";
@@ -129,14 +171,14 @@ function Sidebar(props: SidebarProps) {
         <br />
         <strong>Active subagents</strong>
         <br />
-        <Show when={activeAgents().length === 0}>
+        <Show when={activeSubagentNames().length === 0}>
           <span>None</span>
           <br />
         </Show>
-        <For each={activeAgents()}>
-          {(agent) => (
+        <For each={activeSubagentNames()}>
+          {(name) => (
             <span>
-              <span>• {agent.name}</span>
+              <span>• {name}</span>
               <br />
             </span>
           )}
