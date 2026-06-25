@@ -17,6 +17,7 @@ import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
+import { getStateStore } from "./shared-state";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -139,6 +140,7 @@ export function extractAgentName(event: OpenCodeEvent): string | undefined {
 
 interface PluginInputLike {
   client?: unknown;
+  directory?: string;
 }
 
 type PluginOptionsLike = Record<string, unknown>;
@@ -326,7 +328,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
 
   const config = resolveConfig({ project: projectConfig, env });
   const metaUrl = import.meta.url;
-  const inputDir = (input as { directory?: string })?.directory;
+  const inputDir = input.directory;
 
   if (inputDir && ACTIVE_INSTANCES.has(inputDir)) {
     instLog("warn", `Duplicate plugin initialization blocked for directory: ${inputDir} (metaUrl: ${metaUrl})`);
@@ -353,6 +355,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
+  const stateStore = inputDir ? getStateStore(inputDir) : undefined;
   const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
@@ -360,6 +363,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     notifier,
     telemetry,
     log: instLog,
+    stateStore,
   });
 
   const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
@@ -603,6 +607,11 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         watchdog.stopAll();
       } catch (err) {
         instLog("warn", `Error stopping watchdog: ${String(err)}`);
+      }
+      try {
+        stateStore?.dispose();
+      } catch (err) {
+        instLog("warn", `Error disposing state store: ${String(err)}`);
       }
       if (config.enabled) {
         try {
