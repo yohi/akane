@@ -24,3 +24,6 @@ coverage/
 
 # Git worktrees
 .worktrees/
+
+# Akane runtime state
+.akane/
