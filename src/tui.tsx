@@ -37,7 +37,7 @@ function Sidebar(props: SidebarProps) {
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [now, setNow] = createSignal(Date.now());
 
-  const directory = () => props.api.state.path.directory;
+  const directory = () => props.api.state.path.worktree;
   const filePath = () => stateFilePath(directory());
 
   const refresh = () => {
@@ -68,13 +68,6 @@ function Sidebar(props: SidebarProps) {
   });
   onCleanup(unsubPartUpdated);
 
-  const unsubAgentSwitched = props.api.event.on("session.next.agent.switched", (event) => {
-    if (event.properties.sessionID !== props.sessionId) return;
-    const name = event.properties.agent;
-    if (!name) return;
-    setAgents((prev) => recordAgent(prev, name));
-  });
-  onCleanup(unsubAgentSwitched);
 
   const updateSession = (info: Session) => {
     setSessions((prev) => ({ ...prev, [info.id]: info }));
