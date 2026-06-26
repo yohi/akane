@@ -50,3 +50,18 @@ export function formatTimestamp(ts: number | undefined, now: number): string {
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
   return `${Math.floor(diffSec / 3600)}h ago`;
 }
+
+export function resolveAgentDisplayColor<TColor>(
+  agentName: string | undefined,
+  options: {
+    fallback: TColor;
+    profileColors: Record<string, TColor | undefined>;
+  },
+): TColor {
+  if (!agentName) return options.fallback;
+  return options.profileColors[agentName] ?? options.fallback;
+}
+
+export function colorStyleProps<TColor>(fg: TColor): { style: { fg: TColor } } {
+  return { style: { fg } };
+}

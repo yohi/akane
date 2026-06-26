@@ -1,78 +1,32 @@
-import type { RGBA } from "@opentui/core";
+import { RGBA } from "@opentui/core";
 import type { PluginOptions } from "@opencode-ai/plugin";
 import type { TuiPlugin, TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui";
 import type { Session } from "@opencode-ai/sdk/v2";
 import type { SharedWatchdogState, SharedSessionState } from "./shared-state";
-import { formatSessionState, formatTimestamp, readSharedState, stateFilePath } from "./tui-state";
+import {
+  type AgentEntry,
+  type SubagentEntry,
+  SUBAGENT_IDLE_MS,
+  agentColorToRgba,
+  formatElapsedSeconds,
+  normalizeAgentsResponse,
+  recordAgent,
+  subagentColor,
+} from "./tui-helpers";
+import { colorStyleProps, formatSessionState, formatTimestamp, readSharedState, resolveAgentDisplayColor, stateFilePath } from "./tui-state";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
 const POLL_MS = 1000;
-const SUBAGENT_IDLE_MS = 60_000;
-const SUBAGENT_FRESH_MS = 30_000;
-
-interface AgentEntry {
-  name: string;
-  firstSeen: number;
-  lastSeen: number;
-}
-
-interface SubagentEntry {
-  key: string;
-  name: string;
-  source: "session" | "event";
-  firstSeen: number;
-  lastSeen: number;
-}
 
 interface SidebarProps {
   api: TuiPluginApi;
   sessionId: string;
 }
 
-function recordAgent(
-  record: Record<string, AgentEntry>,
-  name: string,
-): Record<string, AgentEntry> {
-  const now = Date.now();
-  const existing = record[name];
-  return {
-    ...record,
-    [name]: {
-      name,
-      firstSeen: existing?.firstSeen ?? now,
-      lastSeen: now,
-    },
-  };
-}
-
-function formatElapsedSeconds(elapsedMs: number): string {
-  const seconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  return `${seconds}s`;
-}
-
-function subagentColor(
-  elapsedMs: number,
-  theme: { success: RGBA; warning: RGBA; error: RGBA },
-): RGBA {
-  if (elapsedMs < SUBAGENT_FRESH_MS) return theme.success;
-  if (elapsedMs < SUBAGENT_IDLE_MS) return theme.warning;
-  return theme.error;
-}
-
-// OpenTUI's Solid JSX types omit fg/bg on span/strong; the runtime renderable
-// supports them. We use a tiny wrapper that spreads the props as `any` to keep
-// the build type-clean while still emitting the color options at runtime.
-function ColoredSpan(props: { fg: string | RGBA; children: any }) {
-  return <span {...({ fg: props.fg } as any)}>{props.children}</span>;
-}
-
-function ColoredStrong(props: { fg: string | RGBA; children: any }) {
-  return <strong {...({ fg: props.fg } as any)}>{props.children}</strong>;
-}
-
 function Sidebar(props: SidebarProps) {
   const [state, setState] = createSignal<SharedWatchdogState | undefined>(undefined);
   const [agents, setAgents] = createSignal<Record<string, AgentEntry>>({});
+  const [agentColors, setAgentColors] = createSignal<Record<string, RGBA | undefined>>({});
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [now, setNow] = createSignal(Date.now());
 
@@ -84,7 +38,18 @@ function Sidebar(props: SidebarProps) {
     setState(readSharedState(filePath()));
   };
 
+  const refreshAgentColors = async () => {
+    const response = await props.api.client.app.agents({ directory: directory() });
+    const colors: Record<string, RGBA | undefined> = {};
+    for (const agent of normalizeAgentsResponse(response)) {
+      if (!agent.color) continue;
+      colors[agent.name] = agentColorToRgba(agent.color, theme());
+    }
+    setAgentColors(colors);
+  };
+
   refresh();
+  refreshAgentColors().catch(() => setAgentColors({}));
   const pollTimer = setInterval(refresh, POLL_MS);
   const nowTimer = setInterval(() => setNow(Date.now()), 10_000);
   onCleanup(() => {
@@ -182,18 +147,24 @@ function Sidebar(props: SidebarProps) {
   };
 
   const branch = () => props.api.state.vcs?.branch ?? "-";
+  const agentColor = (agentName: string | undefined, fallback: RGBA): RGBA =>
+    resolveAgentDisplayColor(agentName, {
+      fallback,
+      profileColors: agentColors(),
+    });
+  const currentAgentColor = (): RGBA => agentColor(sessionState()?.agentName, theme().accent);
 
   return (
     <box style={{ border: true }}>
       <text>
-        <ColoredStrong fg={theme().accent}>Akane Watchdog</ColoredStrong>
+        <strong {...colorStyleProps(currentAgentColor())}>Akane Watchdog</strong>
         <br />
         Branch: <span>{branch()}</span>
         <br />
         Plugin: <span>{state()?.enabled ? "enabled" : "disabled"}</span>
         <br />
         <br />
-        <ColoredStrong fg={theme().accent}>Telemetry</ColoredStrong>
+        <strong {...colorStyleProps(theme().accent)}>Telemetry</strong>
         <br />
         Active sessions: <span>{activeSessions()}</span>
         <br />
@@ -206,11 +177,11 @@ function Sidebar(props: SidebarProps) {
         Silenced: <span>{state()?.global.silencedFailures ?? 0}</span>
         <br />
         <br />
-        <ColoredStrong fg={theme().accent}>This session</ColoredStrong>
+        <strong {...colorStyleProps(currentAgentColor())}>This session</strong>
         <br />
         State: <span>{formatSessionState(sessionState()?.state)}</span>
         <br />
-        Agent: <span>{sessionState()?.agentName ?? "-"}</span>
+        Agent: <span {...colorStyleProps(agentColor(sessionState()?.agentName, theme().text))}>{sessionState()?.agentName ?? "-"}</span>
         <br />
         Tools running: <span>{sessionState()?.runningToolsCount ?? 0}</span>
         <br />
@@ -221,16 +192,16 @@ function Sidebar(props: SidebarProps) {
         <Show when={sessionState()?.errorReason}>
           {(reason) => (
             <span>
-              <span>Error: {reason()}</span>
+              <span {...colorStyleProps(theme().error)}>Error: {reason()}</span>
               <br />
             </span>
           )}
         </Show>
         <br />
-        <ColoredStrong fg={theme().accent}>Active subagents</ColoredStrong>
+        <strong {...colorStyleProps(theme().accent)}>Active subagents</strong>
         <br />
         <Show when={activeSubagentNames().length === 0}>
-          <ColoredSpan fg={theme().textMuted}>None</ColoredSpan>
+          <span {...colorStyleProps(theme().textMuted)}>None</span>
           <br />
         </Show>
         <For each={activeSubagentNames()}>
@@ -239,10 +210,10 @@ function Sidebar(props: SidebarProps) {
             const suffix = entry.source === "session" ? ` (${entry.key.slice(-6)})` : "";
             return (
               <span>
-                <ColoredSpan fg={subagentColor(elapsed(), theme())}>
+                <span {...colorStyleProps(agentColor(entry.name, subagentColor(elapsed(), theme())))}>
                   • {entry.name}
                   {suffix} ({formatElapsedSeconds(elapsed())})
-                </ColoredSpan>
+                </span>
                 <br />
               </span>
             );

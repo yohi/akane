@@ -3,8 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import {
+  colorStyleProps,
   formatSessionState,
   formatTimestamp,
+  resolveAgentDisplayColor,
   readSharedState,
   stateFilePath,
 } from "../src/tui-state";
@@ -30,6 +32,35 @@ describe("TUI helpers", () => {
     expect(formatTimestamp(now - 5000, now)).toBe("5s ago");
     expect(formatTimestamp(now - 120000, now)).toBe("2m ago");
     expect(formatTimestamp(now - 7200000, now)).toBe("2h ago");
+  });
+
+  it("uses configured agent profile color before freshness color", () => {
+    const fallback = { r: 0, g: 255, b: 0, a: 255 };
+    const profileColor = { r: 0, g: 206, b: 209, a: 255 };
+
+    expect(
+      resolveAgentDisplayColor("Sisyphus - Ultraworker", {
+        fallback,
+        profileColors: { "Sisyphus - Ultraworker": profileColor },
+      }),
+    ).toEqual(profileColor);
+  });
+
+  it("falls back when the agent has no configured profile color", () => {
+    const fallback = { r: 255, g: 203, b: 71, a: 255 };
+
+    expect(
+      resolveAgentDisplayColor("worker", {
+        fallback,
+        profileColors: {},
+      }),
+    ).toEqual(fallback);
+  });
+
+  it("passes colors through OpenTUI Solid style.fg", () => {
+    const fg = { r: 0, g: 206, b: 209, a: 255 };
+
+    expect(colorStyleProps(fg)).toEqual({ style: { fg } });
   });
 });
 
