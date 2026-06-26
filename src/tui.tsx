@@ -19,8 +19,8 @@ import { For, Show, createSignal, onCleanup } from "solid-js";
 const POLL_MS = 1000;
 
 interface SidebarProps {
-  api: TuiPluginApi;
-  sessionId: string;
+  readonly api: TuiPluginApi;
+  readonly sessionId: string;
 }
 
 function Sidebar(props: SidebarProps) {

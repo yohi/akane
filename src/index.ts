@@ -554,8 +554,6 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           }
           instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
           return;
-          instLog("info", `Event ignored (message.part.delta not matching activity criteria)`);
-          return;
         }
 
         if (event.type === "message.part.updated") {

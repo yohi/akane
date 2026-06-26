@@ -40,14 +40,12 @@ async function buildTui(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+try {
   await buildServer();
   console.log("Built dist/index.js");
   await buildTui();
   console.log("Built dist/tui.js");
-}
-
-main().catch((err) => {
+} catch (err) {
   console.error(err);
   process.exit(1);
-});
+}
