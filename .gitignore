@@ -24,3 +24,13 @@ coverage/
 
 # Git worktrees
 .worktrees/
+
+# Akane runtime state
+.akane/
+
+# OpenCode project-local plugin runtime files
+.opencode/node_modules/
+.opencode/bun.lock
+.opencode/bun.lockb
+.opencode/plugins/akane.server.js
+.opencode/plugins/akane.tui.js

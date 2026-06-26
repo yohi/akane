@@ -1,5 +1,4 @@
 import { reasonToJa, type HangReason } from "./errors";
-import type { DeliveryMode } from "./config";
 
 export interface PingContext {
   reason?: HangReason;
@@ -37,45 +36,34 @@ interface OpenCodeClientLike {
 export class OpenCodeAdapter implements Pinger {
   constructor(
     private readonly client: unknown,
-    private readonly delivery: DeliveryMode = "steer",
+    private readonly log: (message: string) => void = () => {},
   ) {}
 
   async inject(sessionId: string, message: string, context?: PingContext): Promise<void> {
+    const maskedSessionId = sessionId.length > 4 ? `${sessionId.slice(0, 4)}***` : "***";
+    this.log(`PINGER inject called sessionId=${maskedSessionId}`);
     const client = this.client as OpenCodeClientLike;
     const session = client?.session;
     if (typeof session?.prompt !== "function") {
-      console.warn(
-        `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${sessionId}.`,
-      );
+      const msg = `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${maskedSessionId}.`;
+      console.warn(msg);
+      this.log(msg);
       return;
     }
     const finalMessage = buildPingPrompt(message, context?.reason);
     const parts = [{ type: "text", text: finalMessage }];
     try {
-      // Preferred V2 interrupt delivery. Per-call attempt (no permanent switch).
-      await session.prompt({ sessionID: sessionId, parts, delivery: this.delivery });
+      this.log(`PINGER legacy attempt sessionId=${maskedSessionId}`);
+      // The installed @opencode-ai/sdk@1.15.12 `session.prompt` expects the
+      // legacy { path: { id }, body: { parts } } shape. The V2 interrupt shape
+      // is not supported by this SDK version and resolves without injecting.
+      await session.prompt({ path: { id: sessionId }, body: { parts } });
+      this.log(`PINGER legacy success sessionId=${maskedSessionId}`);
     } catch (err) {
-      // Only fall back to legacy when V2 rejected the shape/field.
-      // Other errors (network, parse failures after delivery, etc.) must NOT
-      // proceed to legacy – doing so risks double-delivery.
       const msg = err instanceof Error ? err.message : String(err);
-      const isShapeRejection = /unknown[_\s]field|unrecognized[_\s]field/i.test(msg);
-      if (!isShapeRejection) {
-        console.warn(
-          `[watchdog] V2 prompt threw a non-shape error for ${sessionId}; skipping legacy fallback. err=${msg}`,
-        );
-        return;
-      }
-      console.warn(
-        `[watchdog] V2 prompt rejected the request shape for ${sessionId}; falling back to legacy. err=${msg}`,
-      );
-      try {
-        await session.prompt({ path: { id: sessionId }, body: { parts } });
-      } catch (legacyErr) {
-        console.warn(
-          `[watchdog] Failed to inject ping to ${sessionId} (V2 steer and legacy both failed). err=${legacyErr instanceof Error ? legacyErr.message : String(legacyErr)}`,
-        );
-      }
+      const maskedErr = msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
+      this.log(`PINGER legacy failed sessionId=${maskedSessionId} err=${maskedErr}`);
+      console.warn(`[watchdog] Failed to inject ping to ${maskedSessionId}. err=${maskedErr}`);
     }
   }
 }

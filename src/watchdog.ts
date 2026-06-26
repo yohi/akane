@@ -4,8 +4,9 @@ import type { Pinger } from "./pinger";
 import type { WatchdogConfig } from "./config";
 import { NoopTelemetry, type Telemetry } from "./telemetry";
 import type { HangReason } from "./errors";
+import type { WatchdogStateStore } from "./shared-state";
 
-type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED";
+type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED" | "IDLE";
 
 interface SessionEntry {
   state: State;
@@ -13,6 +14,7 @@ interface SessionEntry {
   pingCount: number;
   agentName?: string;
   lastPingTime?: number;
+  lastActivityAt?: number;
   lastErrorReason?: HangReason;
   pendingRequests: Set<string>;
   runningTools: Set<string>;
@@ -28,6 +30,7 @@ export interface WatchdogDeps {
   pinger: Pinger;
   telemetry?: Telemetry;
   log?: (level: "info" | "warn", message: string) => void;
+  stateStore?: WatchdogStateStore;
 }
 
 export interface ActivityMeta {
@@ -49,6 +52,7 @@ export class Watchdog {
   private readonly pinger: Pinger;
   private readonly telemetry: Telemetry;
   private readonly log: (level: "info" | "warn", message: string) => void;
+  private readonly stateStore?: WatchdogStateStore;
 
   constructor(deps: WatchdogDeps) {
     this.config = deps.config;
@@ -57,10 +61,33 @@ export class Watchdog {
     this.pinger = deps.pinger;
     this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.log = deps.log ?? ((level, m) => console[level](`[watchdog] ${m}`));
+    this.stateStore = deps.stateStore;
+    this.stateStore?.setEnabled(this.config.enabled);
   }
 
   getLastPingTime(sessionId: string): number {
     return this.sessions.get(sessionId)?.lastPingTime ?? 0;
+  }
+
+  private reportSession(sessionId: string): void {
+    if (!this.stateStore) return;
+    const entry = this.sessions.get(sessionId);
+    if (!entry) {
+      this.stateStore.removeSession(sessionId);
+      return;
+    }
+    this.stateStore.setSession(sessionId, {
+      state: entry.state,
+      agentName: entry.agentName,
+      lastActivityAt: entry.lastActivityAt,
+      errorReason: entry.lastErrorReason,
+      runningToolsCount: entry.runningTools.size,
+      pendingRequestsCount: entry.pendingRequests.size,
+    });
+  }
+
+  private reportGlobal(): void {
+    this.stateStore?.setGlobal(this.telemetry.snapshot());
   }
 
   /**
@@ -75,6 +102,7 @@ export class Watchdog {
     if (entry) {
       entry.lastErrorReason = reason;
       this.log("info", `[Watchdog] noteError: session ${sessionId} reason=${reason}`);
+      this.reportSession(sessionId);
     } else {
       this.log("info", `[Watchdog] noteError ignored: session ${sessionId} not monitored`);
     }
@@ -163,6 +191,7 @@ export class Watchdog {
       entry.timer = null;
     }
     entry.state = "PAUSED";
+    this.reportSession(sessionId);
     this.log("info", `[Watchdog] onInputRequested: session ${sessionId} PAUSED (pending=${entry.pendingRequests.size})`);
     if (wasEmpty && this.config.notifyWaiting) {
       this.notifier
@@ -181,6 +210,7 @@ export class Watchdog {
       this.log("info", `[Watchdog] onInputResolved: all input resolved for ${sessionId}, resuming WATCHING`);
       this.armOrReset(sessionId, { agentName: entry.agentName });
     }
+    this.reportSession(sessionId);
   }
   /** tool part reached `running` — active + tracked for steer suppression. */
   onToolRunning(sessionId: string, callId: string): void {
@@ -192,6 +222,7 @@ export class Watchdog {
     const existing = this.sessions.get(sessionId);
     if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
       existing.runningTools.add(callId);
+      this.reportSession(sessionId);
       return;
     }
     if (existing && existing.state === "SILENCED") {
@@ -204,7 +235,10 @@ export class Watchdog {
     }
     this.armOrReset(sessionId, {});
     const entry = this.sessions.get(sessionId);
-    if (entry) entry.runningTools.add(callId);
+    if (entry) {
+      entry.runningTools.add(callId);
+      this.reportSession(sessionId);
+    }
   }
 
   /** tool part reached `completed`/`error` — untrack + active. */
@@ -215,6 +249,7 @@ export class Watchdog {
     existing.runningTools.delete(callId);
     // PAUSED awaiting input: untrack but do NOT re-arm (design §7).
     if (existing && existing.state === "PAUSED" && existing.pendingRequests.size > 0) {
+      this.reportSession(sessionId);
       return;
     }
     if (existing.state === "SILENCED") {
@@ -267,6 +302,12 @@ export class Watchdog {
       this.log("info", `[Watchdog] Clearing timer for session ${sessionId}`);
       this.clock.clearTimeout(entry.timer);
     }
+    // Keep a final IDLE snapshot in shared state so the TUI can still show
+    // the session as idle (with last known metadata) instead of vanishing.
+    if (entry) {
+      entry.state = "IDLE";
+      this.reportSession(sessionId);
+    }
     this.sessions.delete(sessionId);
     this.recordTombstone(sessionId);
     this.notifier.clear(sessionId).catch((err) =>
@@ -281,12 +322,15 @@ export class Watchdog {
       if (entry.timer) {
         this.clock.clearTimeout(entry.timer);
       }
+      entry.state = "IDLE";
+      this.reportSession(sessionId);
       this.recordTombstone(sessionId);
       this.notifier.clear(sessionId).catch((err) =>
         this.log("warn", `notifier.clear failed on stopAll: ${String(err)}`),
       );
     }
     this.sessions.clear();
+    this.reportGlobal();
   }
 
   private armOrReset(sessionId: string, meta: ActivityMeta): void {
@@ -320,12 +364,14 @@ export class Watchdog {
     if (existing && existing.pingCount > 0 && existing.state !== "SILENCED") {
       // Activity returned after a ping was injected — the session recovered.
       this.telemetry.recordRecovery();
+      this.reportGlobal();
     }
     const entry: SessionEntry = {
       state: "WATCHING",
       timer: null,
       pingCount: 0,
       agentName: effectiveName,
+      lastActivityAt: this.clock.now(),
       pendingRequests: existing?.pendingRequests ?? new Set(),
       runningTools: existing?.runningTools ?? new Set(),
       toolGateNotified: false,
@@ -340,16 +386,23 @@ export class Watchdog {
     }, this.config.stage1Ms);
 
     this.sessions.set(sessionId, entry);
+    this.reportSession(sessionId);
   }
 
   private recordTombstone(sessionId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
-    this.stoppedSessions.add(sessionId);
-    this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
-    if (this.stoppedSessions.size > STOPPED_TOMBSTONE_CAPACITY) {
-      const oldest = this.stoppedSessions.keys().next().value;
-      if (oldest !== undefined) this.stoppedSessions.delete(oldest);
+    // If we're at capacity, the oldest tombstone will be evicted and should be
+    // removed from shared state to prevent unbounded growth.
+    let evicted: string | undefined;
+    if (this.stoppedSessions.size >= STOPPED_TOMBSTONE_CAPACITY) {
+      evicted = this.stoppedSessions.keys().next().value as string | undefined;
     }
+    this.stoppedSessions.add(sessionId);
+    if (evicted !== undefined && evicted !== sessionId) {
+      this.stoppedSessions.delete(evicted);
+      this.stateStore?.removeSession(evicted);
+    }
+    this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
   }
 
   private clearTombstone(sessionId: string): void {
@@ -366,7 +419,9 @@ export class Watchdog {
     }
     this.log("info", `[Watchdog] Session ${sessionId} STAGE1 expired. Transitioning to STAGE1_NOTIFIED`);
     entry.state = "STAGE1_NOTIFIED";
+    this.reportSession(sessionId);
     this.telemetry.recordHangup();
+    this.reportGlobal();
     
     this.log("info", `[Watchdog] Scheduling stage2 timer for session ${sessionId} in ${this.config.stage2Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
@@ -421,6 +476,7 @@ export class Watchdog {
           );
         }
       }
+      this.reportSession(sessionId);
       return;
     }
 
@@ -429,7 +485,9 @@ export class Watchdog {
       entry.state = "PINGED";
       entry.pingCount += 1;
       this.telemetry.recordPing();
+      this.reportGlobal();
       entry.lastPingTime = this.clock.now();
+      this.reportSession(sessionId);
       const reason = entry.lastErrorReason;
       const prompt = this.config.pingMessage;
       // Fire-and-forget: Do not await pinger.inject to avoid blocking Tmux notifications
@@ -461,7 +519,9 @@ export class Watchdog {
     } else {
       this.log("info", `[Watchdog] Session ${sessionId} reached max pings. Transitioning to SILENCED`);
       entry.state = "SILENCED";
+      this.reportSession(sessionId);
       this.telemetry.recordFailure();
+      this.reportGlobal();
       entry.timer = null;
       // Message text per design §5.2 (SILENCED row).
       await this.notifier.notify(

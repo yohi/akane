@@ -17,6 +17,7 @@ import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig } from "./config";
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
+import { getStateStore } from "./shared-state";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -139,6 +140,8 @@ export function extractAgentName(event: OpenCodeEvent): string | undefined {
 
 interface PluginInputLike {
   client?: unknown;
+  directory?: string;
+  worktree?: string;
 }
 
 type PluginOptionsLike = Record<string, unknown>;
@@ -272,6 +275,7 @@ export function routeSessionError(properties: unknown): SessionErrorRoute {
 }
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 const LOG_FILE = (typeof process !== "undefined" ? process.env.HOME ?? "." : ".") + "/opencode-watchdog.log";
 
@@ -326,8 +330,8 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
 
   const config = resolveConfig({ project: projectConfig, env });
   const metaUrl = import.meta.url;
-  const inputDir = (input as { directory?: string })?.directory;
-
+  const inputDir = input.directory;
+  const stateDir = input.worktree ?? input.directory;
   if (inputDir && ACTIVE_INSTANCES.has(inputDir)) {
     instLog("warn", `Duplicate plugin initialization blocked for directory: ${inputDir} (metaUrl: ${metaUrl})`);
     return {
@@ -339,10 +343,29 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     ACTIVE_INSTANCES.add(inputDir);
   }
 
-  instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir})`);
+  instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir}, stateDir: ${stateDir})`);
+
+  const debugEnabled = env.AKANE_DEBUG === "true";
+  if (debugEnabled && stateDir) {
+    try {
+      fs.mkdirSync(path.join(stateDir, ".akane"), { recursive: true });
+    } catch {
+      // ignore init directory creation errors
+    }
+  }
+
+  const debugLog = (message: string) => {
+    if (!debugEnabled || !stateDir) return;
+    try {
+      fs.appendFileSync(path.join(stateDir, ".akane", "watchdog-debug.log"), `${new Date().toISOString()} ${message}\n`);
+    } catch {
+      // ignore debug logging errors
+    }
+  };
+  debugLog(`INIT inputDir=${inputDir} stateDir=${stateDir} config=${JSON.stringify(config)}`);
 
   const clock = new RealClock();
-  const pinger = new OpenCodeAdapter(input?.client, config.delivery);
+  const pinger = new OpenCodeAdapter(input?.client, debugLog);
   const notifier = createNotifier(config.notifierType, {
     env,
     spawn: bunSpawn(),
@@ -353,6 +376,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     log: instLog,
   });
   const telemetry = new TelemetryCollector();
+  const stateStore = stateDir ? getStateStore(stateDir) : undefined;
   const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
@@ -360,6 +384,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     notifier,
     telemetry,
     log: instLog,
+    stateStore,
   });
 
   const reportMs = parseReportMs(env.OPENCODE_WATCHDOG_REPORT_MS, instLog);
@@ -381,6 +406,8 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           return;
         }
         const sessionId = extractSessionId(event);
+        debugLog(`EVENT type=${event.type} sessionId=${sessionId ?? "-"}`);
+
 
         if (event.type === "session.created" || event.type === "session.updated") {
           instLog("info", `Event ignored (informational session event)`);
@@ -478,6 +505,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
             "info",
             `Event triggered onUserMessage (bypassing arm lock) for session ${sessionId} (messageId: ${messageId})`,
           );
+          debugLog(`ACTION onUserMessage sessionId=${sessionId} source=${isManualUserMessage ? "manual" : "typing"}`);
           watchdog.onUserMessage(sessionId, { agentName });
           return;
         }
@@ -527,6 +555,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           // If this is an assistant event (has agent name), treat as activity to refresh stage1.
           if (agentName !== undefined) {
             instLog("info", `Event triggered onActivity (stream delta) for session ${sessionId}`);
+            debugLog(`ACTION onActivity (delta) sessionId=${sessionId} agentName=${agentName}`);
             watchdog.onActivity(sessionId, { agentName });
             return;
           }
@@ -567,6 +596,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
               "info",
               `Event triggered onActivity (assistant part update) for session ${sessionId}`,
             );
+            debugLog(`ACTION onActivity (part) sessionId=${sessionId} agentName=${agentName}`);
             watchdog.onActivity(sessionId, { agentName });
             return;
           }
@@ -603,6 +633,11 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         watchdog.stopAll();
       } catch (err) {
         instLog("warn", `Error stopping watchdog: ${String(err)}`);
+      }
+      try {
+        stateStore?.dispose();
+      } catch (err) {
+        instLog("warn", `Error disposing state store: ${String(err)}`);
       }
       if (config.enabled) {
         try {
