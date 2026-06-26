@@ -242,6 +242,7 @@ export interface WatchdogConfig {
    - `OPENCODE_WATCHDOG_PAUSE_ON_INPUT` (デフォルト: "true")
    - `OPENCODE_WATCHDOG_NOTIFY_WAITING` (デフォルト: "true")
    - `OPENCODE_WATCHDOG_VERBOSE` (デフォルト: "false")
+   - `AKANE_DEBUG` (デフォルト: "false", デバッグ用詳細ログファイル出力制御)
 2. **`opencode.json` の `experimental.watchdog`**（または `watchdog`）
 3. **Defaults**
 
@@ -269,6 +270,9 @@ export interface WatchdogConfig {
 | `waiting` (入力待ち) | ユーザーの質問・承認待機中にタイマーを停止して通知 | `bg=cyan` (シアン) | urgency=low |
 | `正常終了 / 復帰` | `tmux set-window-option window-status-current-style 'default'` | `default` (通常色) | （OS通知なし/Tmux色クリア） |
 
+### 5.3 カラーコード検証
+- TUI描画およびエージェントのカラーコード検証では、厳格なCSS互換の16進カラーコード検証（3桁、4桁、6桁、または8桁の正規表現: `/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/`）を行い、無効なカラー表現やインジェクションになり得る不正な値のパースを防止します。
+
 ---
 
 ## 6. セキュリティと安全性
@@ -280,8 +284,13 @@ export interface WatchdogConfig {
   `Bun.spawn` で外部コマンド（tmux, notify-send, osascript）を呼び出す際、引数は文字列連結ではなく配列引数として渡し、シェル展開（シェルインジェクション）を経由させないようにします。macOSの `osascript` 呼び出しに際しては、メッセージ内のダブルクォートやバックスラッシュなどの文字を厳密にエスケープ処理します。
 - **絶対パスのコミット禁止**:
   パス指定に絶対パスを使用せず、`$HOME` または相対パスで表現します。
-- **機密情報の保護（ログのセキュア化）**:
-  ログには API キーやセッションのメッセージ本文を出さず、sessionId と状態遷移のみを出力します。また、TmuxNotifier/OSNotifier において外部コマンドの実行が失敗した際、エラーログに通知メッセージ本文（任意のセッション内容やエラー分類情報）が出力されるのを防ぐため、コマンド引数全体を出力せず、バイナリ名と終了コードのみを記録するようにします。
+- **アトミックな状態書き込み**:
+  `shared-state.ts` におけるセッション状態の保存処理では、直接ファイルを上書きせずに一時ファイル（`.tmp`）を作成して書き込んだ後、`renameSync` を用いてアトミックに置き換えます。これにより、書き込み中のプロセス異常終了等によるファイルの破損や不完全な読み込みを防ぎます。
+- **機密情報の保護（ログのセキュア化・マスク）**:
+  - ログには API キーやセッションのメッセージ本文を出さず、sessionId と状態遷移のみを出力します。また、TmuxNotifier/OSNotifier において外部コマンドの実行が失敗した際、エラーログに通知メッセージ本文が出力されるのを防ぐため、コマンド引数全体を出力せず、バイナリ名と終了コードのみを記録します。
+  - Pinger のログ出力時、`sessionId` の大部分をマスク（例: 先頭4文字のみ残し、他は `***` に置換）し、さらに注入失敗時のエラー詳細も先頭30文字程度に制限してマスク処理を施すことで、機密情報のログ漏洩を防ぎます。
+- **デバッグログの制御**:
+  高頻度で出力されディスクを圧迫する恐れのあるデバッグ用ログファイル (`watchdog-debug.log`) は、環境変数 `AKANE_DEBUG` が `"true"` の場合のみ出力されます。これにより、本番環境でのログ肥大化やストレージ圧迫を防止します。
 
 ---
 
@@ -390,7 +399,7 @@ export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Ho
 
 ### `client.session.prompt` 呼び出し形 (確認日: 2026-06-18, V2 割り込み対応)
 
-#### V2 形式 (優先試行形状):
+#### V2 形式 (将来的な割り込み対応形状):
 ```typescript
 client.session.prompt({
   sessionID: sessionId,
@@ -399,7 +408,7 @@ client.session.prompt({
 });
 ```
 
-#### legacy 形式 (フォールバック形状):
+#### legacy 形式 (現行使用形状):
 ```typescript
 client.session.prompt({
   path: { id: sessionId },
@@ -407,7 +416,7 @@ client.session.prompt({
 });
 ```
 
-`OpenCodeAdapter` はまず V2 形式での送信を試み、ランタイムからスキーマ拒否（例外送出され、エラーメッセージに `unknown_field` や `unrecognized_field` を含む）を検知した場合のみ、 legacy 形式へ try/catch フォールバックします。それ以外の接続エラーやランタイムエラーでは二重送信を防止するためフォールバックしません。
+現行の `@opencode-ai/sdk@1.15.12` においては、V2 形式で送信した際に例外が送出されずに無視されて処理される挙動が確認されています。このため、正常なメッセージ注入の失敗を誤認するリスクを避けるため、`OpenCodeAdapter` は V2 形式の試行をスキップし、最初から legacy 形式 (`{ path: { id }, body: { parts } }`) で直接送信を行います。
 
 `TextPartInput` の主要フィールド:
 
