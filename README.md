@@ -39,6 +39,7 @@
 | `OPENCODE_WATCHDOG_PAUSE_ON_INPUT` | ユーザーへの質問・承認要求（Asked）時に監視を一時停止するか | `true` |
 | `OPENCODE_WATCHDOG_NOTIFY_WAITING` | 監視一時停止（入力待ち）の際に通知を送るか | `true` |
 | `OPENCODE_WATCHDOG_VERBOSE` | 受信イベントの完全な JSON をログ出力するか（デバッグ用） | `false` |
+| `AKANE_DEBUG` | デバッグ用詳細ログファイル（`watchdog-debug.log`）の出力を有効にするか | `false` |
 
 ## 🚀 Build & Deployment
 
