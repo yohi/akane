@@ -101,8 +101,11 @@ export class WatchdogStateStore {
     if (this.disposed) return;
     this.pendingWrite = false;
     try {
-      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2));
+      const dir = path.dirname(this.filePath);
+      fs.mkdirSync(dir, { recursive: true });
+      const tmpPath = `${this.filePath}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(this.state, null, 2));
+      fs.renameSync(tmpPath, this.filePath);
     } catch (err) {
       console.warn(`[watchdog] Failed to write shared state: ${String(err)}`);
     }

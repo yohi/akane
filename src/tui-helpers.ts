@@ -73,7 +73,7 @@ function themeColor(name: string, theme: TuiPluginApi["theme"]["current"]): RGBA
 export function agentColorToRgba(color: string, theme: TuiPluginApi["theme"]["current"]): RGBA | undefined {
   const themed = themeColor(color, theme);
   if (themed) return themed;
-  if (!/^#[0-9a-fA-F]{3,8}$/.test(color)) return undefined;
+  if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) return undefined;
   return RGBA.fromHex(color);
 }
 

@@ -50,8 +50,11 @@ function Sidebar(props: SidebarProps) {
 
   refresh();
   refreshAgentColors().catch(() => setAgentColors({}));
-  const pollTimer = setInterval(refresh, POLL_MS);
-  const nowTimer = setInterval(() => setNow(Date.now()), 10_000);
+  const pollTimer = setInterval(() => {
+    refresh();
+    refreshAgentColors().catch(() => setAgentColors({}));
+  }, POLL_MS);
+  const nowTimer = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => {
     clearInterval(pollTimer);
     clearInterval(nowTimer);

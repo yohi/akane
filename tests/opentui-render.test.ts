@@ -21,6 +21,7 @@ describe("OpenTUI Solid rendering", () => {
       await setup.renderOnce();
       const spans = setup.captureSpans().lines.flatMap((line) => line.spans);
       const coloredSpan = spans.find((span) => span.text.includes("Akane color probe"));
+      expect(coloredSpan).toBeDefined();
 
       expect(coloredSpan?.fg.toInts()).toEqual(fg.toInts());
     } finally {
