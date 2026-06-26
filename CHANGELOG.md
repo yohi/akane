@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.4.0](https://github.com/yohi/akane/compare/v1.3.1...v1.4.0) (2026-06-26)
+
+
+### Features
+
+* **shared-state:** サーバーと TUI 間で共有するファイルベースの状態ストアを追加 ([6914345](https://github.com/yohi/akane/commit/6914345ae8672a99537b68de13ad56db77209ed9))
+* **tui:** OpenCode TUI サイドバーに watchdog 状態を表示 ([7490d35](https://github.com/yohi/akane/commit/7490d35cf892f09b4c0d352e144716a49047decb))
+* **tui:** 見出しにカラーとサブエージェント経過時間を追加 ([33d8028](https://github.com/yohi/akane/commit/33d8028217ffeeaaaf39b18e182c3642a8685cd9))
+
+
+### Bug Fixes
+
+* **akane:** message.part.delta の agent 名なしイベントを誤ってユーザー入力と判定していた問題を修正 ([cf9c77b](https://github.com/yohi/akane/commit/cf9c77b92facdf98d28e242ca03d31c6b4631cbb))
+* **akane:** ユーザーのストリーミング入力 (message.part.delta) でも watchdog を arm するよう修正 ([3a06a46](https://github.com/yohi/akane/commit/3a06a46b6e0c1b534eef29d67a1af3524cca4944))
+* **akane:** 回復ピング注入失敗時のフォールバックとデバッグログを追加 ([7200ca1](https://github.com/yohi/akane/commit/7200ca13075b7366068f4969238267cbc7f136ed))
+* **akane:** 状態ファイルの保存先を input.directory から input.worktree に変更 ([a030fcb](https://github.com/yohi/akane/commit/a030fcbadbd6b7dcbab93a307d0fd120f1a3fe3b))
+* CodeRabbitレビュー指摘に対応（型ガード強化・参照リーク修正・重複排除・test片付け） ([cd3202b](https://github.com/yohi/akane/commit/cd3202bfe64114e5f54a63980b4ceb3575a646bd))
+* **opencode:** TUI プラグインが auto-discovery されない問題を修正し、file ベース配置に変更 ([c69beb3](https://github.com/yohi/akane/commit/c69beb3fe3d671600018b2633ad9520ccbc9d577))
+* OpenTUIの色指定をstyle.fgへ統一 ([3090454](https://github.com/yohi/akane/commit/3090454b8dfc44af81989fa0eeaddcdbf9bf4231))
+* OpenTUIの色指定をstyle.fgへ統一＋CodeRabbitレビュー指摘対応 ([6001427](https://github.com/yohi/akane/commit/60014274648c503d4af6cdd911f7de077779974b))
+* **pinger:** SDKのsession.promptにレガシー形状を使用 ([224f36a](https://github.com/yohi/akane/commit/224f36a67c9d8168246caec97d7795a7a821b59b))
+* **tui:** stateファイルパスをworktreeに修正し誤検知エージェントイベントを除去 ([ed47d11](https://github.com/yohi/akane/commit/ed47d11a06682726c9ed79141544a548596a1d02))
+* **tui:** サブエージェント検出に session.created/updated/deleted イベントを追加 ([fe143a6](https://github.com/yohi/akane/commit/fe143a69b8d2a92a898b53c36fd7f36becf85fac))
+* **tui:** 同じエージェント名の subagent も個別に表示できるよう key を session ID ベースに変更 ([3704ff5](https://github.com/yohi/akane/commit/3704ff55846fad5ad865eed533fc821eb7aad2e2))
+* **watchdog,tui:** 最終活動時刻を記録しActive sessionsをIDLEを除いてカウント ([4be286e](https://github.com/yohi/akane/commit/4be286e279c1fcd484341e0bd505566b97373eba))
+* **watchdog:** tombstone セッションの削除漏れによるメモリリークを修正 ([4ad1ac4](https://github.com/yohi/akane/commit/4ad1ac435169d0493ddb0754773665aec5332761))
+* **watchdog:** コードレビュー指摘対応（インデント・重複コメント修正、破棄済みストアのキャッシュ残存バグ修正） ([1caede9](https://github.com/yohi/akane/commit/1caede9cca73b7daf607de5bc2cdad6431157d2a))
+* **watchdog:** セッション停止時にshared stateにIDLEスナップショットを残す ([75b7f47](https://github.com/yohi/akane/commit/75b7f4720ff4f3689e119929edfc3bd4a5afadbf))
+
 ## [1.3.1](https://github.com/yohi/akane/compare/v1.3.0...v1.3.1) (2026-06-23)
 
 
