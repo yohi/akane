@@ -9,17 +9,18 @@ import type { WatchdogStateStore } from "./shared-state";
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED" | "IDLE";
 
 interface SessionEntry {
-  state: State;
-  timer: TimerHandle | null;
-  pingCount: number;
-  agentName?: string;
+state: State;
+timer: TimerHandle | null;
+pingCount: number;
+agentName?: string;
   lastPingTime?: number;
-  lastErrorReason?: HangReason;
-  pendingRequests: Set<string>;
-  runningTools: Set<string>;
-  retrySuppressed?: boolean;
-  toolGateNotified: boolean;
-  toolGateCycles: number;
+  lastActivityAt?: number;
+lastErrorReason?: HangReason;
+pendingRequests: Set<string>;
+runningTools: Set<string>;
+retrySuppressed?: boolean;
+toolGateNotified: boolean;
+toolGateCycles: number;
 }
 
 export interface WatchdogDeps {
@@ -78,7 +79,7 @@ export class Watchdog {
     this.stateStore.setSession(sessionId, {
       state: entry.state,
       agentName: entry.agentName,
-      lastActivityAt: entry.lastPingTime,
+      lastActivityAt: entry.lastActivityAt,
       errorReason: entry.lastErrorReason,
       runningToolsCount: entry.runningTools.size,
       pendingRequestsCount: entry.pendingRequests.size,
@@ -364,16 +365,17 @@ export class Watchdog {
       this.telemetry.recordRecovery();
       this.reportGlobal();
     }
-    const entry: SessionEntry = {
-      state: "WATCHING",
-      timer: null,
-      pingCount: 0,
+const entry: SessionEntry = {
+state: "WATCHING",
+timer: null,
+pingCount: 0,
       agentName: effectiveName,
-      pendingRequests: existing?.pendingRequests ?? new Set(),
-      runningTools: existing?.runningTools ?? new Set(),
-      toolGateNotified: false,
-      toolGateCycles: 0,
-    };
+      lastActivityAt: this.clock.now(),
+pendingRequests: existing?.pendingRequests ?? new Set(),
+runningTools: existing?.runningTools ?? new Set(),
+toolGateNotified: false,
+toolGateCycles: 0,
+};
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {

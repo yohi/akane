@@ -96,7 +96,8 @@ function Sidebar(props: SidebarProps) {
   onCleanup(unsubSessionDeleted);
 
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
-  const activeSessions = (): number => Object.keys(state()?.sessions ?? {}).length;
+  const activeSessions = (): number =>
+    Object.values(state()?.sessions ?? {}).filter((session) => session.state !== "IDLE").length;
 
   const activeEventAgents = (): AgentEntry[] => {
     const cutoff = now() - SUBAGENT_IDLE_MS;
