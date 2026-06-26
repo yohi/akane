@@ -6,7 +6,7 @@ import { NoopTelemetry, type Telemetry } from "./telemetry";
 import type { HangReason } from "./errors";
 import type { WatchdogStateStore } from "./shared-state";
 
-type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED";
+type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED" | "IDLE";
 
 interface SessionEntry {
   state: State;
@@ -294,6 +294,7 @@ export class Watchdog {
     this.armOrReset(sessionId, { agentName: entry.agentName });
   }
   /** Session terminated normally or with error. Tombstones the sessionId. */
+  /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
     this.log("info", `[Watchdog] stop called for session ${sessionId}`);
     const entry = this.sessions.get(sessionId);
@@ -301,8 +302,13 @@ export class Watchdog {
       this.log("info", `[Watchdog] Clearing timer for session ${sessionId}`);
       this.clock.clearTimeout(entry.timer);
     }
+    // Keep a final IDLE snapshot in shared state so the TUI can still show
+    // the session as idle (with last known metadata) instead of vanishing.
+    if (entry) {
+      entry.state = "IDLE";
+      this.reportSession(sessionId);
+    }
     this.sessions.delete(sessionId);
-    this.reportSession(sessionId);
     this.recordTombstone(sessionId);
     this.notifier.clear(sessionId).catch((err) =>
       this.log("warn", `notifier.clear failed: ${String(err)}`),
@@ -382,12 +388,17 @@ export class Watchdog {
 
   private recordTombstone(sessionId: string): void {
     if (this.stoppedSessions.has(sessionId)) return;
-    this.stoppedSessions.add(sessionId);
-    this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
-    if (this.stoppedSessions.size > STOPPED_TOMBSTONE_CAPACITY) {
-      const oldest = this.stoppedSessions.keys().next().value;
-      if (oldest !== undefined) this.stoppedSessions.delete(oldest);
+    // If we're at capacity, the oldest tombstone will be evicted and should be
+    // removed from shared state to prevent unbounded growth.
+    let evicted: string | undefined;
+    if (this.stoppedSessions.size >= STOPPED_TOMBSTONE_CAPACITY) {
+      evicted = this.stoppedSessions.keys().next().value as string | undefined;
     }
+    this.stoppedSessions.add(sessionId);
+    if (evicted !== undefined && evicted !== sessionId) {
+      this.stateStore?.removeSession(evicted);
+    }
+    this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
   }
 
   private clearTombstone(sessionId: string): void {
