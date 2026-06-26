@@ -109,7 +109,10 @@ export class WatchdogStateStore {
   getSnapshot(): SharedWatchdogState {
     return {
       ...this.state,
-      sessions: { ...this.state.sessions },
+      global: { ...this.state.global },
+      sessions: Object.fromEntries(
+        Object.entries(this.state.sessions).map(([id, s]) => [id, { ...s }]),
+      ),
     };
   }
 
@@ -121,7 +124,7 @@ export class WatchdogStateStore {
   }
 
   setSession(sessionId: string, session: SharedSessionState): void {
-    this.state.sessions[sessionId] = session;
+    this.state.sessions[sessionId] = { ...session };
     this.state.timestamp = Date.now();
     this.emit();
     this.scheduleWrite();
@@ -181,15 +184,39 @@ export function clearStateStoreCache(): void {
   stores.clear();
 }
 
+function isSharedTelemetry(value: unknown): value is SharedTelemetry {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Partial<SharedTelemetry>;
+  return (
+    typeof c.hangupsDetected === "number" &&
+    typeof c.pingsSent === "number" &&
+    typeof c.recoveries === "number" &&
+    typeof c.silencedFailures === "number"
+  );
+}
+
+function isSharedSessionState(value: unknown): value is SharedSessionState {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Partial<SharedSessionState>;
+  return (
+    typeof c.state === "string" &&
+    typeof c.runningToolsCount === "number" &&
+    typeof c.pendingRequestsCount === "number" &&
+    (c.agentName === undefined || typeof c.agentName === "string") &&
+    (c.lastActivityAt === undefined || typeof c.lastActivityAt === "number") &&
+    (c.errorReason === undefined || typeof c.errorReason === "string")
+  );
+}
+
 export function isSharedWatchdogState(value: unknown): value is SharedWatchdogState {
   if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<SharedWatchdogState>;
+  const c = value as Partial<SharedWatchdogState>;
   return (
-    typeof candidate.enabled === "boolean" &&
-    typeof candidate.timestamp === "number" &&
-    candidate.global !== null &&
-    typeof candidate.global === "object" &&
-    candidate.sessions !== null &&
-    typeof candidate.sessions === "object"
+    typeof c.enabled === "boolean" &&
+    typeof c.timestamp === "number" &&
+    isSharedTelemetry(c.global) &&
+    c.sessions !== null &&
+    typeof c.sessions === "object" &&
+    Object.values(c.sessions).every(isSharedSessionState)
   );
 }

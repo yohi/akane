@@ -72,20 +72,23 @@ describe("WatchdogStateStore", () => {
 
   it("notifies subscribers when state changes", () => {
     const store = new WatchdogStateStore(dir);
-    let calls = 0;
-    const unsubscribe = store.subscribe(() => {
-      calls++;
-    });
+    try {
+      let calls = 0;
+      const unsubscribe = store.subscribe(() => {
+        calls++;
+      });
 
-    store.setEnabled(false);
-    expect(calls).toBeGreaterThanOrEqual(1);
+      store.setEnabled(false);
+      expect(calls).toBeGreaterThanOrEqual(1);
 
-    unsubscribe();
-    const before = calls;
-    store.setEnabled(true);
-    expect(calls).toBe(before);
+      unsubscribe();
+      const before = calls;
+      store.setEnabled(true);
+      expect(calls).toBe(before);
+    } finally {
+      store.dispose();
+    }
   });
-
   it("dispose flushes pending writes immediately", () => {
     const store = new WatchdogStateStore(dir);
     store.setSession("sess-2", {

@@ -139,8 +139,8 @@ function Sidebar(props: SidebarProps) {
     const seen = new Set<string>();
     const combined: SubagentEntry[] = [];
     for (const entry of [...fromSessions, ...fromEvents]) {
-      if (seen.has(entry.key)) continue;
-      seen.add(entry.key);
+      if (seen.has(entry.name)) continue;
+      seen.add(entry.name);
       combined.push(entry);
     }
     return combined.sort((a, b) => a.name.localeCompare(b.name));
