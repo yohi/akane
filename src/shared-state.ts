@@ -51,6 +51,7 @@ const STATE_FILE_NAME = "watchdog-state.json";
 const STATE_DIR_NAME = ".akane";
 
 export class WatchdogStateStore {
+  private readonly directory: string;
   private readonly filePath: string;
   private state: SharedWatchdogState;
   private writeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -59,6 +60,7 @@ export class WatchdogStateStore {
   private disposed = false;
 
   constructor(directory: string) {
+    this.directory = directory;
     this.filePath = path.join(directory, STATE_DIR_NAME, STATE_FILE_NAME);
     this.state = this.load();
   }
@@ -156,6 +158,10 @@ export class WatchdogStateStore {
     };
   }
 
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     if (this.writeTimer) {
@@ -165,16 +171,23 @@ export class WatchdogStateStore {
     this.flush();
     this.disposed = true;
     this.listeners.clear();
+
+    if (stores.get(this.directory) === this) {
+      stores.delete(this.directory);
+    }
   }
 }
 
 const stores = new Map<string, WatchdogStateStore>();
 
 export function getStateStore(directory: string): WatchdogStateStore {
-  if (!stores.has(directory)) {
-    stores.set(directory, new WatchdogStateStore(directory));
+  const existing = stores.get(directory);
+  if (existing && !existing.isDisposed) {
+    return existing;
   }
-  return stores.get(directory)!;
+  const store = new WatchdogStateStore(directory);
+  stores.set(directory, store);
+  return store;
 }
 
 export function clearStateStoreCache(): void {

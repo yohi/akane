@@ -9,18 +9,18 @@ import type { WatchdogStateStore } from "./shared-state";
 type State = "WATCHING" | "STAGE1_NOTIFIED" | "PINGED" | "SILENCED" | "PAUSED" | "IDLE";
 
 interface SessionEntry {
-state: State;
-timer: TimerHandle | null;
-pingCount: number;
-agentName?: string;
+  state: State;
+  timer: TimerHandle | null;
+  pingCount: number;
+  agentName?: string;
   lastPingTime?: number;
   lastActivityAt?: number;
-lastErrorReason?: HangReason;
-pendingRequests: Set<string>;
-runningTools: Set<string>;
-retrySuppressed?: boolean;
-toolGateNotified: boolean;
-toolGateCycles: number;
+  lastErrorReason?: HangReason;
+  pendingRequests: Set<string>;
+  runningTools: Set<string>;
+  retrySuppressed?: boolean;
+  toolGateNotified: boolean;
+  toolGateCycles: number;
 }
 
 export interface WatchdogDeps {
@@ -295,7 +295,6 @@ export class Watchdog {
     this.armOrReset(sessionId, { agentName: entry.agentName });
   }
   /** Session terminated normally or with error. Tombstones the sessionId. */
-  /** Session terminated normally or with error. Tombstones the sessionId. */
   stop(sessionId: string): void {
     this.log("info", `[Watchdog] stop called for session ${sessionId}`);
     const entry = this.sessions.get(sessionId);
@@ -365,17 +364,17 @@ export class Watchdog {
       this.telemetry.recordRecovery();
       this.reportGlobal();
     }
-const entry: SessionEntry = {
-state: "WATCHING",
-timer: null,
-pingCount: 0,
+    const entry: SessionEntry = {
+      state: "WATCHING",
+      timer: null,
+      pingCount: 0,
       agentName: effectiveName,
       lastActivityAt: this.clock.now(),
-pendingRequests: existing?.pendingRequests ?? new Set(),
-runningTools: existing?.runningTools ?? new Set(),
-toolGateNotified: false,
-toolGateCycles: 0,
-};
+      pendingRequests: existing?.pendingRequests ?? new Set(),
+      runningTools: existing?.runningTools ?? new Set(),
+      toolGateNotified: false,
+      toolGateCycles: 0,
+    };
 
     this.log("info", `[Watchdog] Scheduling stage1 timer for session ${sessionId} in ${this.config.stage1Ms}ms`);
     entry.timer = this.clock.setTimeout(() => {
