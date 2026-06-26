@@ -397,6 +397,7 @@ export class Watchdog {
     }
     this.stoppedSessions.add(sessionId);
     if (evicted !== undefined && evicted !== sessionId) {
+      this.stoppedSessions.delete(evicted);
       this.stateStore?.removeSession(evicted);
     }
     this.log("info", `[Watchdog] Tombstoned session ${sessionId} (current tombstones size: ${this.stoppedSessions.size})`);
