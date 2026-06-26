@@ -40,11 +40,12 @@ export class OpenCodeAdapter implements Pinger {
   ) {}
 
   async inject(sessionId: string, message: string, context?: PingContext): Promise<void> {
-    this.log(`PINGER inject called sessionId=${sessionId}`);
+    const maskedSessionId = sessionId.length > 4 ? `${sessionId.slice(0, 4)}***` : "***";
+    this.log(`PINGER inject called sessionId=${maskedSessionId}`);
     const client = this.client as OpenCodeClientLike;
     const session = client?.session;
     if (typeof session?.prompt !== "function") {
-      const msg = `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${sessionId}.`;
+      const msg = `[watchdog] OpenCode client.session.prompt is unavailable; cannot inject ping to ${maskedSessionId}.`;
       console.warn(msg);
       this.log(msg);
       return;
@@ -52,16 +53,17 @@ export class OpenCodeAdapter implements Pinger {
     const finalMessage = buildPingPrompt(message, context?.reason);
     const parts = [{ type: "text", text: finalMessage }];
     try {
-      this.log(`PINGER legacy attempt sessionId=${sessionId}`);
+      this.log(`PINGER legacy attempt sessionId=${maskedSessionId}`);
       // The installed @opencode-ai/sdk@1.15.12 `session.prompt` expects the
       // legacy { path: { id }, body: { parts } } shape. The V2 interrupt shape
       // is not supported by this SDK version and resolves without injecting.
       await session.prompt({ path: { id: sessionId }, body: { parts } });
-      this.log(`PINGER legacy success sessionId=${sessionId}`);
+      this.log(`PINGER legacy success sessionId=${maskedSessionId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.log(`PINGER legacy failed sessionId=${sessionId} err=${msg}`);
-      console.warn(`[watchdog] Failed to inject ping to ${sessionId}. err=${msg}`);
+      const maskedErr = msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
+      this.log(`PINGER legacy failed sessionId=${maskedSessionId} err=${maskedErr}`);
+      console.warn(`[watchdog] Failed to inject ping to ${maskedSessionId}. err=${maskedErr}`);
     }
   }
 }

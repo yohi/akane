@@ -345,12 +345,19 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
 
   instLog("info", `Watchdog plugin initialized! Resolved Config: ${JSON.stringify(config)} (metaUrl: ${metaUrl}, inputDir: ${inputDir}, stateDir: ${stateDir})`);
 
-  const debugLog = (message: string) => {
-    if (!stateDir) return;
+  const debugEnabled = env.AKANE_DEBUG === "true";
+  if (debugEnabled && stateDir) {
     try {
-      const dir = path.join(stateDir, ".akane");
-      fs.mkdirSync(dir, { recursive: true });
-      fs.appendFileSync(path.join(dir, "watchdog-debug.log"), `${new Date().toISOString()} ${message}\n`);
+      fs.mkdirSync(path.join(stateDir, ".akane"), { recursive: true });
+    } catch {
+      // ignore init directory creation errors
+    }
+  }
+
+  const debugLog = (message: string) => {
+    if (!debugEnabled || !stateDir) return;
+    try {
+      fs.appendFileSync(path.join(stateDir, ".akane", "watchdog-debug.log"), `${new Date().toISOString()} ${message}\n`);
     } catch {
       // ignore debug logging errors
     }

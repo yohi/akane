@@ -208,11 +208,21 @@ function isSharedTelemetry(value: unknown): value is SharedTelemetry {
   );
 }
 
+const WATCHDOG_SESSION_STATES = new Set<WatchdogSessionState>([
+  "WATCHING",
+  "STAGE1_NOTIFIED",
+  "PINGED",
+  "SILENCED",
+  "PAUSED",
+  "IDLE",
+]);
+
 function isSharedSessionState(value: unknown): value is SharedSessionState {
   if (typeof value !== "object" || value === null) return false;
   const c = value as Partial<SharedSessionState>;
   return (
     typeof c.state === "string" &&
+    WATCHDOG_SESSION_STATES.has(c.state as WatchdogSessionState) &&
     typeof c.runningToolsCount === "number" &&
     typeof c.pendingRequestsCount === "number" &&
     (c.agentName === undefined || typeof c.agentName === "string") &&

@@ -322,6 +322,8 @@ export class Watchdog {
       if (entry.timer) {
         this.clock.clearTimeout(entry.timer);
       }
+      entry.state = "IDLE";
+      this.reportSession(sessionId);
       this.recordTombstone(sessionId);
       this.notifier.clear(sessionId).catch((err) =>
         this.log("warn", `notifier.clear failed on stopAll: ${String(err)}`),
