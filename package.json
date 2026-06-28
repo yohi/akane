@@ -16,6 +16,10 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
+  "files": [
+    "dist",
+    ".opencode"
+  ],
   "scripts": {
     "build": "bun run build.ts",
     "test": "bun test",
