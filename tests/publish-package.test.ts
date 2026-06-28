@@ -15,6 +15,11 @@ function run(command: string[], cwd: string): string {
     stderr: "pipe",
   });
 
+  if (result.exitCode !== 0) {
+    const stderr = new TextDecoder().decode(result.stderr);
+    console.error(`Command failed: ${command.join(" ")}\n${stderr}`);
+  }
+
   expect(result.exitCode).toBe(0);
   return new TextDecoder().decode(result.stdout);
 }
