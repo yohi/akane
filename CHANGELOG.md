@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/yohi/akane/compare/v1.4.0...v1.4.1) (2026-06-28)
+
+
+### Bug Fixes
+
+* TUI公開物を同梱する ([1b23d13](https://github.com/yohi/akane/commit/1b23d1342a7040362305fb33a2774606cbef52df))
+* TUI公開物を同梱する ([6e390f0](https://github.com/yohi/akane/commit/6e390f058b15c511e4bb5347fae484a8b20c58c9))
+
 ## [1.4.0](https://github.com/yohi/akane/compare/v1.3.1...v1.4.0) (2026-06-26)
 
 
