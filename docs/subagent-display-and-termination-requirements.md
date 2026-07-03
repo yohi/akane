@@ -4,6 +4,7 @@
 - **ステータス**: ドラフト（設計・計画フェーズ / 未実装）
 - **関連ドキュメント**: [SPEC.md](../SPEC.md), [AGENTS.md](../AGENTS.md), [README.md](../README.md)
 - **前提バージョン**: `@opencode-ai/plugin@1.15.12` / `@opencode-ai/sdk@1.15.12`
+- **設計との差分（supersession）**: 本書はドラフトであり、レジストリの**配置**については[設計書](subagent-display-and-termination-design.md) D-1 が優先する。設計では新規 [`src/subagent-registry.ts`](../src/subagent-registry.ts) の **server plugin プロセス内 in-memory Map** に一元化し、[`src/shared-state.ts`](../src/shared-state.ts) は**無改変**・**TUI は本レジストリを参照しない**。よって本書中で `shared-state.ts`（file-based アトミック共有）や TUI 共有を前提とする記述（§4 図・§4.1・§9・§14 Phase B）は、実装時は設計書 D-1 に従うこと。
 
 ---
 
@@ -306,7 +307,7 @@ interface SubagentRecord {
 | Phase | 内容 |
 |---|---|
 | A | SDK 実測固め: `session.created` の `parentID` 実 payload 形状、`client.session.delete` のシグネチャをテスト fixture 化。 |
-| B | Subagent レジストリを `shared-state.ts` に追加（親子マップ + ライフサイクル）。 |
+| B | Subagent レジストリを新規 `subagent-registry.ts`（**server plugin プロセス内 in-memory**・親子マップ + `byParent` 索引 + ライフサイクル）に追加。**`shared-state.ts` は無改変**（設計書 D-1 で確定。TUI は本レジストリを参照しないため file-based 共有ストアは不要）。 |
 | C | Pane Manager モジュール新規（inline split / 即時 attach / 上限4 / 最古 evict）+ config + tests。 |
 | D | Session Terminator モジュール新規（親再開 or grace で delete / keepOnError）+ config + tests。 |
 | E | [`src/index.ts`](../src/index.ts) の event ルータ配線（created→登録/表示・child記録、idle→保留・pane close、親活動→delete、deleted→掃除）。 |
