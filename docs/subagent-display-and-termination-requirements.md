@@ -122,8 +122,9 @@ OmO ── サブエージェント spawn（tmux 表示は OFF）──┘
 
 | ID | 要件 |
 |---|---|
-| FR-3.1 | `session.deleted` / `session.idle`（既存 stop 経路 [`src/index.ts`](../src/index.ts) L417-424）で、対象サブエージェントのペインを閉じ、レジストリから除去する。 |
-| FR-3.2 | FR-2 による削除を実行した場合、その後に届く `session.deleted` は既に無い状態を許容する（冪等）。 |
+| FR-3.1 | `session.idle`（子）では、対象サブエージェントの**ペインを閉じるのみ**とし、レコードはレジストリに**保持**する（`deletePending`/`idleAt`/親子索引を残し、FR-2 の削除判定に供する）。idle 時点でレジストリから除去しない。 |
+| FR-3.2 | レコードのレジストリ除去は、akane 自身の `session.delete` 成功後、または `session.deleted` 受信時に行い、あわせて残存ペインがあれば後始末する。参照する「既存 stop 経路（[`src/index.ts`](../src/index.ts) L417-424）」は `session.deleted`/`session.idle` を同一分岐で `watchdog.stop()` に流すが、**新レジストリのレコード除去はイベント種別で分岐**すること（idle では除去しない）。 |
+| FR-3.3 | FR-2 による削除を実行した場合、その後に届く `session.deleted` は既に無い状態を許容する（冪等）。 |
 
 ---
 
