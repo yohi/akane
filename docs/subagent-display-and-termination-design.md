@@ -115,7 +115,7 @@ interface SubagentRecord {
 4. `subagentDisplay.enabled` かつ tmux 有効なら:
    1. 表示中ペイン数（`paneId` 設定済みレコード数）が `maxPanes`(4) 以上 → **最古を evict**（`createdAt` 最小のものを `tmux kill-pane` で閉じ、`paneId` をクリア。**OpenCode セッションは削除しない**、表示から外れるだけ）。
    2. ペイン生成 + attach を **1 コマンド**で発行:
-      ```
+      ```sh
       tmux split-window -P -F "#{pane_id}" \
         opencode attach <serverUrl> --session <childSessionId> --dir <dir> --mini
       ```
@@ -164,11 +164,13 @@ interface SubagentRecord {
 
 ## 8. 設定スキーマ
 
-`experimental.watchdog` 名前空間に 2 つの optional な object を追加する（未指定は default、不正値は warn してデフォルト採用）。両機能とも**デフォルト無効（opt-in）**。既存 `resolveConfig`（env > project > default）と nested 処理（`tmux` / `agents` と同様）を踏襲する。
+`experimental.watchdog` 名前空間に 2 つの optional な object を追加する（未指定は default、不正値は warn してデフォルト採用）。両機能とも**デフォルト無効（opt-in）**。設定の読み込み優先順位は **env > `experimental.watchdog` > project（flat 互換 alias）> defaults** とし、`tmux` / `agents` / `subagentDisplay` / `subagentTermination` などの nested object も同じ優先順位で個別にマージする。`experimental.watchdog` が正規ルートであり、`project`（flat/top-level フィールドまたは `watchdog` キー）は後方互換 alias として扱う。これらの方針は [`src/config.ts`](../src/config.ts) の `ConfigSources` / `resolveConfig` で実装済み。
 
 ```typescript
 export interface WatchdogConfig {
   // ...既存フィールド...
+  // NOTE: WatchdogConfig は parse 後の正規化済み・デフォルト埋め込み済み設定を表す。
+  // 未指定フィールドは ConfigSources で optional として受け取り、resolveConfig で埋める。
 
   subagentDisplay: {
     enabled: boolean;   // default: false（opt-in）
