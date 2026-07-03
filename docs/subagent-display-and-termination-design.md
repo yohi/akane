@@ -140,7 +140,11 @@ interface SubagentRecord {
 
 ### 6.1 ペイン後始末（FR-3, 両機能共通）
 
-`session.deleted` / `session.idle` / `session.error` で、対象サブエージェントの `paneId` があれば `tmux kill-pane` で閉じ、レジストリから除去する。FR-2 による delete を実行した場合、その後に届く `session.deleted` は既にレコードが無い状態を許容する（冪等）。
+対象サブエージェントの `paneId` があれば、いずれのイベントでも `tmux kill-pane` でペインを閉じる。ただし**レジストリレコードの除去タイミングはイベントごとに異なる**（§6 表と整合）:
+
+- **`session.idle`**: ペインのみ閉じ、**レコードは `deletePending=true` のまま保持する**。ここでレコードを除去すると `byParent` 索引と `deletePending` が失われ、親活動再開（§6 表）でも grace（§6 表）でも対象子を発見できず `session.delete` が実行されない（＝削除対象の子セッションが残留する）。実レコード除去は実 `session.delete` 完了後（parent-resume / grace）に行う。
+- **`session.error`（`keepOnError=true`）**: ペインを閉じ、**レコードは除去する**（セッション自体は残すが以後アクション不要のため。§6 表と整合）。
+- **`session.deleted`**: ペイン後始末 + レコード除去。FR-2 による delete を実行した後に届く `session.deleted` は、既にレコードが無い状態を許容する（冪等, FR-3.2）。
 
 ### 6.2 parent-resume の安全性根拠（要件書 §11.1）
 
