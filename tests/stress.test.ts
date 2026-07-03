@@ -11,20 +11,22 @@ class NoopNotifier implements Notifier {
 }
 
 const cfg: WatchdogConfig = {
-  enabled: true,
-  stage1Ms: 1000,
-  stage2Ms: 1000,
-  maxPings: 1,
-  maxToolGateCycles: 1,
-  pingMessage: "p",
-  notifierType: "tmux",
-  delivery: "steer",
-  suppressPingWhileToolRunning: true,
-  pauseOnInputRequest: true,
-  notifyWaiting: true,
-  verboseLog: false,
-  tmux: { enabled: true, displayMessage: true, highlightWindow: true },
+enabled: true,
+stage1Ms: 1000,
+stage2Ms: 1000,
+maxPings: 1,
+maxToolGateCycles: 1,
+pingMessage: "p",
+notifierType: "tmux",
+delivery: "steer",
+suppressPingWhileToolRunning: true,
+pauseOnInputRequest: true,
+notifyWaiting: true,
+verboseLog: false,
+tmux: { enabled: true, displayMessage: true, highlightWindow: true },
   agents: {},
+  subagentDisplay: { enabled: false, maxPanes: 4 },
+  subagentTermination: { enabled: false, graceMs: 60_000, keepOnError: true },
 };
 
 describe("Watchdog - memory & timer leak (design §7.4)", () => {

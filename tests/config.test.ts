@@ -13,17 +13,24 @@ describe("resolveConfig", () => {
     expect(cfg.tmux.enabled).toBe(true);
     expect(cfg.tmux.displayMessage).toBe(true);
     expect(cfg.tmux.highlightWindow).toBe(true);
+    expect(cfg.subagentDisplay.enabled).toBe(false);
+    expect(cfg.subagentDisplay.maxPanes).toBe(4);
+    expect(cfg.subagentTermination.enabled).toBe(false);
+    expect(cfg.subagentTermination.graceMs).toBe(60_000);
+    expect(cfg.subagentTermination.keepOnError).toBe(true);
   });
 
   test("project config overrides defaults", () => {
     const sources: ConfigSources = {
-      project: { stage1Ms: 60_000, maxPings: 3, maxToolGateCycles: 2 },
+      project: { stage1Ms: 60_000, maxPings: 3, maxToolGateCycles: 2, subagentDisplay: { enabled: true } },
     };
     const cfg = resolveConfig(sources);
     expect(cfg.stage1Ms).toBe(60_000);
     expect(cfg.maxPings).toBe(3);
     expect(cfg.maxToolGateCycles).toBe(2);
     expect(cfg.stage2Ms).toBe(180_000); // default preserved
+    expect(cfg.subagentDisplay.enabled).toBe(true);
+    expect(cfg.subagentDisplay.maxPanes).toBe(DEFAULT_CONFIG.subagentDisplay.maxPanes);
   });
 
   test("env overrides project config", () => {
@@ -34,6 +41,43 @@ describe("resolveConfig", () => {
     const cfg = resolveConfig(sources);
     expect(cfg.stage1Ms).toBe(30_000);
     expect(cfg.maxToolGateCycles).toBe(2);
+  });
+
+  test("experimental.watchdog overrides project (flat alias)", () => {
+    const sources: ConfigSources = {
+      project: { enabled: false, stage1Ms: 60_000 },
+      experimental: { watchdog: { enabled: true, stage1Ms: 30_000 } },
+    };
+    const cfg = resolveConfig(sources);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.stage1Ms).toBe(30_000);
+  });
+
+  test("env overrides experimental.watchdog", () => {
+    const sources: ConfigSources = {
+      experimental: { watchdog: { enabled: true, stage1Ms: 30_000 } },
+      env: { OPENCODE_WATCHDOG_ENABLED: "false", OPENCODE_WATCHDOG_STAGE1_MS: "10000" },
+    };
+    const cfg = resolveConfig(sources);
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.stage1Ms).toBe(10_000);
+  });
+
+  test("nested subagent config merges via experimental.watchdog", () => {
+    const sources: ConfigSources = {
+      experimental: {
+        watchdog: {
+          subagentDisplay: { enabled: true, maxPanes: 2 },
+          subagentTermination: { enabled: true, graceMs: 30_000, keepOnError: false },
+        },
+      },
+    };
+    const cfg = resolveConfig(sources);
+    expect(cfg.subagentDisplay.enabled).toBe(true);
+    expect(cfg.subagentDisplay.maxPanes).toBe(2);
+    expect(cfg.subagentTermination.enabled).toBe(true);
+    expect(cfg.subagentTermination.graceMs).toBe(30_000);
+    expect(cfg.subagentTermination.keepOnError).toBe(false);
   });
 
   test("env OPENCODE_WATCHDOG_ENABLED=false disables", () => {
@@ -268,3 +312,8 @@ describe("resolveConfig", () => {
     expect(warnings[0]).toContain("lower-priority source");
   });
 });
+  test("subagent defaults are opt-in false", () => {
+    const cfg = resolveConfig({});
+    expect(cfg.subagentDisplay.enabled).toBe(false);
+    expect(cfg.subagentTermination.enabled).toBe(false);
+  });

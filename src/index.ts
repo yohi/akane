@@ -14,7 +14,7 @@ import { RealClock } from "./clock";
 import type { Clock, TimerHandle } from "./clock";
 import { OpenCodeAdapter } from "./pinger";
 import { createNotifier, bunSpawn, bunWhich } from "./notifier";
-import { resolveConfig, type WatchdogConfig } from "./config";
+import { resolveConfig, type WatchdogConfig, type ConfigSources } from "./config";
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 import { getStateStore } from "./shared-state";
@@ -148,10 +148,22 @@ type PluginOptionsLike = Record<string, unknown>;
 
 function readProjectConfig(
   options: PluginOptionsLike | undefined,
-): Partial<WatchdogConfig> | undefined {
-  if (!options) return undefined;
+): ConfigSources {
+  const sources: ConfigSources = {};
+  if (!options) return sources;
+
+  // Primary route: opencode.jsonc's `experimental.watchdog` namespace.
+  const experimental = (options as { experimental?: { watchdog?: Partial<WatchdogConfig> } }).experimental;
+  if (experimental?.watchdog && typeof experimental.watchdog === "object") {
+    sources.experimental = { watchdog: experimental.watchdog };
+  }
+
+  // Compatibility alias: flat `watchdog` object.
   const fromKey = (options as { watchdog?: Partial<WatchdogConfig> }).watchdog;
-  if (fromKey && typeof fromKey === "object") return fromKey;
+  if (fromKey && typeof fromKey === "object") {
+    sources.project = { ...sources.project, ...fromKey };
+  }
+
   // Top-level fields fallback (less common but accepted).
   const candidate = options as Partial<WatchdogConfig>;
   if (
@@ -164,11 +176,13 @@ function readProjectConfig(
     typeof candidate.tmux === "object" ||
     typeof candidate.agents === "object" ||
     typeof candidate.suppressPingWhileToolRunning === "boolean" ||
-    typeof candidate.maxToolGateCycles === "number"
+    typeof candidate.maxToolGateCycles === "number" ||
+    typeof candidate.subagentDisplay === "object" ||
+    typeof candidate.subagentTermination === "object"
   ) {
-    return candidate;
+    sources.project = { ...sources.project, ...candidate };
   }
-  return undefined;
+  return sources;
 }
 
 export function extractMessageId(event: OpenCodeEvent): string | undefined {
@@ -328,7 +342,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     string | undefined
   >;
 
-  const config = resolveConfig({ project: projectConfig, env });
+  const config = resolveConfig({ ...projectConfig, env });
   const metaUrl = import.meta.url;
   const inputDir = input.directory;
   const stateDir = input.worktree ?? input.directory;
