@@ -202,6 +202,14 @@ export class SubagentRegistry {
       .filter((r): r is SubagentRecord => r !== undefined && r.deletePending === true);
   }
 
+  paneCount(): number {
+    let count = 0;
+    for (const r of this.records.values()) {
+      if (r.paneId) count += 1;
+    }
+    return count;
+  }
+
   findOldestPaneToEvict(): SubagentRecord | undefined {
     let oldest: SubagentRecord | undefined;
     for (const r of this.records.values()) {
@@ -375,7 +383,7 @@ describe("PaneManager", () => {
     const calls: { cmd: string[] }[] = [];
     const spawn = async (cmd: string[]) => {
       calls.push({ cmd });
-      return { exitCode: 0, stdout: cmd[0] === "tmux" ? "%42" : "" };
+      return { exitCode: 0, stdout: cmd[1] === "split-window" ? "%42" : "" };
     };
     const which = (b: string) => (b === "tmux" ? "/usr/bin/tmux" : null);
     const logs: string[] = [];
@@ -409,8 +417,8 @@ describe("PaneManager", () => {
   });
 
   test("does nothing when display disabled", async () => {
-    const { manager: _, registry, calls, log: __, ...rest } = setup();
-    const manager2 = new PaneManager({ ...rest, registry, config: { enabled: false, maxPanes: 4 } });
+    const { manager: _, ...rest } = setup();
+    const manager2 = new PaneManager({ ...rest, config: { enabled: false, maxPanes: 4 } });
     registry.register("child-1", "parent-1");
     await manager2.onChildCreated("child-1");
     expect(calls).toHaveLength(0);
@@ -535,11 +543,7 @@ export class PaneManager {
   }
 
   private countPanes(): number {
-    let count = 0;
-    for (const r of (this.deps.registry as unknown as { ["records"]: Map<string, { paneId?: string }> })["records"].values()) {
-      if (r.paneId) count += 1;
-    }
-    return count;
+    return this.deps.registry.paneCount();
   }
 
   private async ensureTmux(): Promise<boolean> {
@@ -575,23 +579,13 @@ export class PaneManager {
 }
 ```
 
-> 注: `countPanes` は private `records` にアクセスしているためテスト時に不便。設計上 `SubagentRegistry` に `paneCount(): number` メソッドを追加する方が良い。実装時は Task 1 で `paneCount()` を追加してからこちらを使うこと。
+> 注: `countPanes` は private `records` にアクセスしているためテスト時に不便。設計上 `SubagentRegistry` に `paneCount(): number` メソッドを追加する方が良い。`SubagentRegistry` の Step 3 で追加し、`PaneManager` でも最初から使うこと。
+
+`PaneManager.countPanes` は既に `this.deps.registry.paneCount()` を使用しているため、追加の差し替えは不要。
 
 - [ ] **Step 4: Adjust `SubagentRegistry` to expose `paneCount()`**
 
-`src/subagent-registry.ts` に追加：
-
-```typescript
-  paneCount(): number {
-    let count = 0;
-    for (const r of this.records.values()) {
-      if (r.paneId) count += 1;
-    }
-    return count;
-  }
-```
-
-`PaneManager.countPanes` を `this.deps.registry.paneCount()` に差し替える。
+`SubagentRegistry` の Step 3 で `paneCount()` を追加済みなので、ここでは `PaneManager.countPanes` が `this.deps.registry.paneCount()` を使用していることを確認するだけ。
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -683,6 +677,8 @@ describe("SessionTerminator", () => {
     registry.register("child-1", "parent-1");
     terminator.onChildIdle("child-1");
     clock.advance(60_001);
+    await Promise.resolve();
+    await Promise.resolve();
     expect(deletions).toEqual(["child-1"]);
   });
 
