@@ -386,19 +386,23 @@ describe("PaneManager", () => {
       return { exitCode: 0, stdout: cmd[1] === "split-window" ? "%42" : "" };
     };
     const which = (b: string) => (b === "tmux" ? "/usr/bin/tmux" : null);
+    const env = { TMUX: "/tmp/tmux-0" };
+    const serverUrl = "http://localhost:8080";
+    const directory = "/tmp";
     const logs: string[] = [];
+    const log = (_l: "info" | "warn", m: string) => logs.push(m);
     const manager = new PaneManager({
       registry,
       config: { enabled: true, maxPanes: 4 },
       spawn,
       which,
-      env: { TMUX: "/tmp/tmux-0" },
-      serverUrl: "http://localhost:8080",
-      directory: "/tmp",
-      log: (_l, m) => logs.push(m),
+      env,
+      serverUrl,
+      directory,
+      log,
       clock,
     });
-    return { manager, registry, calls, logs, clock };
+    return { manager, registry, calls, logs, clock, spawn, which, env, serverUrl, directory, log };
   }
 
   test("creates tmux split + attach --mini for child", async () => {
@@ -417,11 +421,11 @@ describe("PaneManager", () => {
   });
 
   test("does nothing when display disabled", async () => {
-    const { manager: _, ...rest } = setup();
-    const manager2 = new PaneManager({ ...rest, config: { enabled: false, maxPanes: 4 } });
+    const { manager: _, registry, ...rest } = setup();
+    const manager2 = new PaneManager({ ...rest, registry, config: { enabled: false, maxPanes: 4 } });
     registry.register("child-1", "parent-1");
     await manager2.onChildCreated("child-1");
-    expect(calls).toHaveLength(0);
+    expect(rest.calls).toHaveLength(0);
   });
 
   test("evicts oldest pane when maxPanes reached", async () => {
@@ -496,6 +500,7 @@ export class PaneManager {
       "-P",
       "-F",
       "#{pane_id}",
+      "--",
       "opencode",
       "attach",
       this.deps.serverUrl,
