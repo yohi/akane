@@ -540,9 +540,11 @@ export class PaneManager {
       const result = await this.deps.spawn([this.tmuxPath, "kill-pane", "-t", paneId]);
       if (result.exitCode !== 0) {
         this.deps.log("warn", `tmux kill-pane failed (exitCode: ${result.exitCode})`);
+        return;
       }
     } catch (err) {
       this.deps.log("warn", `tmux kill-pane spawn failed: ${String(err).slice(0, 30)}`);
+      return;
     }
     this.deps.registry.clearPaneId(sessionId);
   }
@@ -757,6 +759,7 @@ export class SessionTerminator {
     if (!this.deps.config.enabled) return;
     if (!this.deps.registry.has(sessionId)) return;
     this.deps.registry.markIdle(sessionId);
+    this.clearTimer(sessionId);
     const handle = this.deps.clock.setTimeout(() => {
       this.timers.delete(sessionId);
       void this.deleteSession(sessionId, "grace");
@@ -769,7 +772,9 @@ export class SessionTerminator {
     if (!this.deps.registry.has(sessionId)) return;
     this.deps.registry.markError(sessionId);
     this.clearTimer(sessionId);
-    this.deps.registry.remove(sessionId);
+    if (!this.deps.config.keepOnError) {
+      this.deps.registry.remove(sessionId);
+    }
   }
 
   async onParentActivity(parentId: string): Promise<void> {
@@ -886,9 +891,11 @@ Expected: PASS
 
 ```typescript
   const subagentRegistry = new SubagentRegistry(clock);
+  const hasServerUrl = typeof input.serverUrl === "string" && input.serverUrl.length > 0;
+  const subagentDisplay = hasServerUrl ? config.subagentDisplay : { enabled: false, maxPanes: config.subagentDisplay.maxPanes };
   const paneManager = new PaneManager({
     registry: subagentRegistry,
-    config: config.subagentDisplay,
+    config: subagentDisplay,
     spawn: bunSpawn(),
     which: bunWhich(),
     env,
