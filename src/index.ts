@@ -18,6 +18,9 @@ import { resolveConfig, type WatchdogConfig, type ConfigSources } from "./config
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 import { getStateStore } from "./shared-state";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -330,7 +333,75 @@ function parseReportMs(
 }
 
 
+function parseJsonc(content: string): any {
+  const cleaned = content.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1');
+  return JSON.parse(cleaned);
+}
+
+function getOpenCodeConfigDir(): string {
+  if (process.env.OPENCODE_CONFIG_DIR) {
+    return process.env.OPENCODE_CONFIG_DIR;
+  }
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(xdgConfig, "opencode");
+}
+
+function ensureTuiPluginEntry() {
+  try {
+    const configDir = getOpenCodeConfigDir();
+    let serverConfig: any = null;
+    const jsoncPath = join(configDir, "opencode.jsonc");
+    const jsonPath = join(configDir, "opencode.json");
+    
+    if (existsSync(jsoncPath)) {
+      serverConfig = parseJsonc(readFileSync(jsoncPath, "utf-8"));
+    } else if (existsSync(jsonPath)) {
+      serverConfig = JSON.parse(readFileSync(jsonPath, "utf-8"));
+    }
+    
+    if (!serverConfig || !Array.isArray(serverConfig.plugin)) {
+      return;
+    }
+    
+    const ourServerEntry = serverConfig.plugin.find((entry: string) => {
+      return entry === "@yohi/akane" || 
+             entry.startsWith("@yohi/akane@") || 
+             (entry.startsWith("file:") && entry.includes("akane"));
+    });
+    
+    if (!ourServerEntry) {
+      return;
+    }
+    
+    const tuiJsonPath = join(configDir, "tui.json");
+    let tuiConfig: any = { plugin: [] };
+    if (existsSync(tuiJsonPath)) {
+      try {
+        tuiConfig = parseJsonc(readFileSync(tuiJsonPath, "utf-8"));
+      } catch {
+        tuiConfig = { plugin: [] };
+      }
+    }
+    
+    if (!tuiConfig || typeof tuiConfig !== "object") {
+      tuiConfig = { plugin: [] };
+    }
+    if (!Array.isArray(tuiConfig.plugin)) {
+      tuiConfig.plugin = [];
+    }
+    
+    if (!tuiConfig.plugin.includes(ourServerEntry)) {
+      tuiConfig.plugin.push(ourServerEntry);
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(tuiJsonPath, JSON.stringify(tuiConfig, null, 2) + "\n");
+    }
+  } catch (err) {
+    console.warn("[watchdog] Failed to ensure TUI plugin entry in tui.json:", err);
+  }
+}
+
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
+  ensureTuiPluginEntry();
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);
