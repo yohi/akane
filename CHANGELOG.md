@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/yohi/akane/compare/v1.4.1...v1.5.0) (2026-07-05)
+
+
+### Features
+
+* experimental.watchdog 正規ルート化と subagent 設定の型・解決処理追加 ([4327ed3](https://github.com/yohi/akane/commit/4327ed395b5fd9310362f46a338eb7d2cbdeb17e))
+* **tui:** add automatic TUI plugin registration on startup ([61498a6](https://github.com/yohi/akane/commit/61498a64d9d47cd2c5f04d0ba3b51041c5cf1492))
+* **tui:** プラグイン起動時の tui.json 自動登録機能を追加 ([a7950f3](https://github.com/yohi/akane/commit/a7950f36f60f6ceb2ea9987f9cfaecb7a1ddb0f0))
+
+
+### Bug Fixes
+
+* **typecheck:** file: パス解析時における basename の undefined チェックガードの追加 ([c8590fc](https://github.com/yohi/akane/commit/c8590fcbb23e7a55b240bf4f937d72016b303b2b))
+
 ## [1.4.1](https://github.com/yohi/akane/compare/v1.4.0...v1.4.1) (2026-06-28)
 
 
