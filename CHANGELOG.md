@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1](https://github.com/yohi/akane/compare/v1.5.0...v1.5.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* **tui:** file:指定のTUIプラグイン登録時にディレクトリではなくdist/tui.jsを登録する ([de29f1b](https://github.com/yohi/akane/commit/de29f1bde396855a9695fe1aca0cb094b8915dfb))
+* **tui:** file:指定のTUIプラグイン登録時にディレクトリではなくdist/tui.jsを登録する ([2623988](https://github.com/yohi/akane/commit/2623988d0b6d5e81be837c8fbdeff20ee5ce3178))
+* **tui:** TUIプラグイン登録のレビュー指摘3件に対応 ([3de368d](https://github.com/yohi/akane/commit/3de368dbba32e6b9b878b0816bd71cdec7b4e4e5))
+* **tui:** TUIプラグイン登録のレビュー指摘4件に対応 ([ce0bd8f](https://github.com/yohi/akane/commit/ce0bd8fd9d320cdd10fc86f3d2e26107fba134d2))
+
 ## [1.5.0](https://github.com/yohi/akane/compare/v1.4.1...v1.5.0) (2026-07-05)
 
 
