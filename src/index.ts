@@ -21,6 +21,8 @@ import { getStateStore } from "./shared-state";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { parse, modify, applyEdits } from "jsonc-parser";
+
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -334,8 +336,7 @@ function parseReportMs(
 
 
 function parseJsonc(content: string): any {
-  const cleaned = content.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1');
-  return JSON.parse(cleaned);
+  return parse(content, [], { allowTrailingComma: true });
 }
 
 function getOpenCodeConfigDir(): string {
@@ -344,6 +345,24 @@ function getOpenCodeConfigDir(): string {
   }
   const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
   return join(xdgConfig, "opencode");
+}
+
+function getBasePluginName(entry: string): string | null {
+  if (entry === "@yohi/akane" || entry.startsWith("@yohi/akane@")) {
+    return "@yohi/akane";
+  }
+  if (entry.startsWith("file:")) {
+    const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
+    const basename = segments[segments.length - 1];
+    if (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@")) {
+      return "akane";
+    }
+  }
+  return null;
+}
+
+function isAkanePlugin(entry: string): boolean {
+  return getBasePluginName(entry) !== null;
 }
 
 function ensureTuiPluginEntry() {
@@ -364,9 +383,13 @@ function ensureTuiPluginEntry() {
     }
     
     const ourServerEntry = serverConfig.plugin.find((entry: string) => {
-      return entry === "@yohi/akane" || 
-             entry.startsWith("@yohi/akane@") || 
-             (entry.startsWith("file:") && entry.includes("akane"));
+      if (entry === "@yohi/akane" || entry.startsWith("@yohi/akane@")) return true;
+      if (entry.startsWith("file:")) {
+        const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
+        const basename = segments[segments.length - 1];
+        return basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@");
+      }
+      return false;
     });
     
     if (!ourServerEntry) {
@@ -390,10 +413,18 @@ function ensureTuiPluginEntry() {
       tuiConfig.plugin = [];
     }
     
-    if (!tuiConfig.plugin.includes(ourServerEntry)) {
-      tuiConfig.plugin.push(ourServerEntry);
+    const hasAkane = tuiConfig.plugin.some((entry: string) => isAkanePlugin(entry));
+    if (!hasAkane) {
       mkdirSync(configDir, { recursive: true });
-      writeFileSync(tuiJsonPath, JSON.stringify(tuiConfig, null, 2) + "\n");
+      const originalText = existsSync(tuiJsonPath) ? readFileSync(tuiJsonPath, "utf-8") : "{}";
+      const edits = modify(originalText, ["plugin"], [...tuiConfig.plugin, ourServerEntry], {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        }
+      });
+      const updatedText = applyEdits(originalText, edits);
+      writeFileSync(tuiJsonPath, updatedText.trim() + "\n");
     }
   } catch (err) {
     console.warn("[watchdog] Failed to ensure TUI plugin entry in tui.json:", err);
