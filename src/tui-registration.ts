@@ -42,11 +42,18 @@ function isAkaneTuiEntry(entry: string): boolean {
   if (basename !== "tui.js") {
     return false;
   }
-  // Conservative cleanup: only treat dist/tui.js paths inside an akane directory
-  // as derived TUI entries. This avoids accidentally removing unrelated plugins
-  // while still cleaning up stale akane TUI specs.
-  return segments.some(
-    (s) => s === "akane" || s?.startsWith("akane-") === true || s?.startsWith("akane@") === true,
+  // Conservative cleanup: only treat dist/tui.js paths inside an akane package
+  // directory as derived TUI entries. This avoids accidentally removing unrelated
+  // plugins while still cleaning up stale akane TUI specs.
+  const parentDir = segments[segments.length - 2];
+  if (parentDir !== "dist") {
+    return false;
+  }
+  const packageDir = segments[segments.length - 3];
+  return (
+    packageDir === "akane" ||
+    packageDir?.startsWith("akane-") === true ||
+    packageDir?.startsWith("akane@") === true
   );
 }
 
@@ -88,6 +95,71 @@ function deriveTuiPluginSpec(
   return pathToFileURL(tuiPath).href;
 }
 
+function loadServerConfig(
+  configDir: string,
+  readFile: (path: string) => string,
+  exists: (path: string) => boolean,
+): { plugin?: unknown } | null {
+  const jsoncPath = join(configDir, "opencode.jsonc");
+  const jsonPath = join(configDir, "opencode.json");
+
+  if (exists(jsoncPath)) {
+    try {
+      return parseJsonc(readFile(jsoncPath)) as { plugin?: unknown };
+    } catch {
+      return null;
+    }
+  } else if (exists(jsonPath)) {
+    try {
+      return JSON.parse(readFile(jsonPath)) as { plugin?: unknown };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function readTuiConfig(
+  tuiJsonPath: string,
+  readFile: (path: string) => string,
+  exists: (path: string) => boolean,
+): { plugin: unknown[]; originalText: string } {
+  let originalText = "{}";
+  if (exists(tuiJsonPath)) {
+    try {
+      originalText = readFile(tuiJsonPath);
+    } catch {
+      originalText = "{}";
+    }
+  }
+
+  let tuiConfig = parseJsonc(originalText) as { plugin?: unknown } | null;
+  if (!tuiConfig || typeof tuiConfig !== "object") {
+    tuiConfig = {};
+  }
+  if (!Array.isArray(tuiConfig.plugin)) {
+    tuiConfig.plugin = [];
+  }
+
+  return { plugin: tuiConfig.plugin as unknown[], originalText };
+}
+
+function normalizePluginList(pluginList: unknown[], tuiSpec: string): unknown[] {
+  // Remove any existing akane server or derived TUI entries to avoid
+  // duplicate/conflicting specs.
+  const cleaned = pluginList.filter((entry) => {
+    return !(typeof entry === "string" && (isAkanePlugin(entry) || isAkaneTuiEntry(entry)));
+  });
+
+  // Only add if the exact target spec is not already present.
+  if (!cleaned.includes(tuiSpec)) {
+    cleaned.push(tuiSpec);
+  }
+
+  return cleaned;
+}
+
 export function ensureTuiPluginEntry(deps: TuiRegistrationDeps): void {
   try {
     ensureTuiPluginEntryUnsafe(deps);
@@ -100,24 +172,7 @@ export function ensureTuiPluginEntry(deps: TuiRegistrationDeps): void {
 function ensureTuiPluginEntryUnsafe(deps: TuiRegistrationDeps): void {
   const { configDir, serverModuleUrl, readFile, writeFile, exists, mkdir } = deps;
 
-  let serverConfig: { plugin?: unknown } | null = null;
-  const jsoncPath = join(configDir, "opencode.jsonc");
-  const jsonPath = join(configDir, "opencode.json");
-
-  if (exists(jsoncPath)) {
-    try {
-      serverConfig = parseJsonc(readFile(jsoncPath)) as { plugin?: unknown };
-    } catch {
-      serverConfig = null;
-    }
-  } else if (exists(jsonPath)) {
-    try {
-      serverConfig = JSON.parse(readFile(jsonPath)) as { plugin?: unknown };
-    } catch {
-      serverConfig = null;
-    }
-  }
-
+  const serverConfig = loadServerConfig(configDir, readFile, exists);
   if (!serverConfig || !Array.isArray(serverConfig.plugin)) {
     return;
   }
@@ -136,35 +191,9 @@ function ensureTuiPluginEntryUnsafe(deps: TuiRegistrationDeps): void {
   }
 
   const tuiJsonPath = join(configDir, "tui.json");
-  let originalText = "{}";
-  if (exists(tuiJsonPath)) {
-    try {
-      originalText = readFile(tuiJsonPath);
-    } catch {
-      originalText = "{}";
-    }
-  }
+  const { plugin: pluginList, originalText } = readTuiConfig(tuiJsonPath, readFile, exists);
 
-  let tuiConfig = parseJsonc(originalText) as { plugin?: unknown } | null;
-  if (!tuiConfig || typeof tuiConfig !== "object") {
-    tuiConfig = {};
-  }
-  if (!Array.isArray(tuiConfig.plugin)) {
-    tuiConfig.plugin = [];
-  }
-
-  const pluginList = tuiConfig.plugin as unknown[];
-
-  // Remove any existing akane server or derived TUI entries to avoid
-  // duplicate/conflicting specs.
-  const cleaned = pluginList.filter((entry) => {
-    return !(typeof entry === "string" && (isAkanePlugin(entry) || isAkaneTuiEntry(entry)));
-  });
-
-  // Only add if the exact target spec is not already present.
-  if (!cleaned.includes(tuiSpec)) {
-    cleaned.push(tuiSpec);
-  }
+  const cleaned = normalizePluginList(pluginList, tuiSpec);
 
   // Avoid unnecessary disk I/O when the plugin list is unchanged.
   if (JSON.stringify(pluginList) === JSON.stringify(cleaned)) {

@@ -147,20 +147,38 @@ describe("ensureTuiPluginEntry", () => {
     expect(config.plugin).toContain("file:///home/test/projects/akane/dist/tui.js");
   });
 
+  it("does not remove unrelated plugins with akane in an ancestor path", () => {
+    const unrelated = "file:///home/test/.config/opencode/akane/plugins/my-plugin/dist/tui.js";
+    const { deps } = createFs({
+      "/home/test/.config/opencode/opencode.jsonc": JSON.stringify({
+        plugin: ["file:///home/test/.config/opencode/plugins/akane"],
+      }),
+      "/home/test/.config/opencode/tui.json": JSON.stringify({
+        plugin: [unrelated],
+      }),
+      "/home/test/.config/opencode/plugins/akane/dist/tui.js": "export default {}",
+    });
+
+    ensureTuiPluginEntry(deps);
+
+    const written = deps.readFile("/home/test/.config/opencode/tui.json");
+    const config = JSON.parse(written);
+    expect(config.plugin).toContain(unrelated);
+    expect(config.plugin).toContain(
+      "file:///home/test/.config/opencode/plugins/akane/dist/tui.js",
+    );
+  });
+
   it("does not throw when mkdir/writeFile fails", () => {
-    const deps: TuiRegistrationDeps = {
-      configDir: "/home/test/.config/opencode",
-      serverModuleUrl: "file:///home/test/.config/opencode/plugins/akane/dist/index.js",
-      readFile: () => {
-        throw new Error("read error");
-      },
-      writeFile: () => {
-        throw new Error("write error");
-      },
-      exists: () => true,
-      mkdir: () => {
-        throw new Error("mkdir error");
-      },
+    const { deps } = createFs({
+      "/home/test/.config/opencode/opencode.jsonc": JSON.stringify({
+        plugin: ["file:///home/test/.config/opencode/plugins/akane"],
+      }),
+      "/home/test/.config/opencode/tui.json": JSON.stringify({ plugin: [] }),
+      "/home/test/.config/opencode/plugins/akane/dist/tui.js": "export default {}",
+    });
+    deps.writeFile = () => {
+      throw new Error("write error");
     };
     expect(() => ensureTuiPluginEntry(deps)).not.toThrow();
   });
