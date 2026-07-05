@@ -18,6 +18,11 @@ import { resolveConfig, type WatchdogConfig, type ConfigSources } from "./config
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 import { getStateStore } from "./shared-state";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { parse, modify, applyEdits } from "jsonc-parser";
+
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
 // Event union here so the plugin remains decoupled from upstream churn.
@@ -330,7 +335,104 @@ function parseReportMs(
 }
 
 
+function parseJsonc(content: string): any {
+  return parse(content, [], { allowTrailingComma: true });
+}
+
+function getOpenCodeConfigDir(): string {
+  if (process.env.OPENCODE_CONFIG_DIR) {
+    return process.env.OPENCODE_CONFIG_DIR;
+  }
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(xdgConfig, "opencode");
+}
+
+function getBasePluginName(entry: string): string | null {
+  if (entry === "@yohi/akane" || entry.startsWith("@yohi/akane@")) {
+    return "@yohi/akane";
+  }
+  if (entry.startsWith("file:")) {
+    const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
+    const basename = segments[segments.length - 1];
+    if (basename && (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@"))) {
+      return "akane";
+    }
+  }
+  return null;
+}
+
+function isAkanePlugin(entry: string): boolean {
+  return getBasePluginName(entry) !== null;
+}
+
+function ensureTuiPluginEntry() {
+  try {
+    const configDir = getOpenCodeConfigDir();
+    let serverConfig: any = null;
+    const jsoncPath = join(configDir, "opencode.jsonc");
+    const jsonPath = join(configDir, "opencode.json");
+    
+    if (existsSync(jsoncPath)) {
+      serverConfig = parseJsonc(readFileSync(jsoncPath, "utf-8"));
+    } else if (existsSync(jsonPath)) {
+      serverConfig = JSON.parse(readFileSync(jsonPath, "utf-8"));
+    }
+    
+    if (!serverConfig || !Array.isArray(serverConfig.plugin)) {
+      return;
+    }
+    
+    const ourServerEntry = serverConfig.plugin.find((entry: string) => {
+      if (entry === "@yohi/akane" || entry.startsWith("@yohi/akane@")) return true;
+      if (entry.startsWith("file:")) {
+        const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
+        const basename = segments[segments.length - 1];
+        return !!basename && (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@"));
+      }
+      return false;
+    });
+    
+    if (!ourServerEntry) {
+      return;
+    }
+    
+    const tuiJsonPath = join(configDir, "tui.json");
+    let tuiConfig: any = { plugin: [] };
+    if (existsSync(tuiJsonPath)) {
+      try {
+        tuiConfig = parseJsonc(readFileSync(tuiJsonPath, "utf-8"));
+      } catch {
+        tuiConfig = { plugin: [] };
+      }
+    }
+    
+    if (!tuiConfig || typeof tuiConfig !== "object") {
+      tuiConfig = { plugin: [] };
+    }
+    if (!Array.isArray(tuiConfig.plugin)) {
+      tuiConfig.plugin = [];
+    }
+    
+    const hasAkane = tuiConfig.plugin.some((entry: string) => isAkanePlugin(entry));
+    if (!hasAkane) {
+      mkdirSync(configDir, { recursive: true });
+      const originalText = existsSync(tuiJsonPath) ? readFileSync(tuiJsonPath, "utf-8") : "{}";
+      const edits = modify(originalText, ["plugin"], [...tuiConfig.plugin, ourServerEntry], {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        }
+      });
+      const updatedText = applyEdits(originalText, edits);
+      writeFileSync(tuiJsonPath, updatedText.trim() + "\n");
+    }
+  } catch (err) {
+    console.warn("[watchdog] Failed to ensure TUI plugin entry in tui.json:", err);
+  }
+}
+
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
+  ensureTuiPluginEntry();
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);

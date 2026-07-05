@@ -26,7 +26,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.15.12"
+    "@opencode-ai/plugin": "1.15.12",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@opentui/solid": "0.2.16",
