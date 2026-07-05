@@ -354,7 +354,7 @@ function getBasePluginName(entry: string): string | null {
   if (entry.startsWith("file:")) {
     const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
     const basename = segments[segments.length - 1];
-    if (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@")) {
+    if (basename && (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@"))) {
       return "akane";
     }
   }
@@ -387,7 +387,7 @@ function ensureTuiPluginEntry() {
       if (entry.startsWith("file:")) {
         const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
         const basename = segments[segments.length - 1];
-        return basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@");
+        return !!basename && (basename === "akane" || basename.startsWith("akane-") || basename.startsWith("akane@"));
       }
       return false;
     });
