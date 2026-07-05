@@ -147,5 +147,68 @@ describe("ensureTuiPluginEntry", () => {
     expect(config.plugin).toContain("file:///home/test/projects/akane/dist/tui.js");
   });
 
+  it("does not throw when mkdir/writeFile fails", () => {
+    const deps: TuiRegistrationDeps = {
+      configDir: "/home/test/.config/opencode",
+      serverModuleUrl: "file:///home/test/.config/opencode/plugins/akane/dist/index.js",
+      readFile: () => {
+        throw new Error("read error");
+      },
+      writeFile: () => {
+        throw new Error("write error");
+      },
+      exists: () => true,
+      mkdir: () => {
+        throw new Error("mkdir error");
+      },
+    };
+    expect(() => ensureTuiPluginEntry(deps)).not.toThrow();
+  });
+
+  it("removes stale akane dist/tui.js entries when the plugin path changes", () => {
+    const { deps } = createFs({
+      "/home/test/.config/opencode/opencode.jsonc": JSON.stringify({
+        plugin: ["file:///home/test/.config/opencode/plugins/akane"],
+      }),
+      "/home/test/.config/opencode/tui.json": JSON.stringify({
+        plugin: [
+          "file:///home/test/.config/opencode/plugins/akane-old/dist/tui.js",
+          "file:///home/test/.config/opencode/plugins/akane/dist/tui.js",
+        ],
+      }),
+      "/home/test/.config/opencode/plugins/akane/dist/tui.js": "export default {}",
+    });
+
+    ensureTuiPluginEntry(deps);
+
+    const written = deps.readFile("/home/test/.config/opencode/tui.json");
+    const config = JSON.parse(written);
+    expect(config.plugin).toEqual([
+      "file:///home/test/.config/opencode/plugins/akane/dist/tui.js",
+    ]);
+  });
+
+  it("does not write tui.json when the plugin list is already up to date", () => {
+    const { deps } = createFs({
+      "/home/test/.config/opencode/opencode.jsonc": JSON.stringify({
+        plugin: ["file:///home/test/.config/opencode/plugins/akane"],
+      }),
+      "/home/test/.config/opencode/tui.json": JSON.stringify({
+        plugin: ["file:///home/test/.config/opencode/plugins/akane/dist/tui.js"],
+      }),
+      "/home/test/.config/opencode/plugins/akane/dist/tui.js": "export default {}",
+    });
+
+    let writeCount = 0;
+    const originalWriteFile = deps.writeFile;
+    deps.writeFile = (p, c) => {
+      writeCount++;
+      originalWriteFile(p, c);
+    };
+
+    ensureTuiPluginEntry(deps);
+
+    expect(writeCount).toBe(0);
+  });
 });
 

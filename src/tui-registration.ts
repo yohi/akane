@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse, modify, applyEdits } from "jsonc-parser";
@@ -30,6 +31,23 @@ function isAkanePlugin(entry: string): boolean {
     );
   }
   return false;
+}
+
+function isAkaneTuiEntry(entry: string): boolean {
+  if (!entry.startsWith("file:")) {
+    return false;
+  }
+  const segments = entry.replace(/^file:\/\//, "").split(/[\\/]/);
+  const basename = segments[segments.length - 1];
+  if (basename !== "tui.js") {
+    return false;
+  }
+  // Conservative cleanup: only treat dist/tui.js paths inside an akane directory
+  // as derived TUI entries. This avoids accidentally removing unrelated plugins
+  // while still cleaning up stale akane TUI specs.
+  return segments.some(
+    (s) => s === "akane" || s?.startsWith("akane-") === true || s?.startsWith("akane@") === true,
+  );
 }
 
 function deriveTuiPluginSpec(
@@ -71,6 +89,15 @@ function deriveTuiPluginSpec(
 }
 
 export function ensureTuiPluginEntry(deps: TuiRegistrationDeps): void {
+  try {
+    ensureTuiPluginEntryUnsafe(deps);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[akane] Failed to ensure TUI plugin entry: ${message}`);
+  }
+}
+
+function ensureTuiPluginEntryUnsafe(deps: TuiRegistrationDeps): void {
   const { configDir, serverModuleUrl, readFile, writeFile, exists, mkdir } = deps;
 
   let serverConfig: { plugin?: unknown } | null = null;
@@ -128,14 +155,20 @@ export function ensureTuiPluginEntry(deps: TuiRegistrationDeps): void {
 
   const pluginList = tuiConfig.plugin as unknown[];
 
-  // Remove any existing akane entries to avoid duplicate/conflicting specs.
+  // Remove any existing akane server or derived TUI entries to avoid
+  // duplicate/conflicting specs.
   const cleaned = pluginList.filter((entry) => {
-    return !(typeof entry === "string" && isAkanePlugin(entry));
+    return !(typeof entry === "string" && (isAkanePlugin(entry) || isAkaneTuiEntry(entry)));
   });
 
   // Only add if the exact target spec is not already present.
   if (!cleaned.includes(tuiSpec)) {
     cleaned.push(tuiSpec);
+  }
+
+  // Avoid unnecessary disk I/O when the plugin list is unchanged.
+  if (JSON.stringify(pluginList) === JSON.stringify(cleaned)) {
+    return;
   }
 
   const edits = modify(originalText, ["plugin"], cleaned, {
@@ -144,6 +177,10 @@ export function ensureTuiPluginEntry(deps: TuiRegistrationDeps): void {
       tabSize: 2,
     },
   });
+
+  if (edits.length === 0) {
+    return;
+  }
 
   mkdir(configDir);
   const updatedText = applyEdits(originalText, edits);
@@ -165,7 +202,7 @@ function getOpenCodeConfigDir(): string {
   if (process.env.OPENCODE_CONFIG_DIR) {
     return process.env.OPENCODE_CONFIG_DIR;
   }
-  const xdgConfig = process.env.XDG_CONFIG_HOME || join(process.env.HOME || "~", ".config");
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
   return join(xdgConfig, "opencode");
 }
 
