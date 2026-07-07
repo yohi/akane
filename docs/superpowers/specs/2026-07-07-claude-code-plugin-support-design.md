@@ -193,7 +193,7 @@ monitor 内の既存 `Notifier` が tmux ウィンドウ色 / OS 通知を発火
 ### 6.3 Ping 実効性と補助ベクタ
 「ハング中のターンへ Ping を差し込んで実際に自己復旧させられるか」は Claude Code の仕様上不確実であり、実機検証（§9.3）で可否を判定する。フルパリティ方針に基づき、以下の配信ベクタを検証し、有効なものを採用/併用する。
 - **主**: monitor stdout → Claude 通知（§6.2）。
-- **補助1**: `asyncRewake` フック（exit code 2 で Claude を起床、stderr/stdout を system reminder 提示）。
+- **補助1**: `asyncRewake` フック（exit code 2 で Claude を起床、stderr/stdout を system reminder 提示）。採用時はセンサー `hook.js` と分離した専用エントリ `rewake.js` として登録し、§8.1 の exit-0 保証を侵さない。
 - **補助2**: `Stop` フックの `decision:"block"`（ターン終了を阻止し理由注入 ＝「早期終了の抑止」用途。ハング中断とは目的が異なるため限定的）。
 
 Ping が実効しない場合でも、§6.1 の tmux/OS 警告表示（akane の主要な可視価値）は維持される。
@@ -304,6 +304,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 
 ### 8.1 Zero-Crash（akane 憲法の継承）
 - **hooks（短命）**: 全処理を try/catch し **常に exit 0**、ターン/ツールを block しない（観測専用センサー）。malformed stdin は stderr/ログに退避して exit 0。
+  - ※ この exit-0 保証は観測センサー `hook.js` に適用する。§6.3 の `asyncRewake` を採用する場合に限り、`hook.js` とは別の専用エントリ `rewake.js` に exit 2 を封じ込め、`hook.js` の exit-0 保証（AC #7）は不変とする。
 - **monitor（常駐）**: 別プロセスで隔離。per-event try/catch で1イベントの失敗が全体を止めない（既存 `index.ts` の containment と同型）。tmux/OS 呼出・stdout 書込も try/catch。
 - **events.ndjson 堅牢性**: 破損/部分行は `JSON.parse` の try/catch でスキップ（`shared-state.ts` の `load()` と同思想）。
 
