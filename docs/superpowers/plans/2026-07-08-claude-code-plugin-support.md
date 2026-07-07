@@ -203,7 +203,7 @@ git commit -m "feat(claude): 正規化イベント型 AkaneClaudeEvent と型ガ
 **Interfaces:**
 - Consumes: `node:path`。
 - Produces:
-  - `function resolveStateDir(env: Record<string, string | undefined>): string`（優先順位: `AKANE_STATE_DIR` > `XDG_STATE_HOME/akane` > `$HOME/.local/state/akane`）
+  - `function resolveStateDir(env: Record<string, string | undefined>): string`（優先順位: `AKANE_STATE_DIR` > `XDG_STATE_HOME/akane` > `$HOME/.local/state/akane`。`HOME` 未設定時は `"."`（cwd 相対）ではなく `os.homedir()` で決定論的に解決し、§4.3 の hook/monitor 同一 stateDir 不変条件を担保）
   - `function eventsDir(stateDir: string): string`（`<stateDir>/.akane`）
   - `function sanitizeSessionId(sessionId: string): string`（`[^A-Za-z0-9_.-]` を `_` 置換）
   - `function eventsPathFor(stateDir: string, sessionId: string): string`（`<stateDir>/.akane/<sanitized>.ndjson`）
@@ -213,6 +213,8 @@ git commit -m "feat(claude): 正規化イベント型 AkaneClaudeEvent と型ガ
 ```typescript
 import { describe, test, expect } from "bun:test";
 import { resolveStateDir, eventsDir, sanitizeSessionId, eventsPathFor } from "../../src/claude/state-dir";
+import * as os from "node:os";
+import * as path from "node:path";
 
 describe("resolveStateDir", () => {
   test("AKANE_STATE_DIR wins", () => {
@@ -229,6 +231,12 @@ describe("resolveStateDir", () => {
 
   test("ignores blank AKANE_STATE_DIR", () => {
     expect(resolveStateDir({ AKANE_STATE_DIR: "  ", XDG_STATE_HOME: "/y" })).toBe("/y/akane");
+  });
+
+  test("HOME 未設定でも cwd 相対でなく決定論的な絶対パスに解決する (SPEC §4.3)", () => {
+    const dir = resolveStateDir({});
+    expect(path.isAbsolute(dir)).toBe(true);
+    expect(dir).toBe(path.join(os.homedir(), ".local", "state", "akane"));
   });
 });
 
@@ -263,6 +271,7 @@ Expected: FAIL — module not found.
 
 ```typescript
 import * as path from "node:path";
+import * as os from "node:os";
 
 const STATE_SUBDIR = ".akane";
 
@@ -271,7 +280,10 @@ export function resolveStateDir(env: Record<string, string | undefined>): string
   if (explicit && explicit.trim().length > 0) return explicit;
   const xdg = env.XDG_STATE_HOME;
   if (xdg && xdg.trim().length > 0) return path.join(xdg, "akane");
-  const home = env.HOME && env.HOME.trim().length > 0 ? env.HOME : ".";
+  // HOME 未設定でも cwd 相対 "." にフォールバックしない: hook/monitor は別プロセスで cwd 一致の
+  // 保証がなく、相対 stateDir は §4.3「決定論的に同一の stateDir」を破壊し IPC (.ndjson) が食い違う。
+  // os.homedir() は同一 uid で決定論的に解決される。
+  const home = env.HOME && env.HOME.trim().length > 0 ? env.HOME : os.homedir();
   return path.join(home, ".local", "state", "akane");
 }
 
@@ -295,7 +307,7 @@ export function eventsPathFor(stateDir: string, sessionId: string): string {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/claude/state-dir.test.ts`
-Expected: PASS (7 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
