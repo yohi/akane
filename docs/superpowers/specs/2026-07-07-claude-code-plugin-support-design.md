@@ -173,10 +173,12 @@ hook（短命）と monitor（常駐）は別プロセスのため、両者が**
 
 ### 5.4 登録不可フックのフォールバック（§7.2・§10-3 依存）
 
-`StopFailure` / `PermissionRequest` は登録可否が未確定（§10-3）。**登録不可と判明した場合の代替経路**を以下に固定し、主経路の欠落でハング検知セマンティクスが破綻しないことを保証する。
+`StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart` / `SubagentStop` は登録可否が未確定（§10-3・§7.2）。**登録不可と判明した場合の代替経路**を以下に固定し、主経路の欠落でハング検知セマンティクスが破綻しないことを保証する。
 
 1. **`StopFailure`（監視解除＝クリア経路の担保）**: 登録可能なら `error_type` matcher 付きで登録。不可の場合、単一 `hook.js` が **`Stop` 受信時に stdin JSON の `error_type`/失敗フィールドを検査**し、存在すれば `turn_end` ではなく `error` 正規化イベントを発行して `routeSessionError` 経路へ合流させる。これにより rate_limit/overloaded 終了でも Watchdog が WATCHING に留まらず、既にエラー終了したセッションへの誤 Ping（stage2）を防ぐ。最悪でも `SessionEnd` の tombstone が監視を破棄する。
 2. **`PermissionRequest`（PAUSED 経路の担保）**: 登録可能なら PAUSED 主経路。不可の場合、`Notification(permission_prompt)`（§5.1・冗長シグナル）を PAUSED の唯一経路とする。両者は同義イベントのため PAUSED 機能自体は縮退しない。残る懸念は `Notification` 配信遅延中に stage1（既定 180s）が満了する誤検知だが、(a) 配信遅延は通常サブ秒で 180s 窓に対し無視可能、(b) 誤 stage1 は黄色警告のみで Ping ではなく `UserPromptSubmit` で即クリアされる低害・自己回復状態。実機で配信 cadence と誤検知不発を確認する（§9.3-4）。
+3. **`PostToolUseFailure`（ツール完了＝settle/reset 経路の担保）**: `PostToolUse` / `PostToolUseFailure` は同一の正規化イベント（`tool_settled＋onActivity`、§5.1）へ写像される。登録可能なら両方登録。不可の場合、実機で **`PostToolUse` がツール成功・失敗の双方で発火するなら `PostToolUseFailure` は冗長**で欠落は無害。仮に `PostToolUse` が成功時のみ発火する挙動でも、ツール失敗後は Claude のエラー処理に伴う `MessageDisplay`（activity）が stage1 を再アームするため実害は限定的で、残る懸念は「Ping ではなく黄色 stage1 のみ・次の活性 / `UserPromptSubmit` で自己クリア」（§5.4-2 と同じ低害・自己回復クラス）。`PostToolUse` の失敗時発火有無を実機で確認する（§9.3・§10-3）。
+4. **`SubagentStart` / `SubagentStop`（サブエージェント活性の担保）**: いずれも活性 / settle の補助シグナル（§5.1）で、PAUSED / クリアのような状態遷移は担わない。登録不可でも親セッションの `MessageDisplay` ／ツールイベントが監視を駆動するため監視機能は縮退せず、サブエージェント区間の沈黙感度がやや低下するのみ。
 
 ---
 

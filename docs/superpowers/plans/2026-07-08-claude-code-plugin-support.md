@@ -2794,7 +2794,7 @@ Expected: エラーなく起動し、`akane` プラグインと `akane-watchdog`
 - [ ] **Step 2: §10-3 登録可否 & matcher 構文を確定**
 
 Run: `npx --yes claude plugin validate ./ --strict`
-Expected: PASS。失敗した場合はエラーに従い `plugin.json` の hooks イベント名/matcher を修正。`StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart` / `SubagentStop` が登録可なら `plugin.json` に追加（全て同じ `hook.js`）。**登録不可なら SPEC §5.4 のフォールバックが既に `hook.ts` に実装済み**（Stop の error フィールド検査 / Notification(permission_prompt)）なので追加実装は不要。確定結果を `CC_VERIFICATION-2026-07-08.md` に記録。
+Expected: PASS。失敗した場合はエラーに従い `plugin.json` の hooks イベント名/matcher を修正。`StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart` / `SubagentStop` が登録可なら `plugin.json` に追加（全て同じ `hook.js`）。**登録不可なら SPEC §5.4 のフォールバックが既に `hook.ts` に実装済み**（`StopFailure`→Stop の error フィールド検査 / `PermissionRequest`→Notification(permission_prompt)）なので追加実装は不要。`PostToolUseFailure` / `SubagentStart|Stop` は既存の PostToolUse・親セッション活性イベントで代替されるため同じく追加実装は不要（§5.4-3/4）。確定結果を `CC_VERIFICATION-2026-07-08.md` に記録。
 
 - [ ] **Step 3: §10-3 stdin フィールド名を実測し `CCHookStdin` を確定**
 
@@ -2851,7 +2851,7 @@ git commit -m "test(claude): 実機検証結果を反映し未確定事項(§10)
 | §5.1 イベントマッピング | Task 8（normalizeEvent）+ Task 7（dispatchEvent） |
 | §5.2 ハング検知セマンティクス | 既存 `watchdog.ts` をそのまま利用（Task 10 統合テストで検証） |
 | §5.3 パリティ限界 | Task 7（PAUSED 解除の簡略化）/ Task 15（cadence 実測） |
-| §5.4 登録不可フックのフォールバック | Task 8（Stop-with-error 検査 / Notification(permission_prompt)） |
+| §5.4 登録不可フックのフォールバック | Task 8（`StopFailure`→Stop-with-error 検査 / `PermissionRequest`→Notification(permission_prompt)。`PostToolUseFailure` / `SubagentStart` / `SubagentStop` は既存 PostToolUse・親セッション活性で代替＝追加実装不要） |
 | §6.1 警告表示 | 既存 Notifier を Task 10 で DI（lock ガード付） |
 | §6.2 Ping 注入 | Task 6（ClaudeCodeAdapter） |
 | §6.3 Ping 実効性・補助ベクタ | Task 15（実機評価） |
