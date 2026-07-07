@@ -2708,6 +2708,8 @@ jobs:
           # (token supplied via a credential helper; mirrors nexus).
           DIST_URL="https://bitbucket.org/${{ vars.BITBUCKET_ORG }}/akane-dist.git"
           export GIT_ASKPASS="$(mktemp)"
+          # set -e (Actions 既定シェル) で後続が失敗しても資格情報スクリプトを確実に破棄 (SPEC §7.4)
+          trap 'rm -f "$GIT_ASKPASS"' EXIT
           printf '#!/bin/sh\ncase "$1" in *Username*) echo "$BB_USER";; *) echo "$BB_TOKEN";; esac\n' > "$GIT_ASKPASS"
           chmod +x "$GIT_ASKPASS"
           REMOTE_TAG="$(git ls-remote --tags "$DIST_URL" "refs/tags/${{ steps.tag.outputs.tag }}" || true)"
@@ -2717,7 +2719,6 @@ jobs:
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-          rm -f "$GIT_ASKPASS"
 
       - name: Stage Claude distribution
         if: steps.guard.outputs.skip != 'true'
@@ -2742,6 +2743,8 @@ jobs:
         run: |
           DIST_URL="https://bitbucket.org/${{ vars.BITBUCKET_ORG }}/akane-dist.git"
           export GIT_ASKPASS="$(mktemp)"
+          # git push 失敗 (set -e) でも資格情報スクリプトを確実に破棄 (SPEC §7.4)
+          trap 'rm -f "$GIT_ASKPASS"' EXIT
           printf '#!/bin/sh\ncase "$1" in *Username*) echo "$BB_USER";; *) echo "$BB_TOKEN";; esac\n' > "$GIT_ASKPASS"
           chmod +x "$GIT_ASKPASS"
           cd "$STAGE"
@@ -2752,7 +2755,6 @@ jobs:
           git tag "${{ steps.tag.outputs.tag }}"
           git push -q --force "$DIST_URL" main
           git push -q --force "$DIST_URL" "${{ steps.tag.outputs.tag }}"
-          rm -f "$GIT_ASKPASS"
 ```
 
 > `secrets.BITBUCKET_USER` / `secrets.BITBUCKET_TOKEN`（`repository:write` の Access Token）と `vars.BITBUCKET_ORG` は repo 設定で事前登録する。トークンは URL/引数/ログに出さない（GIT_ASKPASS 経由、SPEC §7.4）。
