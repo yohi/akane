@@ -84,7 +84,7 @@ akane を「**センサー（フック）**」と「**頭脳（常駐 monitor）
 2. **monitor = 頭脳（状態を持つ）**: Claude Code が自動起動/停止。既存 Watchdog・Clock・Notifier・Telemetry・errors をほぼそのまま搭載。**タイマーを保持できる唯一の場所**＝沈黙検知の心臓部。
 3. **結合 = 一方向 IPC（`events.ndjson`）**: `shared-state.ts` のアトミック書込パターンを踏襲。フックが write、monitor が read（既存「monitor→TUI」パターンの鏡像）。
 4. **Ping 経路**: Watchdog が Ping を打つと、Claude Code 版 Pinger は monitor プロセスの stdout に1行出力 → Claude Code がそれを通知として配信。
-5. **ライフサイクル**: monitor の起動/終了は Claude Code 管理（自前 PID 管理は原則不要。多重起動ガードのみ実装）。
+5. **ライフサイクル**: monitor の起動/終了は Claude Code 管理（lifecycle 用の自前 PID 追跡は不要）。多重起動ガードのみ自前実装し、その stale 検知に限り PID を用いる（§8.3）。
 
 **核心的制約**: monitor は stdout の各行が Claude 通知になるため、デバッグ・テレメトリ・要約ログは必ず stderr / ログファイルへ分離する。stdout は「Ping/通知として意図した行」だけに厳格に限定する。
 
@@ -118,6 +118,22 @@ akane を「**センサー（フック）**」と「**頭脳（常駐 monitor）
 | `config.ts` | Claude Code 設定解決（既存 `resolveConfig` を env 経路で流用） | `index.ts` の `readProjectConfig` |
 
 **方針**: 各新規モジュールは単一責務・DI で単体テスト可能に保つ（既存の設計規律を踏襲）。
+
+### 4.3 `stateDir` 解決と `events` ライフサイクル
+
+hook（短命）と monitor（常駐）は別プロセスのため、両者が**決定論的に同一の `stateDir`** を解決できることが一方向 IPC（§3-3）の前提となる。
+
+- **`stateDir` 解決順（優先順位固定）**:
+  1. `AKANE_STATE_DIR`（明示指定・最優先）
+  2. `XDG_STATE_HOME/akane`（XDG Base Directory 準拠）
+  3. `$HOME/.local/state/akane`（XDG 既定へのフォールバック）
+- **events パス（セッション単位）**: `<stateDir>/.akane/<sessionId>.ndjson`。`sessionId` は hook が Claude Code stdin から抽出（既存 `extractSessionId` 流用）、monitor は `<stateDir>/.akane/` を tail する。§3 図中の `events.ndjson` はこのセッション単位ファイルの総称。
+- **マルチセッション/複数 monitor**: セッション毎にファイルを分離し、同時実行時のイベント混線と追記競合を回避する（複数 monitor 可否は §10-1 で確定）。
+- **ローテーション/クリーンアップ**（append-only の無制限成長防止）:
+  - `SessionEnd` 受信時、monitor は当該 `<sessionId>.ndjson` を tombstone 記録後に削除する。
+  - monitor 起動時、tombstone 済み・または最終更新から TTL（既定 24h）超過の孤児ファイルを掃除する（クラッシュで `SessionEnd` を取りこぼした場合の保険）。
+  - 単一セッションが上限行数（既定 100,000 行）を超えた場合、monitor は読取オフセット以前の処理済みプレフィックスを破棄し未処理分のみで再書込（atomic `.tmp→rename`）するコンパクションを行う。
+- env による値受け渡し（hook/monitor が同一 `stateDir`/設定を得る手段）は §7.2 の env マッピングに従い実機で確定する（§10-2）。
 
 ---
 
@@ -154,6 +170,13 @@ akane を「**センサー（フック）**」と「**頭脳（常駐 monitor）
 1. **MessageDisplay の粒度**: `message.part.delta` は文字チャンク毎だが `MessageDisplay` は「表示中」イベント。長い単一メッセージ生成中の発火頻度が不明。→ **対策**: `stage1Ms` を保守的に設定し、全ツールイベントも活性に含める。実機で cadence を計測し閾値を調整。
 2. **PAUSED 解除信号の不在**: Claude Code に `permission.replied` 相当の明示イベントが無い。→ `PermissionRequest` で PAUSED に入り、**次の活性イベント（PreToolUse/PostToolUse/MessageDisplay）または UserPromptSubmit で WATCHING 復帰**に簡略化する（`pendingRequests` の厳密なカウント追跡は行わない）。
 3. **thinking 中の沈黙**: 拡張思考中に MessageDisplay もツールも発火しない区間があり得る。長考とハングの区別は本質的に時間閾値依存（OpenCode でも同様の割り切り）。
+
+### 5.4 登録不可フックのフォールバック（§7.2・§10-3 依存）
+
+`StopFailure` / `PermissionRequest` は登録可否が未確定（§10-3）。**登録不可と判明した場合の代替経路**を以下に固定し、主経路の欠落でハング検知セマンティクスが破綻しないことを保証する。
+
+1. **`StopFailure`（監視解除＝クリア経路の担保）**: 登録可能なら `error_type` matcher 付きで登録。不可の場合、単一 `hook.js` が **`Stop` 受信時に stdin JSON の `error_type`/失敗フィールドを検査**し、存在すれば `turn_end` ではなく `error` 正規化イベントを発行して `routeSessionError` 経路へ合流させる。これにより rate_limit/overloaded 終了でも Watchdog が WATCHING に留まらず、既にエラー終了したセッションへの誤 Ping（stage2）を防ぐ。最悪でも `SessionEnd` の tombstone が監視を破棄する。
+2. **`PermissionRequest`（PAUSED 経路の担保）**: 登録可能なら PAUSED 主経路。不可の場合、`Notification(permission_prompt)`（§5.1・冗長シグナル）を PAUSED の唯一経路とする。両者は同義イベントのため PAUSED 機能自体は縮退しない。残る懸念は `Notification` 配信遅延中に stage1（既定 180s）が満了する誤検知だが、(a) 配信遅延は通常サブ秒で 180s 窓に対し無視可能、(b) 誤 stage1 は黄色警告のみで Ping ではなく `UserPromptSubmit` で即クリアされる低害・自己回復状態。実機で配信 cadence と誤検知不発を確認する（§9.3-4）。
 
 ---
 
@@ -226,7 +249,7 @@ akane/
   }
 }
 ```
-> `StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart` / `SubagentStop` の登録可否と matcher 構文は実機の `claude plugin validate` で確定する（§10）。
+> `StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart` / `SubagentStop` の登録可否と matcher 構文は実機の `claude plugin validate` で確定する（§10）。登録不可時の代替経路は §5.4 に定義する。
 
 `monitors/monitors.json`（常駐 Watchdog ホスト）:
 ```jsonc
@@ -299,7 +322,11 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 
 ### 8.3 新規の不変条件（Claude Code 固有）
 - **monitor stdout 規律**: stdout は Ping/通知行のみ（§6.4）。デバッグ出力が stdout に漏れないことをテストで保証。
-- **monitor 単一起動保証**: Claude Code が多重起動しない前提だが、既存 `ACTIVE_INSTANCES` 相当のガード（stateDir 単位のファイルロック）を monitor に設置する。
+- **monitor 単一起動保証（stale lock 回復付き）**: Claude Code が多重起動しない前提だが、既存 `ACTIVE_INSTANCES` 相当のガードを monitor に設置する。in-memory `Set` はプロセス死亡で自動消滅するが、別プロセス跨ぎの排他には `<stateDir>/.akane/monitor.lock`（記録: PID＋起動時刻＋ハートビート時刻）を用いる。取得手順:
+  1. lock 不在なら自 PID/時刻を atomic 書込（§8.2 `.tmp→rename`）して取得。
+  2. lock 存在時は記録 PID の生存を確認（`process.kill(pid, 0)`）。**死亡していれば stale と判定し奪取**。
+  3. 生存でもハートビートが TTL（既定 = `max(stage2Ms*2, 30000)`）超過で未更新なら stale とみなし奪取。
+  - これによりクラッシュ残留ロックで monitor が永続的に起動不能になる事態を防ぐ。lifecycle 管理は Claude Code（§3-5）だが、クラッシュ→再起動の窓を stale 検知で吸収する。
 
 ---
 
@@ -317,7 +344,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 ### 9.2 Integration / Smoke / Stress
 - **Integration（monitor）**: fake `Clock` ＋ `events.ndjson` にイベント列を流し込み、stage1/stage2 の発火・`Notifier` 呼出・Ping stdout 出力を検証（既存 `watchdog.test.ts` のシナリオを Claude Code イベント列で再現）。
 - **Smoke**: `plugin.json` / `monitors.json` の JSON 妥当性・`claude plugin validate --strict` 相当の構造検証。
-- **Stress**: 既存の 1000 セッション × 100 イベントを `events.ndjson` 経由で再現し、Map / アクティブタイマー数が 0 に戻ることを確認。
+- **Stress**: 既存の 1000 セッション × 100 イベントを `events.ndjson` 経由で再現し、Map / アクティブタイマー数が 0 に戻ること、かつ `SessionEnd` 後に全セッションファイルが削除される（disk 側衛生・§4.3）ことを確認。
 - **既存 202 テストは不変**（OpenCode 側は非改変）。新規テストを追加する。
 
 ### 9.3 実機検証（実装計画の検証ステップ・別途）
@@ -334,7 +361,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 以下は本設計の前提だが、Claude Code の実機/最新スキーマで最終確定する。`writing-plans` 工程で検証タスクとして計画する。
 1. `monitors/monitors.json` の完全スキーマ（`when` トリガ、変数展開、複数 monitor 可否）。
 2. hooks / monitors への **userConfig → env 受け渡し構文**（`plugin.json` の env マッピングが hooks/monitors に効くか）。
-3. 登録可能なフックイベント名の最終確定（`StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart|Stop` の matcher 構文）。
+3. 登録可能なフックイベント名の最終確定（`StopFailure` / `PostToolUseFailure` / `PermissionRequest` / `SubagentStart|Stop` の matcher 構文）。登録不可時のフォールバック設計は §5.4。
 4. staging に `monitors/` を含める調整が `claude plugin validate --strict` を通ること。
 5. `MessageDisplay` の発火粒度（§5.3-1）。
 
@@ -354,6 +381,8 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 10. monitor の stdout に Ping/通知以外の行が出力されない（stdout 規律テスト pass）。
 11. `deploy-claude-to-bitbucket.yml` が冪等（Bitbucket 最新タグ == GitHub Release タグならスキップ）に動作する。
 12. OpenCode 版の既存挙動・テストが一切変化しない。
+13. 長時間セッションで `events` ファイルが無制限に成長せず、`SessionEnd`（および孤児掃除）でセッションファイルが削除される（§4.3）。
+14. monitor クラッシュで `monitor.lock` が残留しても、次回起動時に stale 判定で奪取され再起動できる（§8.3）。
 
 ---
 
