@@ -59,6 +59,7 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
       log: () => {}, onLockLost: onLost,
     });
 
+    expect(fs.readdirSync(dir).length).toBeGreaterThan(0); // witness: session files exist before processing
     monitor.tick(); // single poll ingests all files (activity* then session_end each)
 
     expect(watchdog.activeSessionCount()).toBe(0);
@@ -73,7 +74,7 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
     fs.mkdirSync(dir, { recursive: true });
     const file = eventsPathFor(stateDir, "concurrent");
     const tailer = new EventTailer(dir);
-    const seen = new Set<number>();
+    const seen: number[] = [];
     let prevSize = 0;
     const TOTAL = 500;
     for (let i = 0; i < TOTAL; i++) {
@@ -81,9 +82,10 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
       const size = fs.statSync(file).size;
       expect(size).toBeGreaterThanOrEqual(prevSize); // monitor は active log を rewrite/縮小しない
       prevSize = size;
-      if (i % 7 === 0) for (const e of tailer.poll()) seen.add(e.ts);
+      if (i % 7 === 0) for (const e of tailer.poll()) seen.push(e.ts);
     }
-    for (const e of tailer.poll()) seen.add(e.ts);
-    expect(seen.size).toBe(TOTAL); // interleaved append + poll でロストなし
+    for (const e of tailer.poll()) seen.push(e.ts);
+    expect(seen.length).toBe(TOTAL); // no dup: exactly TOTAL emissions (a re-emitted event would push length past TOTAL)
+    expect(new Set(seen).size).toBe(TOTAL); // no loss: all distinct ts observed
   });
 });
