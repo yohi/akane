@@ -2755,6 +2755,8 @@ jobs:
 
 > `secrets.BITBUCKET_USER` / `secrets.BITBUCKET_TOKEN`（`repository:write` の Access Token）と `vars.BITBUCKET_ORG` は repo 設定で事前登録する。トークンは URL/引数/ログに出さない（GIT_ASKPASS 経由、SPEC §7.4）。
 
+> **[レビュー指摘対応メモ / 実装時 TODO — Task 14]** 上記 `guard` ステップの `REMOTE_TAG="$(git ls-remote --tags ... || true)"` は、**実装時に末尾の `|| true` を削除**すること。`|| true` は `git ls-remote` の接続失敗（認証・ネットワークエラー = 終了コード 128）まで握り潰し、`REMOTE_TAG` を空にして「タグ未存在」と誤判定 → `skip=false` となり force push へ進んでしまう。`git ls-remote` は対象タグが無くても接続が成功していれば終了コード 0 を返すため、`|| true` を外しても正常系（タグ未存在）は壊れず、**接続失敗時のみ fail-fast** する。これは冪等性ガード（AC #11「既存タグは上書きしない」）の設計意図に合致する（PR #77 レビュー指摘）。
+
 - [ ] **Step 4: Run test + local YAML sanity check**
 
 Run: `bun test tests/claude/deploy-workflow.test.ts`
