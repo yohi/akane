@@ -616,10 +616,11 @@ git commit -m "feat(claude): events.ndjson の追記・tail(EventTailer, read-of
 
 **Files:**
 - Create: `src/claude/event-store.ts`
+- Create: `src/claude/safe-error.ts`（共有エラー秘匿ヘルパ。`event-store.ts`・`monitor.ts` が import）
 - Test: `tests/claude/event-store.test.ts`
 
 **Interfaces:**
-- Consumes: `eventsPathFor`, `sanitizeSessionId`（`state-dir.ts`）；`node:fs`, `node:path`。
+- Consumes: `eventsPathFor`, `sanitizeSessionId`（`state-dir.ts`）；`safeError`（`safe-error.ts`）；`node:fs`, `node:path`。
 - Produces:
   - `function deleteSessionLog(stateDir: string, sessionId: string): void`
   - `class TombstoneStore`（`<eventsDir>/tombstones.json` へ FIFO 10,000 上限で永続化）
@@ -628,6 +629,7 @@ git commit -m "feat(claude): events.ndjson の追記・tail(EventTailer, read-of
     - `record(sessionId: string): void`
   - `interface SweepDeps { now: number; ttlMs: number; isTombstoned: (fileStem: string) => boolean }`
   - `function sweepOrphans(dir: string, deps: SweepDeps): string[]`（tombstone 済み or mtime 超過の `*.ndjson` を削除、削除した stem を返す）
+  - （`safe-error.ts`）`function safeError(err: unknown): string`（共有純関数。`err.message`（非 Error は `String(err)`）を 30 字 truncate + `... (redacted)` 付与。SPEC/AGENTS.md §3.7 秘匿不変条件の単一実装。`event-store.ts`・`monitor.ts` が import）
 
 - [ ] **Step 1: Write the failing test**
 
@@ -706,10 +708,26 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write minimal implementation**
 
+`src/claude/safe-error.ts`（共有ヘルパ。`event-store.ts`・`monitor.ts` が import する単一実装）:
+
+```typescript
+/**
+ * Redacts + truncates an error into a log-safe string. The 30-char cap and the
+ * "... (redacted)" suffix are the SPEC / AGENTS.md §3.7 secrecy invariant, kept
+ * as a single implementation so the behavior cannot drift between call sites.
+ */
+export function safeError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
+}
+```
+
+`src/claude/event-store.ts`:
 ```typescript
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { eventsPathFor, sanitizeSessionId } from "./state-dir";
+import { safeError } from "./safe-error";
 
 const TOMBSTONE_FILE = "tombstones.json";
 const TOMBSTONE_CAPACITY = 10_000;
@@ -806,11 +824,6 @@ export function sweepOrphans(dir: string, deps: SweepDeps): string[] {
   }
   return swept;
 }
-
-function safeError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
-}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -821,7 +834,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/claude/event-store.ts tests/claude/event-store.test.ts
+git add src/claude/safe-error.ts src/claude/event-store.ts tests/claude/event-store.test.ts
 git commit -m "feat(claude): tombstone 永続化・セッションログ削除・孤児掃除を追加"
 ```
 
@@ -1769,6 +1782,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ClaudeMonitor, lockGuardedNotifier, lockGuardedPinger } from "../../src/claude/monitor";
 import { Watchdog } from "../../src/watchdog";
+import { TelemetryCollector } from "../../src/telemetry";
 import { FakeClock } from "../../src/clock";
 import { EventTailer, appendEvent } from "../../src/claude/event-log";
 import { TombstoneStore } from "../../src/claude/event-store";
@@ -1791,6 +1805,7 @@ interface Harness {
   monitor: ClaudeMonitor;
   clock: FakeClock;
   watchdog: Watchdog;
+  telemetry: TelemetryCollector;
   notifies: NotifierStage[];
   stdout: string[];
   lock: MonitorLock;
@@ -1815,13 +1830,14 @@ function makeHarness(): Harness {
   const notifier = lockGuardedNotifier(baseNotifier, lock, onLockLost);
   const pinger = lockGuardedPinger(new ClaudeCodeAdapter((line) => stdout.push(line)), lock, onLockLost);
   const config = resolveClaudeConfig({ AKANE_STAGE1_MS: "1000", AKANE_STAGE2_MS: "1000", AKANE_MAX_PINGS: "1" });
-  const watchdog = new Watchdog({ config, clock, notifier, pinger, log: () => {} });
+  const telemetry = new TelemetryCollector();
+  const watchdog = new Watchdog({ config, clock, notifier, pinger, telemetry, log: () => {} });
   const monitor = new ClaudeMonitor({
     stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir), lock, clock,
     pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000,
     log: () => {}, onLockLost,
   });
-  return { monitor, clock, watchdog, notifies, stdout, lock };
+  return { monitor, clock, watchdog, notifies, stdout, lock, telemetry };
 }
 
 describe("ClaudeMonitor", () => {
@@ -1879,8 +1895,10 @@ describe("ClaudeMonitor", () => {
     h.clock.advance(1000);
     h.clock.advance(1000);
     await new Promise((r) => setTimeout(r, 10));
-    // Assert via TelemetryCollector's public snapshot/report API after wiring it
-    // into the harness; stdout must still contain only the ping line.
+    const snap = h.telemetry.snapshot();
+    expect(snap.hangupsDetected).toBe(1);
+    expect(snap.pingsSent).toBe(1);
+    // stdout must still contain only the ping line (no telemetry/debug leaked).
     expect(h.stdout).toHaveLength(1);
   });
 
@@ -1935,6 +1953,7 @@ import type { EventTailer } from "./event-log";
 import { deleteSessionLog, sweepOrphans, type TombstoneStore } from "./event-store";
 import type { MonitorLock } from "./lock";
 import { eventsDir } from "./state-dir";
+import { safeError } from "./safe-error";
 import type { AkaneClaudeEvent } from "./event-types";
 
 export interface ClaudeMonitorDeps {
@@ -2030,11 +2049,6 @@ export class ClaudeMonitor {
     }
     this.deps.lock.release();
   }
-}
-
-function safeError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
 }
 
 // SPEC §8.3 退場手順-2: gate every side effect on current lock ownership so a
