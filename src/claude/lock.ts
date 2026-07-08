@@ -47,12 +47,18 @@ export class MonitorLock {
     return null;
   }
 
-  private write(record: LockRecord): void {
-    fs.mkdirSync(this.deps.dir, { recursive: true });
-    // Use PID-unique tmp name to avoid cross-process renameSync ENOENT race at cold start.
-    const tmp = `${this.filePath}.${this.deps.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(record));
-    fs.renameSync(tmp, this.filePath);
+  private write(record: LockRecord): boolean {
+    try {
+      fs.mkdirSync(this.deps.dir, { recursive: true });
+      // Use PID-unique tmp name to avoid cross-process renameSync ENOENT race at cold start.
+      const tmp = `${this.filePath}.${this.deps.pid}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(record));
+      fs.renameSync(tmp, this.filePath);
+      return true;
+    } catch {
+      // Failed lock writes must not throw (zero-crash §8.1); callers treat false as not acquired / ownership not refreshed.
+      return false;
+    }
   }
 
   private isMine(record: LockRecord): boolean {
@@ -71,8 +77,7 @@ export class MonitorLock {
     if (existing && !this.isMine(existing) && !this.isStale(existing)) {
       return false; // healthy foreign owner (SPEC §8.3-4)
     }
-    this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() });
-    return true;
+    return this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() });
   }
 
   // SPEC §8.3 退場手順-1: re-read before writing; if we no longer own the lock,
@@ -80,8 +85,7 @@ export class MonitorLock {
   heartbeat(): boolean {
     const current = this.read();
     if (!current || !this.isMine(current)) return false;
-    this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() });
-    return true;
+    return this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() });
   }
 
   // SPEC §8.3 退場手順-2: synchronous ownership gate before side effects.
