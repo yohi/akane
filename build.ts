@@ -39,6 +39,8 @@ export async function buildClaudeHook(): Promise<void> {
     target: "node",
     external: EXTERNALS,
     naming: { entry: "hook.js" },
+    // root: "." pins the project root so parent-relative imports (../errors) resolve under `bun test` (Bun would otherwise infer root=src/claude/ and fail to resolve imports that escape it).
+    root: ".",
   });
   if (!result.success) {
     for (const log of result.logs) console.error(log);
@@ -53,6 +55,7 @@ export async function buildClaudeMonitor(): Promise<void> {
     target: "node",
     external: EXTERNALS,
     naming: { entry: "monitor.js" },
+    root: ".",
   });
   if (!result.success) {
     for (const log of result.logs) console.error(log);
