@@ -5,7 +5,8 @@ const plugin = JSON.parse(fs.readFileSync(".claude-plugin/plugin.json", "utf8"))
   name: string;
   version: string;
   hooks: Record<string, Array<{ hooks: Array<{ type: string; command: string }> }>>;
-  userConfig: Record<string, { type: string; default: unknown }>;
+  userConfig: Record<string, { type: string; default: unknown; title: string; description: string }>;
+  author?: { name?: string; url?: string };
 };
 const monitors = JSON.parse(fs.readFileSync("monitors/monitors.json", "utf8")) as Array<{
   name: string;
@@ -38,6 +39,18 @@ describe("plugin.json", () => {
     expect(plugin.userConfig.stage2_ms!.default).toBe(180000);
     expect(plugin.userConfig.max_pings!.default).toBe(1);
     expect(plugin.userConfig.notifier_type!.default).toBe("tmux");
+  });
+
+  test("userConfig entries have title + description and manifest has author (required by claude plugin validate --strict)", () => {
+    for (const key of Object.keys(plugin.userConfig)) {
+      const entry = plugin.userConfig[key]!;
+      expect(typeof entry.title).toBe("string");
+      expect(entry.title.length).toBeGreaterThan(0);
+      expect(typeof entry.description).toBe("string");
+      expect(entry.description.length).toBeGreaterThan(0);
+    }
+    expect(plugin.author).toBeDefined();
+    expect(typeof plugin.author!.name).toBe("string");
   });
 
   test("uses only CLAUDE_PLUGIN_ROOT-relative paths (no absolute paths)", () => {

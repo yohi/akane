@@ -2,6 +2,7 @@
   "name": "akane",
   "version": "1.5.1",
   "description": "Claude Code session hang detector with tmux/OS notification + recovery ping",
+  "author": { "name": "yohi", "url": "https://github.com/yohi" },
   "hooks": {
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
     "MessageDisplay": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
@@ -13,9 +14,9 @@
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }]
   },
   "userConfig": {
-    "stage1_ms": { "type": "number", "default": 180000 },
-    "stage2_ms": { "type": "number", "default": 180000 },
-    "max_pings": { "type": "number", "default": 1 },
-    "notifier_type": { "type": "string", "default": "tmux" }
+    "stage1_ms": { "type": "number", "default": 180000, "title": "Stage 1 timeout (ms)", "description": "Milliseconds of agent silence before the Stage 1 warning is raised." },
+    "stage2_ms": { "type": "number", "default": 180000, "title": "Stage 2 timeout (ms)", "description": "Milliseconds of continued silence before the Stage 2 critical alert and recovery ping." },
+    "max_pings": { "type": "number", "default": 1, "title": "Max pings", "description": "Maximum number of automatic recovery pings injected per hang before giving up." },
+    "notifier_type": { "type": "string", "default": "tmux", "title": "Notifier type", "description": "Notification backend to use: 'tmux' (status line) or 'os' (desktop notification)." }
   }
 }
