@@ -129,10 +129,12 @@ hook（短命）と monitor（常駐）は別プロセスのため、両者が**
   3. `$HOME/.local/state/akane`（XDG 既定へのフォールバック）
 - **events パス（セッション単位）**: `<stateDir>/.akane/<sessionId>.ndjson`。`sessionId` は hook が Claude Code stdin から抽出（既存 `extractSessionId` 流用）、monitor は `<stateDir>/.akane/` を tail する。§3 図中の `events.ndjson` はこのセッション単位ファイルの総称。
 - **マルチセッション/複数 monitor**: セッション毎にファイルを分離し、同時実行時のイベント混線と追記競合を回避する（複数 monitor 可否は §10-1 で確定）。
-- **ローテーション/クリーンアップ**（append-only の無制限成長防止）:
+- **ローテーション/クリーンアップ**（成長バウンドは *in-session コンパクションではなく* セッション寿命の削除＋孤児掃除で担保）:
   - `SessionEnd` 受信時、monitor は当該 `<sessionId>.ndjson` を tombstone 記録後に削除する。
   - monitor 起動時、tombstone 済み・または最終更新から TTL（既定 24h）超過の孤児ファイルを掃除する（クラッシュで `SessionEnd` を取りこぼした場合の保険）。
-  - 単一セッションが上限行数（既定 100,000 行）を超えた場合、monitor は読取オフセット以前の処理済みプレフィックスを破棄し未処理分のみで再書込（atomic `.tmp→rename`）するコンパクションを行う。
+  - **成長方針（Option A・改訂）**: monitor は各セッションログを**永続 read-offset で tail するのみ**とし、追記中の `<sessionId>.ndjson` を **rewrite / rename / truncate しない**（旧案「上限行数超過で `.tmp→rename` 再書込するコンパクション」は撤回）。別プロセスの hook が追記中のファイルへ monitor が `.tmp→rename` すると (a) 読取〜 rename 間の追記 (b) rename 前に open した hook の追記 が失われる不可避のレースが生じ、§8.2「events は追記型／`.tmp→rename` は単一writer のみ」にも違反するため。
+  - **monitor 読取契約**: `[offset, EOF)` を読み改行で分割し、**完全な行のみ** parse、末尾の不完全行（改行未達）はバッファして次回へ回す（tail の必須要件）。offset は EventTailer が保持（既定 in-memory）し、monitor crash/再起動時は先頭から再 tail してよい（末尾再処理はタイマー reset のみで冪等ゆえ無害）。永続化する場合も対象は monitor 専用ファイルへの `.tmp→rename`（単一writer＝§8.2 合法）に限り、events 本体は決して書き換えない。
+  - in-session のディスクは当該セッションのイベント数に比例するが（既定目安 100,000 行 ≈ 数十 MB）、`SessionEnd` 削除＋孤児掃除で回収され無制限蓄積は生じない。単一ログが実運用で数百 MB〜GB に達し **in-session のハード上限が必須**になった場合のみ、セグメントローテーション（`<sessionId>.<seq>.ndjson`＋monitor 所有 marker、消費済み・quiescent・非アクティブなセグメントのみ unlink）へエスカレーションする（SIGSTOP 等で猶予超過した hook 追記が失われる極低確率の残存レースを許容する意思決定が前提。本設計では非採用）。
 - env による値受け渡し（hook/monitor が同一 `stateDir`/設定を得る手段）は §7.2 の env マッピングに従い実機で確定する（§10-2）。
 
 ---
@@ -316,7 +318,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 |---|---|
 | Late-event tombstone（FIFO 10,000） | monitor 内の既存 `BoundedSet`/`stoppedSessions` を流用（Stop/SessionEnd で記録） |
 | Arm lock ＋ 手動バイパス | 既存 watchdog ロジックそのまま。`UserPromptSubmit` が手動バイパス |
-| Atomic 書込 | events.ndjson は追記型（アトミック追記）／shared-state は既存 `.tmp→rename` |
+| Atomic 書込 | events（`<sessionId>.ndjson`）は追記のみ（monitor は rewrite/rename/truncate せず read-offset で tail）／read-offset・shared-state 等の単一writer ファイルのみ `.tmp→rename` |
 | Secure logging / masking | 既存 Pinger マスク（sessionId 先頭4字・err 30字）流用。hooks/monitor もユーザ入力・通知本文を生出力しない |
 | Color validation regex | 既存の厳格 hex 検証（下記の正規表現）を再利用 |
 | Debug log gating（`AKANE_DEBUG`） | hooks/monitor にも適用（高頻度フックのログ肥大防止） |
@@ -357,7 +359,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 ### 9.2 Integration / Smoke / Stress
 - **Integration（monitor）**: fake `Clock` ＋ `events.ndjson` にイベント列を流し込み、stage1/stage2 の発火・`Notifier` 呼出・Ping stdout 出力を検証（既存 `watchdog.test.ts` のシナリオを Claude Code イベント列で再現）。
 - **Smoke**: `plugin.json` / `monitors.json` の JSON 妥当性・`claude plugin validate --strict` 相当の構造検証。
-- **Stress**: 既存の 1000 セッション × 100 イベントを `events.ndjson` 経由で再現し、Map / アクティブタイマー数が 0 に戻ること、かつ `SessionEnd` 後に全セッションファイルが削除される（disk 側衛生・§4.3）ことを確認。
+- **Stress**: (1) 既存の 1000 セッション × 100 イベントを `events.ndjson` 経由で再現し、Map / アクティブタイマー数が 0 に戻ること、`SessionEnd` 後に全セッションファイルが削除される（disk 側衛生・§4.3）こと。(2) **並行追記の無損失検証**: 実サブプロセス hook を高並列で長寿命セッション（上限行数超の規模）へ追記させつつ monitor が offset で tail し、各イベントの一意 ID で consumed ⊇ produced（ロストなし）・全完全行が正規化イベントとして parse 成功（torn/不完全行の誤 parse なし）・monitor を途中 kill しても offset 再開でロスト無し・ピーク live bytes がセッション寿命で回収されることを確認（§4.3 read-offset 方針）。
 - **既存 202 テストは不変**（OpenCode 側は非改変）。新規テストを追加する。
 
 ### 9.3 実機検証（実装計画の検証ステップ・別途）
@@ -394,7 +396,7 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 10. monitor の stdout に Ping/通知以外の行が出力されない（stdout 規律テスト pass）。
 11. `deploy-claude-to-bitbucket.yml` が冪等（Bitbucket 最新タグ == GitHub Release タグならスキップ）に動作する。
 12. OpenCode 版の既存挙動・テストが一切変化しない。
-13. 長時間セッションで `events` ファイルが無制限に成長せず、`SessionEnd`（および孤児掃除）でセッションファイルが削除される（§4.3）。
+13. 長時間セッションで monitor がアクティブなイベントファイルを rewrite/rename/truncate せず read-offset で tail し（§4.3）、`SessionEnd`（および孤児掃除）でセッションファイルが削除されてクロスセッションの無制限蓄積が起きない。
 14. monitor クラッシュで `monitor.lock` が残留しても、次回起動時に stale 判定で奪取され再起動できる（§8.3）。
 15. 生存中の旧 monitor がロックを奪われた際、ハートビート／副作用直前のロック整合チェックで自己終了し、二重通知・二重 Ping が発生しない（§8.3 退場手順）。
 

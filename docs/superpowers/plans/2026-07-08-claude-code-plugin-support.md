@@ -18,7 +18,7 @@
 - **Zero-Crash**: hooks（短命）は全処理を try/catch し**常に exit 0**、ターン/ツールを block しない（SPEC §8.1・AC #7）。monitor（常駐）は per-event try/catch で 1 イベント失敗が全体を止めない。
 - **stateDir 解決順（優先順位固定）**: 1) `AKANE_STATE_DIR` 2) `XDG_STATE_HOME/akane` 3) `$HOME/.local/state/akane`（SPEC §4.3）。
 - **events パス**: `<stateDir>/.akane/<sessionId>.ndjson`（セッション単位・append-only、アトミック追記）（SPEC §4.3）。
-- **Atomic 書込**: 共有状態・ロック・コンパクションは一時ファイル（`.tmp`）へ書込後 `fs.renameSync` で置換（SPEC §8.2・§3.5）。
+- **Atomic 書込**: 共有状態・ロック（および任意の read-offset）は一時ファイル（`.tmp`）へ書込後 `fs.renameSync` で置換（SPEC §8.2・§3.5）。events 本体は追記のみで書き換えない。
 - **Late-event tombstone（FIFO 10,000）**: 既存 `Watchdog` 内 `stoppedSessions` をそのまま流用（SPEC §8.2）。
 - **Secure logging / masking**: `sessionId` は先頭 4 文字のみ（`xxxx***`）、エラーは 30 文字で truncate。ユーザ入力・通知本文を生ログしない（SPEC §8.2・§3.7）。
 - **No shell injection**: 外部コマンドは配列引数（既存 Notifier をそのまま利用）（SPEC §8.2）。
@@ -39,7 +39,7 @@
 | `src/claude/event-types.ts` | 新規 | 正規化イベント型 `AkaneClaudeEvent` と型ガード `isAkaneClaudeEvent`。 |
 | `src/claude/state-dir.ts` | 新規 | `stateDir` 決定論的解決、events パス生成、`sessionId` サニタイズ（パストラバーサル防止）。 |
 | `src/claude/config.ts` | 新規 | `AKANE_*` env → 既存 `OPENCODE_WATCHDOG_*` env へ写像し `resolveConfig` を流用。 |
-| `src/claude/event-log.ts` | 新規 | 一方向 IPC：`appendEvent`（hook 側追記）＋ `EventTailer`（monitor 側 tail・破損行スキップ・コンパクション）。 |
+| `src/claude/event-log.ts` | 新規 | 一方向 IPC：`appendEvent`（hook 側追記）＋ `EventTailer`（monitor 側 tail・破損行スキップ・read-offset。アクティブファイルは非 rewrite）。 |
 | `src/claude/event-store.ts` | 新規 | ディスク衛生：`TombstoneStore`（永続化）＋ `deleteSessionLog` ＋ `sweepOrphans`。 |
 | `src/claude/pinger.ts` | 新規 | `ClaudeCodeAdapter`（`Pinger` 実装 = stdout へ Ping 1 行）。stdout 規律。 |
 | `src/claude/event-map.ts` | 新規 | 正規化イベント → `Watchdog` メソッド dispatch（PAUSED 解除の簡略化含む）。 |
@@ -427,7 +427,7 @@ git commit -m "feat(claude): AKANE_* env を resolveConfig へ写像する設定
 
 ---
 
-## Task 4: `event-log.ts`（一方向 IPC: 追記 + tail + コンパクション）
+## Task 4: `event-log.ts`（一方向 IPC: 追記 + tail + read-offset）
 
 **Files:**
 - Create: `src/claude/event-log.ts`
@@ -441,7 +441,6 @@ git commit -m "feat(claude): AKANE_* env を resolveConfig へ写像する設定
     - `constructor(dir: string)`（dir = `eventsDir(stateDir)`）
     - `poll(): AkaneClaudeEvent[]`（dir 内 `*.ndjson` を名前順に走査、各ファイルの未読完全行のみ返す。破損行スキップ、末尾の不完全行は保留）
     - `forget(sessionId: string): void`（当該ファイルの読取オフセットを破棄）
-    - `compactIfNeeded(sessionId: string, maxLines: number): boolean`（行数 > maxLines なら読取オフセット以降のみを `.tmp→rename` で再書込、オフセットを 0 リセット）
 
 - [ ] **Step 1: Write the failing test**
 
@@ -504,27 +503,6 @@ describe("appendEvent + EventTailer", () => {
     expect(tailer.poll().map((e) => e.kind)).toEqual(["activity"]);
     fs.appendFileSync(file, `,"sessionId":"s1","ts":2}\n`);
     expect(tailer.poll().map((e) => e.kind)).toEqual(["idle"]);
-  });
-
-  test("compactIfNeeded rewrites to unread tail and resets offset", () => {
-    const file = path.join(dir, "s1.ndjson");
-    for (let i = 0; i < 5; i++) appendEvent(file, ev("activity", "s1", i));
-    const tailer = new EventTailer(dir);
-    expect(tailer.poll()).toHaveLength(5); // offset now at EOF
-    appendEvent(file, ev("idle", "s1", 99)); // one unread line remains
-    const compacted = tailer.compactIfNeeded("s1", 3);
-    expect(compacted).toBe(true);
-    // File now holds only the unread tail; next poll yields it exactly once.
-    const after = tailer.poll();
-    expect(after).toHaveLength(1);
-    expect(after[0]!.kind).toBe("idle");
-  });
-
-  test("compactIfNeeded is a no-op below threshold", () => {
-    const file = path.join(dir, "s1.ndjson");
-    appendEvent(file, ev("activity", "s1"));
-    const tailer = new EventTailer(dir);
-    expect(tailer.compactIfNeeded("s1", 100)).toBe(false);
   });
 
   test("poll on missing dir returns empty", () => {
@@ -616,45 +594,19 @@ export class EventTailer {
     this.cursors.delete(`${sanitizeSessionId(sessionId)}.ndjson`);
   }
 
-  compactIfNeeded(sessionId: string, maxLines: number): boolean {
-    const name = `${sanitizeSessionId(sessionId)}.ndjson`;
-    const filePath = path.join(this.dir, name);
-    let content: Buffer;
-    try {
-      content = fs.readFileSync(filePath);
-    } catch {
-      return false;
-    }
-    let lines = 0;
-    for (let i = 0; i < content.length; i++) {
-      if (content[i] === NEWLINE) lines++;
-    }
-    if (lines <= maxLines) return false;
-    const cursor = this.cursors.get(name) ?? { offset: 0 };
-    // Keep only the unprocessed tail (from the read offset). A hook append
-    // racing this rewrite may be lost — tolerated best-effort; the SessionEnd
-    // tombstone is the authoritative teardown (SPEC §4.3).
-    const tail = content.subarray(Math.min(cursor.offset, content.length));
-    const tmp = `${filePath}.tmp`;
-    fs.writeFileSync(tmp, tail);
-    fs.renameSync(tmp, filePath);
-    cursor.offset = 0;
-    this.cursors.set(name, cursor);
-    return true;
-  }
 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/claude/event-log.test.ts`
-Expected: PASS (7 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/claude/event-log.ts tests/claude/event-log.test.ts
-git commit -m "feat(claude): events.ndjson の追記・tail・コンパクション(EventTailer)を追加"
+git commit -m "feat(claude): events.ndjson の追記・tail(EventTailer, read-offset)を追加"
 ```
 
 ---
@@ -1788,12 +1740,12 @@ git commit -m "feat(claude): monitor 単一起動ロック(MonitorLock)と stale
 **Interfaces:**
 - Consumes: `Clock`（`src/clock.ts`）；`Notifier`（`src/notifier.ts`）；`Pinger`（`src/pinger.ts`）；`Watchdog`（`src/watchdog.ts`）；`dispatchEvent`/`WatchdogTarget`（`event-map.ts`）；`EventTailer`（`event-log.ts`）；`TombstoneStore`/`deleteSessionLog`/`sweepOrphans`（`event-store.ts`）；`MonitorLock`（`lock.ts`）；`eventsDir`（`state-dir.ts`）；`AkaneClaudeEvent`（`event-types.ts`）。
 - Produces:
-  - `interface ClaudeMonitorDeps { stateDir; watchdog: Watchdog; tailer: EventTailer; tombstones: TombstoneStore; lock: MonitorLock; clock: Clock; pollMs: number; maintenanceIntervalMs: number; orphanTtlMs: number; maxLinesPerSession: number; log: (level: "info"|"warn", message: string) => void; onLockLost: () => void }`
+  - `interface ClaudeMonitorDeps { stateDir; watchdog: Watchdog; tailer: EventTailer; tombstones: TombstoneStore; lock: MonitorLock; clock: Clock; pollMs: number; maintenanceIntervalMs: number; orphanTtlMs: number; log: (level: "info"|"warn", message: string) => void; onLockLost: () => void }`
   - `class ClaudeMonitor`：`start(): void` / `tick(): void` / `shutdown(): void`
   - `function lockGuardedNotifier(inner: Notifier, lock: MonitorLock, onLost: () => void): Notifier`
   - `function lockGuardedPinger(inner: Pinger, lock: MonitorLock, onLost: () => void): Pinger`
 
-**設計メモ**: `Watchdog` は非改変で再利用するため、副作用直前の lock 整合チェック（SPEC §8.3 退場手順-2）は **Notifier/Pinger を lock ガードラッパーで包んで Watchdog に DI** することで実現（Watchdog 内部の stage1/stage2 発火がガードを通る）。`tick()` 冒頭で `lock.heartbeat()` を呼び、失っていたら shutdown + `onLockLost()`（退場手順-1）。コンパクションと孤児掃除は `maintenanceIntervalMs` 毎の周期処理で行い、毎イベントの全ファイル読取を避ける。`stdout` は ClaudeCodeAdapter のみが使う（monitor logger は stderr/ファイル、SPEC §6.4）。
+**設計メモ**: `Watchdog` は非改変で再利用するため、副作用直前の lock 整合チェック（SPEC §8.3 退場手順-2）は **Notifier/Pinger を lock ガードラッパーで包んで Watchdog に DI** することで実現（Watchdog 内部の stage1/stage2 発火がガードを通る）。`tick()` 冒頭で `lock.heartbeat()` を呼び、失っていたら shutdown + `onLockLost()`（退場手順-1）。孤児掃除は `maintenanceIntervalMs` 毎の周期処理で行い（events 本体は rewrite しない）、毎イベントの全ファイル読取を避ける。`stdout` は ClaudeCodeAdapter のみが使う（monitor logger は stderr/ファイル、SPEC §6.4）。
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1853,7 +1805,7 @@ function makeHarness(): Harness {
   const watchdog = new Watchdog({ config, clock, notifier, pinger, log: () => {} });
   const monitor = new ClaudeMonitor({
     stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir), lock, clock,
-    pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000, maxLinesPerSession: 100_000,
+    pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000,
     log: () => {}, onLockLost,
   });
   return { monitor, clock, watchdog, notifies, stdout, lock };
@@ -1917,7 +1869,7 @@ describe("ClaudeMonitor", () => {
     const m = new ClaudeMonitor({
       stateDir, watchdog: h.watchdog, tailer: new EventTailer(eventsDir(stateDir)),
       tombstones: new TombstoneStore(eventsDir(stateDir)), lock: h.lock, clock: h.clock,
-      pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000, maxLinesPerSession: 100_000,
+      pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000,
       log: () => {}, onLockLost: () => { lost = true; },
     });
     m.tick();
@@ -1957,7 +1909,6 @@ export interface ClaudeMonitorDeps {
   pollMs: number;
   maintenanceIntervalMs: number;
   orphanTtlMs: number;
-  maxLinesPerSession: number;
   log: (level: "info" | "warn", message: string) => void;
   onLockLost: () => void;
 }
@@ -2028,20 +1979,6 @@ export class ClaudeMonitor {
     } catch (err) {
       this.deps.log("warn", `sweep failed: ${String(err)}`);
     }
-    let names: string[] = [];
-    try {
-      names = fs.readdirSync(dir).filter((n) => n.endsWith(".ndjson"));
-    } catch {
-      return;
-    }
-    for (const name of names) {
-      const stem = name.slice(0, -".ndjson".length);
-      try {
-        this.deps.tailer.compactIfNeeded(stem, this.deps.maxLinesPerSession);
-      } catch {
-        // Compaction is best-effort; never crash the monitor.
-      }
-    }
   }
 
   shutdown(): void {
@@ -2102,9 +2039,8 @@ import { ClaudeCodeAdapter } from "./pinger";
 import { ClaudeMonitor, lockGuardedNotifier, lockGuardedPinger } from "./monitor";
 
 const POLL_MS = 1000;
-const MAINTENANCE_INTERVAL_MS = 3_600_000; // hourly sweep + compaction
+const MAINTENANCE_INTERVAL_MS = 3_600_000; // hourly orphan sweep
 const ORPHAN_TTL_MS = 86_400_000; // 24h (SPEC §4.3)
-const MAX_LINES_PER_SESSION = 100_000; // (SPEC §4.3)
 
 function main(): void {
   const env = process.env as Record<string, string | undefined>;
@@ -2146,7 +2082,7 @@ function main(): void {
   const monitor = new ClaudeMonitor({
     stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir), lock, clock,
     pollMs: POLL_MS, maintenanceIntervalMs: MAINTENANCE_INTERVAL_MS,
-    orphanTtlMs: ORPHAN_TTL_MS, maxLinesPerSession: MAX_LINES_PER_SESSION,
+    orphanTtlMs: ORPHAN_TTL_MS,
     log: (level, message) => logStderr(env, `[${level}] ${message}`),
     onLockLost,
   });
@@ -2258,7 +2194,7 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
     });
     const monitor = new ClaudeMonitor({
       stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir), lock, clock,
-      pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000, maxLinesPerSession: 100_000,
+      pollMs: 100, maintenanceIntervalMs: 3_600_000, orphanTtlMs: 86_400_000,
       log: () => {}, onLockLost: onLost,
     });
 
@@ -2271,20 +2207,23 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
     expect(remaining).toEqual([]);
   });
 
-  test("compaction caps a single very large session file", () => {
+  test("interleaved appends during polling are consumed once and the log is never rewritten (§4.3 read-offset)", () => {
     const dir = eventsDir(stateDir);
     fs.mkdirSync(dir, { recursive: true });
-    const sid = "big";
-    const lines: string[] = [];
-    for (let c = 0; c < 250; c++) lines.push(JSON.stringify({ kind: "activity", sessionId: sid, ts: c }));
-    fs.writeFileSync(eventsPathFor(stateDir, sid), lines.join("\n") + "\n");
+    const file = eventsPathFor(stateDir, "concurrent");
     const tailer = new EventTailer(dir);
-    expect(tailer.poll().length).toBe(250); // consume, offset at EOF
-    // Append 3 more unread lines, then compact with a small cap.
-    fs.appendFileSync(eventsPathFor(stateDir, sid), lines.slice(0, 3).join("\n") + "\n");
-    expect(tailer.compactIfNeeded(sid, 100)).toBe(true);
-    const afterLines = fs.readFileSync(eventsPathFor(stateDir, sid), "utf8").trim().split("\n");
-    expect(afterLines.length).toBe(3); // only the unread tail survives
+    const seen = new Set<number>();
+    let prevSize = 0;
+    const TOTAL = 500;
+    for (let i = 0; i < TOTAL; i++) {
+      fs.appendFileSync(file, JSON.stringify({ kind: "activity", sessionId: "concurrent", ts: i }) + "\n");
+      const size = fs.statSync(file).size;
+      expect(size).toBeGreaterThanOrEqual(prevSize); // monitor は active log を rewrite/縮小しない
+      prevSize = size;
+      if (i % 7 === 0) for (const e of tailer.poll()) seen.add(e.ts);
+    }
+    for (const e of tailer.poll()) seen.add(e.ts);
+    expect(seen.size).toBe(TOTAL); // interleaved append + poll でロストなし
   });
 });
 ```
@@ -2847,7 +2786,7 @@ git commit -m "test(claude): 実機検証結果を反映し未確定事項(§10)
 | §3 センサー/頭脳分離・一方向 IPC | Task 4（event-log）/ Task 8（hook）/ Task 10（monitor） |
 | §4.1 既存 `src/` 再利用 | 全タスクが既存 watchdog/clock/notifier/telemetry/errors/shared-state/pinger を import（非改変） |
 | §4.2 新規 `src/claude/` 各モジュール | Task 1–10（event-types/hook/event-log/event-map/pinger/monitor/config + state-dir/event-store/lock） |
-| §4.3 stateDir 解決 / events ライフサイクル / ローテーション | Task 2（state-dir）/ Task 5（tombstone/sweep）/ Task 4（compaction）/ Task 10（session_end 削除・孤児掃除） |
+| §4.3 stateDir 解決 / events ライフサイクル / ローテーション | Task 2（state-dir）/ Task 5（tombstone/sweep）/ Task 4（read-offset tail）/ Task 10（session_end 削除・孤児掃除） |
 | §5.1 イベントマッピング | Task 8（normalizeEvent）+ Task 7（dispatchEvent） |
 | §5.2 ハング検知セマンティクス | 既存 `watchdog.ts` をそのまま利用（Task 10 統合テストで検証） |
 | §5.3 パリティ限界 | Task 7（PAUSED 解除の簡略化）/ Task 15（cadence 実測） |
@@ -2890,7 +2829,7 @@ git commit -m "test(claude): 実機検証結果を反映し未確定事項(§10)
 - `AkaneClaudeEvent`（Task 1）のフィールド（`kind`/`sessionId`/`ts`/`agentName`/`callId`/`requestId`/`errorReason`）を Task 4/7/8/10/11 が一貫使用。
 - `WatchdogTarget`（Task 7）のメソッド名は実 `Watchdog`（`src/watchdog.ts`）のシグネチャと一致（`onUserMessage`/`onActivity`/`onToolRunning`/`onToolSettled`/`onInputRequested`/`onInputResolved`/`onSessionCreated`/`noteError`/`stop`）。
 - `MonitorLock`（Task 9）の `tryAcquire`/`heartbeat`/`isOwned`/`release` を Task 10 がそのまま使用。`computeStartedAt` は monitor-main のみが使用。
-- `EventTailer`（Task 4）の `poll`/`forget`/`compactIfNeeded` を Task 10/11 が使用。`forget`/`compactIfNeeded` は `sanitizeSessionId` でファイル名を導出し、hook 側の `eventsPathFor`（同じ sanitize）とキー一致。
+- `EventTailer`（Task 4）の `poll`/`forget` を Task 10/11 が使用。`forget` は `sanitizeSessionId` でファイル名を導出し、hook 側の `eventsPathFor`（同じ sanitize）とキー一致。
 - `resolveClaudeConfig`（Task 3）→ `WatchdogConfig`（既存 `src/config.ts`）を返し、Task 10 の `Watchdog` コンストラクタにそのまま渡せる。
 - `ClaudeCodeAdapter`（Task 6）は `Pinger`（`src/pinger.ts`）を実装し、`buildPingPrompt` を流用。`PingContext.reason` は `HangReason` と整合。
 
