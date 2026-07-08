@@ -1,0 +1,21 @@
+{
+  "name": "akane",
+  "version": "1.5.1",
+  "description": "Claude Code session hang detector with tmux/OS notification + recovery ping",
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "MessageDisplay": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/hook.js" }] }]
+  },
+  "userConfig": {
+    "stage1_ms": { "type": "number", "default": 180000 },
+    "stage2_ms": { "type": "number", "default": 180000 },
+    "max_pings": { "type": "number", "default": 1 },
+    "notifier_type": { "type": "string", "default": "tmux" }
+  }
+}
