@@ -49,7 +49,8 @@ export class MonitorLock {
 
   private write(record: LockRecord): void {
     fs.mkdirSync(this.deps.dir, { recursive: true });
-    const tmp = `${this.filePath}.tmp`;
+    // Use PID-unique tmp name to avoid cross-process renameSync ENOENT race at cold start.
+    const tmp = `${this.filePath}.${this.deps.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(record));
     fs.renameSync(tmp, this.filePath);
   }
