@@ -1,0 +1,109 @@
+name: deploy-claude-to-bitbucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "GitHub Release tag to publish (defaults to latest)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+          cache: "bun"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      - name: Build
+        run: bun run build
+
+      - name: Validate Claude plugin (post-build, matches nexus)
+        run: npx --yes claude plugin validate ./ --strict
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          TAG="${{ inputs.ref }}"
+          if [ -z "$TAG" ]; then
+            TAG="$(git describe --tags --abbrev=0)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Idempotent skip when Bitbucket already has this tag
+        id: guard
+        env:
+          BB_USER: ${{ secrets.BITBUCKET_USER }}
+          BB_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
+        run: |
+          # Query the dist repo's tags WITHOUT putting the token on the URL/args
+          # (token supplied via a credential helper; mirrors nexus).
+          DIST_URL="https://bitbucket.org/${{ vars.BITBUCKET_ORG }}/akane-dist.git"
+          export GIT_ASKPASS="$(mktemp)"
+          # set -e (Actions 既定シェル) で後続が失敗しても資格情報スクリプトを確実に破棄 (SPEC §7.4)
+          trap 'rm -f "$GIT_ASKPASS"' EXIT
+          printf '#!/bin/sh\ncase "$1" in *Username*) echo "$BB_USER";; *) echo "$BB_TOKEN";; esac\n' > "$GIT_ASKPASS"
+          chmod +x "$GIT_ASKPASS"
+          REMOTE_TAG="$(git ls-remote --tags "$DIST_URL" "refs/tags/${{ steps.tag.outputs.tag }}")"
+          if [ -n "$REMOTE_TAG" ]; then
+            echo "Dist repo already has ${{ steps.tag.outputs.tag }} - skip."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stage Claude distribution
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          STAGE="$(mktemp -d)"
+          mkdir -p "$STAGE/.claude-plugin" "$STAGE/dist/claude" "$STAGE/monitors"
+          cp .claude-plugin/plugin.json "$STAGE/.claude-plugin/plugin.json"
+          cp -r dist/claude/. "$STAGE/dist/claude/"
+          cp monitors/monitors.json "$STAGE/monitors/monitors.json"
+          # Copy only scripts referenced by the manifests, if any exist.
+          if [ -d scripts ]; then
+            mkdir -p "$STAGE/scripts"
+            find scripts -maxdepth 1 -type f -exec cp {} "$STAGE/scripts/" \;
+          fi
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+
+      - name: Push to Bitbucket dist repo (force, token via GIT_ASKPASS)
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          BB_USER: ${{ secrets.BITBUCKET_USER }}
+          BB_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
+        run: |
+          DIST_URL="https://bitbucket.org/${{ vars.BITBUCKET_ORG }}/akane-dist.git"
+          export GIT_ASKPASS="$(mktemp)"
+          # git push 失敗 (set -e) でも資格情報スクリプトを確実に破棄 (SPEC §7.4)
+          trap 'rm -f "$GIT_ASKPASS"' EXIT
+          printf '#!/bin/sh\ncase "$1" in *Username*) echo "$BB_USER";; *) echo "$BB_TOKEN";; esac\n' > "$GIT_ASKPASS"
+          chmod +x "$GIT_ASKPASS"
+          cd "$STAGE"
+          git init -q
+          git checkout -q -b main
+          git add -A
+          git -c user.email=ci@akane -c user.name=akane-ci commit -q -m "release ${{ steps.tag.outputs.tag }}"
+          git tag "${{ steps.tag.outputs.tag }}"
+          git push -q --force "$DIST_URL" main
+          git push -q --force "$DIST_URL" "${{ steps.tag.outputs.tag }}"
