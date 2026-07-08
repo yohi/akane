@@ -318,10 +318,16 @@ nexus の `deploy-to-bitbucket.yml` を基に、以下のみ変更する。
 | Arm lock ＋ 手動バイパス | 既存 watchdog ロジックそのまま。`UserPromptSubmit` が手動バイパス |
 | Atomic 書込 | events.ndjson は追記型（アトミック追記）／shared-state は既存 `.tmp→rename` |
 | Secure logging / masking | 既存 Pinger マスク（sessionId 先頭4字・err 30字）流用。hooks/monitor もユーザ入力・通知本文を生出力しない |
-| Color validation regex | 既存の厳格 hex 検証（`/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/`）を再利用 |
+| Color validation regex | 既存の厳格 hex 検証（下記の正規表現）を再利用 |
 | Debug log gating（`AKANE_DEBUG`） | hooks/monitor にも適用（高頻度フックのログ肥大防止） |
 | No shell injection | spawn は配列引数（Notifier そのまま） |
 | No absolute paths | plugin.json/monitors.json は `${CLAUDE_PLUGIN_ROOT}` 相対、events は stateDir 相対 |
+
+**Color validation regex（§8.2）** — テーブル内でのパイプ誤分割を避けるためコードブロックで記載:
+
+```text
+/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
+```
 
 ### 8.3 新規の不変条件（Claude Code 固有）
 - **monitor stdout 規律**: stdout は Ping/通知行のみ（§6.4）。デバッグ出力が stdout に漏れないことをテストで保証。
