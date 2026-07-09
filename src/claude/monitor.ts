@@ -1,5 +1,3 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
 import type { Clock, TimerHandle } from "../clock";
 import type { Notifier } from "../notifier";
 import type { Pinger } from "../pinger";
