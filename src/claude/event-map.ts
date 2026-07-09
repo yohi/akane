@@ -35,11 +35,8 @@ export function dispatchEvent(w: WatchdogTarget, e: AkaneClaudeEvent): void {
       return;
     case "tool_settled":
       w.onInputResolved(e.sessionId, CC_PERMISSION_REQUEST_ID);
-      if (e.callId) {
-        w.onToolSettled(e.sessionId, e.callId);
-        w.onActivity(e.sessionId, { agentName: e.agentName });
-      }
-      else w.onActivity(e.sessionId, { agentName: e.agentName });
+      if (e.callId) w.onToolSettled(e.sessionId, e.callId);
+      w.onActivity(e.sessionId, { agentName: e.agentName });
       return;
     case "input_requested":
       // Ignore any real requestId: the release path uses the same synthetic id.
