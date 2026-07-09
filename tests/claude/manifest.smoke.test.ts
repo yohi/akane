@@ -24,6 +24,14 @@ describe("plugin.json", () => {
     const required = [
       "UserPromptSubmit", "MessageDisplay", "PreToolUse", "PostToolUse",
       "Stop", "Notification", "SessionStart", "SessionEnd",
+      // Registered per design §5.4 target hook set even though Claude Code's
+      // real-machine registrability/matcher syntax for these five remains
+      // unconfirmed (§10-3, CC_VERIFICATION-2026-07-08.md). hook.ts already
+      // handles them (normalizeEvent), and its documented fallback paths
+      // (Stop error-field inspection, Notification permission_prompt, etc.)
+      // keep the watchdog safe even if Claude Code never fires them.
+      "PostToolUseFailure", "StopFailure", "PermissionRequest",
+      "SubagentStart", "SubagentStop",
     ];
     for (const name of required) {
       const entry = plugin.hooks[name];
