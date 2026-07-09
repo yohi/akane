@@ -1,0 +1,7 @@
+[
+  {
+    "name": "akane-watchdog",
+    "description": "Hang detector state machine",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/dist/claude/monitor.js"
+  }
+]
