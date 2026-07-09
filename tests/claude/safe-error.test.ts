@@ -26,7 +26,7 @@ const msg = `first\n${"b".repeat(40)}`;
 const result = safeError(new Error(msg));
 expect(result.includes("\n")).toBe(false);
 expect(result.endsWith("... (redacted)")).toBe(true);
-expect(result.length).toBe(30 + "... (redacted)".length);
+expect(result).toHaveLength(30 + "... (redacted)".length);
   });
 
   test("collapses a lone carriage return (old Mac line ending), not just \\r\\n", () => {

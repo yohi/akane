@@ -85,7 +85,7 @@ describe("ClaudeMonitor stress & disk hygiene (design 4.3 / AC #9 #13)", () => {
       if (i % 7 === 0) for (const e of tailer.poll()) seen.push(e.ts);
     }
     for (const e of tailer.poll()) seen.push(e.ts);
-    expect(seen.length).toBe(TOTAL); // no dup: exactly TOTAL emissions (a re-emitted event would push length past TOTAL)
+    expect(seen).toHaveLength(TOTAL); // no dup: exactly TOTAL emissions (a re-emitted event would push length past TOTAL)
     expect(new Set(seen).size).toBe(TOTAL); // no loss: all distinct ts observed
   });
 });

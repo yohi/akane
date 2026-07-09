@@ -71,7 +71,7 @@ describe("ClaudeMonitor", () => {
     expect(h.notifies).toContain("warn");
     h.clock.advance(1000); // stage2 fires -> ping
     await new Promise((r) => setTimeout(r, 10)); // flush fire-and-forget inject
-    expect(h.stdout.length).toBe(1);
+    expect(h.stdout).toHaveLength(1);
     expect(h.stdout[0]!.endsWith("\n")).toBe(true);
   });
 
