@@ -30,7 +30,17 @@ describe("deploy-claude-to-bitbucket workflow", () => {
     expect(wf).toContain("GIT_ASKPASS");
   });
 
-  test("is idempotent: skips when the dist tag already matches the release tag", () => {
-    expect(wf.toLowerCase()).toContain("skip");
+  test("is idempotent: compares the resolved tag against the dist repo and gates subsequent steps on the guard's skip output", () => {
+    // The guard step must actually query the dist repo for the resolved tag
+    // and branch on whether that ref already exists there.
+    expect(wf).toContain('id: guard');
+    expect(wf).toContain('REMOTE_TAG="$(git ls-remote --tags "$DIST_URL" "refs/tags/$TAG_REF")"');
+    expect(wf).toContain('if [ -n "$REMOTE_TAG" ]; then');
+    expect(wf).toContain('echo "skip=true" >> "$GITHUB_OUTPUT"');
+    expect(wf).toContain('echo "skip=false" >> "$GITHUB_OUTPUT"');
+    // Later steps must actually be gated on the guard's skip output, not just
+    // print the word "skip" somewhere unrelated.
+    const gatedSteps = wf.match(/if: steps\.guard\.outputs\.skip != 'true'/g) ?? [];
+    expect(gatedSteps.length).toBeGreaterThan(0);
   });
 });

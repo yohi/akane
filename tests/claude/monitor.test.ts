@@ -132,6 +132,10 @@ describe("ClaudeMonitor", () => {
     h.monitor.tick();
     expect(fs.existsSync(file)).toBe(false);
     expect(h.watchdog.activeSessionCount()).toBe(0);
+    // The tombstone must be recorded so late-arriving events for this session
+    // don't re-arm monitoring (AGENTS.md §3.3 late-event tombstoning).
+    const tombstones = new TombstoneStore(eventsDir(stateDir));
+    expect(tombstones.has("s1")).toBe(true);
   });
 
   test("tick reports lock loss and stops when lock is stolen", () => {

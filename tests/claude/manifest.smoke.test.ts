@@ -62,9 +62,20 @@ describe("plugin.json", () => {
   });
 
   test("uses only CLAUDE_PLUGIN_ROOT-relative paths (no absolute paths)", () => {
-    const raw = fs.readFileSync(".claude-plugin/plugin.json", "utf8");
-    expect(raw.includes("/home/")).toBe(false);
-    expect(raw.includes("/Users/")).toBe(false);
+    // Inspect every registered hook command directly (not a raw-text substring
+    // scan) so any absolute-path form — Unix (`/...`) or Windows (`C:\...`,
+    // `\\...`) — is rejected, not just the two hardcoded dev-machine prefixes.
+    const absolutePathPattern = /^(\/|[A-Za-z]:[\\/]|\\\\)/;
+    for (const entries of Object.values(plugin.hooks)) {
+      for (const entry of entries) {
+        for (const hook of entry.hooks) {
+          expect(absolutePathPattern.test(hook.command)).toBe(false);
+        }
+      }
+    }
+    for (const monitor of monitors) {
+      expect(absolutePathPattern.test(monitor.command)).toBe(false);
+    }
   });
 });
 
