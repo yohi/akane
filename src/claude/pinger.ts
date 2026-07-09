@@ -18,10 +18,14 @@ export class ClaudeCodeAdapter implements Pinger {
     const finalMessage = buildPingPrompt(message, context?.reason);
     try {
       // Strip embedded newlines so the ping is exactly one stdout line.
-      this.writeStdout(`${finalMessage.replace(/\r?\n/g, " ")}\n`);
+      this.writeStdout(`${finalMessage.replace(/\r\n|\r|\n/g, " ")}\n`);
       this.log(`PINGER stdout inject sessionId=${maskedSessionId}`);
     } catch (err) {
-      this.log(`PINGER stdout failed sessionId=${maskedSessionId} err=${safeError(err)}`);
+      try {
+        this.log(`PINGER stdout failed sessionId=${maskedSessionId} err=${safeError(err)}`);
+      } catch (logErr) {
+        // Suppress logging errors to prevent crash (Zero-Crash policy)
+      }
     }
   }
 }

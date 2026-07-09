@@ -59,4 +59,26 @@ describe("ClaudeCodeAdapter", () => {
     expect(logs[0]!.includes("\n")).toBe(false);
     expect(logs[0]).toContain("... (redacted)");
   });
+
+  test("normalizes all newline variants (\\r\\n, \\r, \\n) to single space", async () => {
+    const out: string[] = [];
+    const adapter = new ClaudeCodeAdapter((line) => out.push(line));
+    // Test \\r (carriage return alone) — the key fix for (a)
+    await adapter.inject("sess-abc", "ping?\ralone-cr");
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBe("ping? alone-cr\n");
+  });
+
+  test("logger exception does not propagate from inject()", async () => {
+    const adapter = new ClaudeCodeAdapter(
+      () => {
+        throw new Error("writer failed");
+      },
+      () => {
+        throw new Error("logger crashed");
+      },
+    );
+    // Should not throw, should resolve normally (Zero-Crash policy)
+    await expect(adapter.inject("sess-abc", "msg")).resolves.toBeUndefined();
+  });
 });
