@@ -1,5 +1,6 @@
 import { classifyError, type HangReason } from "../errors";
 import { appendEvent } from "./event-log";
+import { safeError } from "./safe-error";
 import { resolveStateDir, eventsPathFor } from "./state-dir";
 import type { AkaneClaudeEvent, AkaneClaudeEventKind } from "./event-types";
 
@@ -126,8 +127,7 @@ export function runHook(io: HookIO): void {
     const stateDir = resolveStateDir(io.env);
     appendEvent(eventsPathFor(stateDir, event.sessionId), event);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    io.logError(`hook error (contained): ${msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg}`);
+    io.logError(`hook error (contained): ${safeError(err)}`);
   }
 }
 
