@@ -7,6 +7,8 @@ export interface LockRecord {
   heartbeatAt: number;
 }
 
+export type HeartbeatResult = "ok" | "not_owner" | "io_error";
+
 export interface MonitorLockDeps {
   dir: string; // eventsDir
   pid: number;
@@ -82,10 +84,16 @@ export class MonitorLock {
 
   // SPEC §8.3 退場手順-1: re-read before writing; if we no longer own the lock,
   // report loss so the caller tears down instead of clobbering the new owner.
-  heartbeat(): boolean {
+  // Distinguishes ownership loss from a transient write I/O error: the former
+  // means another process now owns the lock and we must stop immediately;
+  // the latter is a local hiccup (disk full / EACCES / etc.) that the caller
+  // may choose to retry a bounded number of times before giving up.
+  heartbeat(): HeartbeatResult {
     const current = this.read();
-    if (!current || !this.isMine(current)) return false;
-    return this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() });
+    if (!current || !this.isMine(current)) return "not_owner";
+    return this.write({ pid: this.deps.pid, startedAt: this.deps.startedAt, heartbeatAt: this.deps.now() })
+      ? "ok"
+      : "io_error";
   }
 
   // SPEC §8.3 退場手順-2: synchronous ownership gate before side effects.

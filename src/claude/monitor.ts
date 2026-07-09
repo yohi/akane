@@ -24,14 +24,29 @@ export interface ClaudeMonitorDeps {
   orphanTtlMs: number;
   log: (level: "info" | "warn", message: string) => void;
   onLockLost: () => void;
+  // Consecutive heartbeat I/O errors (disk full / EACCES / etc., distinct
+  // from genuine ownership loss) tolerated before giving up and shutting
+  // down. Defaults to DEFAULT_HEARTBEAT_FAILURE_LIMIT.
+  heartbeatFailureLimit?: number;
 }
+
+// A single transient heartbeat write failure must not cause an instant
+// shutdown: MonitorLock.heartbeat() returning "io_error" means the local
+// write hiccuped, NOT that another process took ownership. Give it a few
+// poll cycles (default pollMs=1000 -> ~3s) to self-heal before treating the
+// lock as unrecoverable and exiting.
+export const DEFAULT_HEARTBEAT_FAILURE_LIMIT = 3;
 
 export class ClaudeMonitor {
   private timer: TimerHandle = null;
   private stopped = false;
   private sinceMaintenanceMs = 0;
+  private heartbeatFailureCount = 0;
+  private readonly heartbeatFailureLimit: number;
 
-  constructor(private readonly deps: ClaudeMonitorDeps) {}
+  constructor(private readonly deps: ClaudeMonitorDeps) {
+    this.heartbeatFailureLimit = deps.heartbeatFailureLimit ?? DEFAULT_HEARTBEAT_FAILURE_LIMIT;
+  }
 
   start(): void {
     this.maintenance(); // startup orphan sweep (SPEC §4.3)
@@ -48,12 +63,31 @@ export class ClaudeMonitor {
 
   /** One poll iteration. Exposed for deterministic testing. */
   tick(): void {
-    if (!this.deps.lock.heartbeat()) {
+    const heartbeat = this.deps.lock.heartbeat();
+    if (heartbeat === "not_owner") {
+      // Another process now owns the lock; continuing risks duplicate
+      // notify/ping side effects, so stop immediately (SPEC §8.3).
       this.deps.log("warn", "[akane] monitor lock lost; shutting down");
       this.shutdown();
       this.deps.onLockLost();
       return;
     }
+    if (heartbeat === "io_error") {
+      this.heartbeatFailureCount += 1;
+      this.deps.log(
+        "warn",
+        `[akane] heartbeat write failed (${this.heartbeatFailureCount}/${this.heartbeatFailureLimit})`,
+      );
+      if (this.heartbeatFailureCount >= this.heartbeatFailureLimit) {
+        this.deps.log("warn", "[akane] heartbeat failed repeatedly; shutting down");
+        this.shutdown();
+        this.deps.onLockLost();
+      }
+      // Skip this tick's event processing; ownership is unconfirmed until a
+      // heartbeat succeeds again. Retried on the next poll.
+      return;
+    }
+    this.heartbeatFailureCount = 0;
     let events: AkaneClaudeEvent[] = [];
     try {
       events = this.deps.tailer.poll();

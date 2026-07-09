@@ -54,7 +54,7 @@ describe("MonitorLock", () => {
     expect(later.tryAcquire()).toBe(true);
   });
 
-  test("heartbeat returns false after the lock is stolen", () => {
+  test("heartbeat reports not_owner after the lock is stolen", () => {
     let t = 1000;
     const a = new MonitorLock({ dir, pid: 100, startedAt: 1, now: () => t, ttlMs: 30000, isAlive: alwaysAlive, procStartTime: noProcTime });
     expect(a.tryAcquire()).toBe(true);
@@ -62,9 +62,28 @@ describe("MonitorLock", () => {
     const b = new MonitorLock({ dir, pid: 200, startedAt: 2, now: () => t, ttlMs: 30000, isAlive: alwaysAlive, procStartTime: noProcTime });
     expect(b.tryAcquire()).toBe(true); // b steals
     // a now detects it lost ownership on its next heartbeat.
-    expect(a.heartbeat()).toBe(false);
+    expect(a.heartbeat()).toBe("not_owner");
     expect(a.isOwned()).toBe(false);
-    expect(b.heartbeat()).toBe(true);
+    expect(b.heartbeat()).toBe("ok");
+  });
+
+  // Regression guard: a transient write failure (disk full / EACCES / etc.)
+  // must be distinguishable from genuine ownership loss, so callers can
+  // tolerate a bounded number of retries instead of shutting down instantly.
+  test("heartbeat reports io_error (not not_owner) when the write fails transiently", () => {
+    const pid = 100;
+    const lock = new MonitorLock({ dir, pid, startedAt: 1, now: () => 1000, ttlMs: 30000, isAlive: alwaysAlive, procStartTime: noProcTime });
+    expect(lock.tryAcquire()).toBe(true);
+    // Pre-create the PID-unique tmp path as a directory so the next write()'s
+    // writeFileSync throws EISDIR regardless of process privileges (root-safe,
+    // unlike chmod-based permission denial).
+    const tmpPath = path.join(dir, `monitor.lock.${pid}.tmp`);
+    fs.mkdirSync(tmpPath);
+    expect(lock.heartbeat()).toBe("io_error");
+    // Still owns the lock; only the heartbeat write failed, not the ownership.
+    expect(lock.isOwned()).toBe(true);
+    fs.rmdirSync(tmpPath);
+    expect(lock.heartbeat()).toBe("ok");
   });
 
   test("release removes the lock only when owned", () => {
