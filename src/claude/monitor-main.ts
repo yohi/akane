@@ -53,7 +53,7 @@ function main(): void {
     stateStore,
   });
   const monitor = new ClaudeMonitor({
-    stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir), lock, clock,
+    stateDir, watchdog, tailer: new EventTailer(dir), tombstones: new TombstoneStore(dir, process.pid), lock, clock,
     pollMs: POLL_MS, maintenanceIntervalMs: MAINTENANCE_INTERVAL_MS,
     orphanTtlMs: ORPHAN_TTL_MS,
     log: (level, message) => logStderr(env, `[${level}] ${message}`),

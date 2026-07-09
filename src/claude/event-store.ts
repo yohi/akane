@@ -19,7 +19,7 @@ export class TombstoneStore {
   private readonly filePath: string;
   private ids: string[];
 
-  constructor(private readonly dir: string) {
+  constructor(private readonly dir: string, private readonly pid: number = process.pid) {
     this.filePath = path.join(dir, TOMBSTONE_FILE);
     this.ids = this.load();
   }
@@ -54,7 +54,12 @@ export class TombstoneStore {
   private flush(): void {
     try {
       fs.mkdirSync(this.dir, { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
+      // Use a PID-unique tmp name to avoid cross-process renameSync ENOENT
+      // races: two monitor processes can both call flush() in the narrow
+      // hand-off window between MonitorLock release and re-acquire (SPEC
+      // §8.2 single-writer invariant for .tmp->rename). Mirrors the same fix
+      // already applied to MonitorLock.write() (lock.ts).
+      const tmp = `${this.filePath}.${this.pid}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(this.ids));
       fs.renameSync(tmp, this.filePath);
     } catch (err) {

@@ -34,6 +34,39 @@ describe("TombstoneStore", () => {
     expect(b.has("s1")).toBe(true);
     expect(b.has("s2")).toBe(false);
   });
+
+  // Regression guard: flush() must not depend on the pre-fix fixed tmp name
+  // ("tombstones.json.tmp") because two monitor processes can call flush()
+  // in the narrow hand-off window between MonitorLock release and re-acquire
+  // (SPEC §8.2 single-writer invariant for .tmp->rename). Mirrors the fix
+  // already applied to MonitorLock.write() (lock.ts) for the same race class.
+  test("flush uses a PID-unique tmp filename, unaffected by another pid squatting on the old shared name", () => {
+    const dir = eventsDir(stateDir);
+    fs.mkdirSync(dir, { recursive: true });
+    // Simulate a foreign process having left/occupied the OLD fixed tmp path.
+    // With the fix, flush() never touches this path, so persistence still succeeds.
+    fs.mkdirSync(path.join(dir, "tombstones.json.tmp"));
+    const store = new TombstoneStore(dir, 4242);
+    store.record("s1");
+    expect(store.has("s1")).toBe(true);
+    // Prove it was actually persisted (not just held in memory after a swallowed failure).
+    const reopened = new TombstoneStore(dir, 4242);
+    expect(reopened.has("s1")).toBe(true);
+  });
+
+  test("two instances with different pids each flush to their own tmp file (no ENOENT clobber)", () => {
+    const dir = eventsDir(stateDir);
+    fs.mkdirSync(dir, { recursive: true });
+    const a = new TombstoneStore(dir, 100);
+    const b = new TombstoneStore(dir, 200);
+    expect(fs.existsSync(path.join(dir, "tombstones.json.100.tmp"))).toBe(false);
+    a.record("s1");
+    // a's tmp file must be gone (renamed away), never collide with b's tmp name.
+    expect(fs.existsSync(path.join(dir, "tombstones.json.100.tmp"))).toBe(false);
+    expect(fs.existsSync(path.join(dir, "tombstones.json.200.tmp"))).toBe(false);
+    b.record("s2");
+    expect(fs.existsSync(path.join(dir, "tombstones.json.200.tmp"))).toBe(false);
+  });
 });
 
 describe("sweepOrphans", () => {
