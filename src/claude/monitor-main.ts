@@ -32,7 +32,18 @@ function main(): void {
   });
   if (!lock.tryAcquire()) process.exit(0); // healthy monitor already running
 
-  const onLockLost = () => process.exit(0);
+  const stateStore = getStateStore(stateDir);
+  // Shared teardown for both the graceful signal path (SIGTERM/SIGINT) and the
+  // lock-loss exit path. Wrapping dispose() keeps a failing flush from blocking
+  // process exit (Zero-Crash, AGENTS.md §3.4).
+  const disposeStateStore = () => {
+    try { stateStore.dispose(); } catch { /* ignore */ }
+  };
+  // Lock loss: ClaudeMonitor.shutdown() already ran on the tick() not_owner
+  // path, so do NOT call it again here (avoids double shutdown). The guarded
+  // notifier/pinger paths never call shutdown(); either way we still must
+  // release shared state before exiting.
+  const onLockLost = () => { disposeStateStore(); process.exit(0); };
   const stdoutAdapter = new ClaudeCodeAdapter((line) => process.stdout.write(line), (m) => logStderr(env, m));
   const notifier = lockGuardedNotifier(
     createNotifier(config.notifierType, {
@@ -46,7 +57,6 @@ function main(): void {
     onLockLost,
   );
   const pinger = lockGuardedPinger(stdoutAdapter, lock, onLockLost);
-  const stateStore = getStateStore(stateDir);
   const watchdog = new Watchdog({
     config, clock, notifier, pinger, telemetry: new TelemetryCollector(),
     log: (level, message) => logStderr(env, `[${level}] ${message}`),
@@ -61,7 +71,7 @@ function main(): void {
   });
 
   const shutdown = () => {
-    try { monitor.shutdown(); } finally { try { stateStore.dispose(); } catch { /* ignore */ } process.exit(0); }
+    try { monitor.shutdown(); } finally { disposeStateStore(); process.exit(0); }
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);

@@ -92,13 +92,26 @@ export class ClaudeMonitor {
     } catch (err) {
       this.deps.log("warn", `poll failed: ${safeError(err)}`);
     }
+    const endedSessions: string[] = [];
     for (const event of events) {
       try {
         dispatchEvent(this.deps.watchdog as WatchdogTarget, event);
-        if (event.kind === "session_end") this.onSessionEnd(event.sessionId);
+        if (event.kind === "session_end") {
+          this.onSessionEnd(event.sessionId);
+          endedSessions.push(event.sessionId);
+        }
       } catch (err) {
         this.deps.log("warn", `dispatch failed: ${safeError(err)}`);
       }
+    }
+    // Batch tombstone/cursor persistence once per tick() instead of once per
+    // ended session: record()/forget() each trigger a synchronous disk
+    // read+write, which is O(n^2) I/O when many sessions end within the same
+    // poll (e.g. a monitor restart replaying a large backlog). recordMany()/
+    // forgetMany() collapse that to a single flush each.
+    if (endedSessions.length > 0) {
+      this.deps.tombstones.recordMany(endedSessions);
+      this.deps.tailer.forgetMany(endedSessions);
     }
     this.sinceMaintenanceMs += this.deps.pollMs;
     if (this.sinceMaintenanceMs >= this.deps.maintenanceIntervalMs) {
@@ -108,9 +121,9 @@ export class ClaudeMonitor {
   }
 
   private onSessionEnd(sessionId: string): void {
-    this.deps.tombstones.record(sessionId);
+    // Tombstone recording and cursor forgetting are batched once per tick()
+    // by the caller (recordMany/forgetMany above) to avoid O(n^2) I/O.
     deleteSessionLog(this.deps.stateDir, sessionId);
-    this.deps.tailer.forget(sessionId);
   }
 
   private maintenance(): void {
@@ -135,7 +148,13 @@ export class ClaudeMonitor {
     } catch {
       // Contained.
     }
-    this.deps.lock.release();
+    try {
+      this.deps.lock.release();
+    } catch (err) {
+      // Contained: shutdown() can run from a schedule() setTimeout callback, so a
+      // future throwing release() must never crash the process (Zero-Crash, AGENTS.md §3.4).
+      this.deps.log("warn", `lock release failed: ${safeError(err)}`);
+    }
   }
 }
 
