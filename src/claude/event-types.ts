@@ -1,16 +1,19 @@
 import type { HangReason } from "../errors";
 
-export type AkaneClaudeEventKind =
-  | "user_message"
-  | "activity"
-  | "tool_running"
-  | "tool_settled"
-  | "input_requested"
-  | "idle"
-  | "turn_end"
-  | "error"
-  | "session_start"
-  | "session_end";
+const EVENT_KINDS = [
+  "user_message",
+  "activity",
+  "tool_running",
+  "tool_settled",
+  "input_requested",
+  "idle",
+  "turn_end",
+  "error",
+  "session_start",
+  "session_end",
+] as const;
+
+export type AkaneClaudeEventKind = (typeof EVENT_KINDS)[number];
 
 export interface AkaneClaudeEvent {
   kind: AkaneClaudeEventKind;
@@ -22,18 +25,7 @@ export interface AkaneClaudeEvent {
   errorReason?: HangReason;
 }
 
-const EVENT_KINDS: ReadonlySet<string> = new Set<AkaneClaudeEventKind>([
-  "user_message",
-  "activity",
-  "tool_running",
-  "tool_settled",
-  "input_requested",
-  "idle",
-  "turn_end",
-  "error",
-  "session_start",
-  "session_end",
-]);
+const EVENT_KINDS_SET: ReadonlySet<string> = new Set(EVENT_KINDS);
 
 const HANG_REASONS: ReadonlySet<string> = new Set<HangReason>([
   "rate_limit",
@@ -46,7 +38,7 @@ export function isAkaneClaudeEvent(value: unknown): value is AkaneClaudeEvent {
   const e = value as Partial<AkaneClaudeEvent>;
   return (
     typeof e.kind === "string" &&
-    EVENT_KINDS.has(e.kind) &&
+    EVENT_KINDS_SET.has(e.kind) &&
     typeof e.sessionId === "string" &&
     e.sessionId.length > 0 &&
     typeof e.ts === "number" &&
