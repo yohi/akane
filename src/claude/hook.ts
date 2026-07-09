@@ -4,15 +4,19 @@ import { resolveStateDir, eventsPathFor } from "./state-dir";
 import type { AkaneClaudeEvent, AkaneClaudeEventKind } from "./event-types";
 
 // ── Claude Code stdin field contract ───────────────────────────────────
-// These field names are a best-effort mapping from the Claude Code Hooks
-// reference and MUST be confirmed against a live `claude` install (SPEC §10-3).
+// `agent_type`/`agent_id` are confirmed against the official Claude Code
+// Hooks reference (https://code.claude.com/docs/en/hooks, "Common input
+// fields"): `agent_type` carries the subagent name/type (e.g. "Explore"),
+// `agent_id` a unique per-subagent-call identifier. The remaining fields
+// below are still a best-effort mapping and MUST be confirmed against a
+// live `claude` install (SPEC §10-3).
 // Keep every raw-field access in this block so Task 15 has a single fix point.
 export interface CCHookStdin {
   hook_event_name?: string;
   session_id?: string;
   sessionId?: string;
-  agent?: string;
-  agent_name?: string;
+  agent_type?: string;
+  agent_id?: string;
   tool_use_id?: string;
   callID?: string;
   error_type?: string;
@@ -28,7 +32,7 @@ export function extractCCSessionId(input: CCHookStdin): string | undefined {
 }
 
 export function extractCCAgentName(input: CCHookStdin): string | undefined {
-  return input.agent ?? input.agent_name;
+  return input.agent_type;
 }
 
 export function extractCCCallId(input: CCHookStdin): string | undefined {

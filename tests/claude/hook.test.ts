@@ -8,7 +8,7 @@ import { eventsPathFor } from "../../src/claude/state-dir";
 describe("normalizeEvent", () => {
   const now = 12345;
   test("UserPromptSubmit -> user_message", () => {
-    const e = normalizeEvent({ hook_event_name: "UserPromptSubmit", session_id: "s1", agent: "a" }, now);
+    const e = normalizeEvent({ hook_event_name: "UserPromptSubmit", session_id: "s1", agent_type: "a" }, now);
     expect(e).toEqual({ kind: "user_message", sessionId: "s1", ts: now, agentName: "a" });
   });
 
