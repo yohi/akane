@@ -67,6 +67,30 @@ describe("TombstoneStore", () => {
     b.record("s2");
     expect(fs.existsSync(path.join(dir, "tombstones.json.200.tmp"))).toBe(false);
   });
+
+  // Lost-update regression: two monitor processes (distinct in-memory views)
+  // interleave record() on the SAME dir. Each flush() must re-read + merge the
+  // on-disk tombstones, otherwise the second writer clobbers the first writer's
+  // record (SPEC §8.2 hand-off window between MonitorLock release/re-acquire).
+  test("interleaved record() from two instances on the same dir preserves every id (no lost update)", () => {
+    const dir = eventsDir(stateDir);
+    fs.mkdirSync(dir, { recursive: true });
+    // Both constructed while the file is empty, so neither ever sees the
+    // other's ids in memory — the only way both survive is a re-read on flush.
+    const a = new TombstoneStore(dir, 100);
+    const b = new TombstoneStore(dir, 200);
+    a.record("s1");
+    b.record("s2");
+    a.record("s3");
+    b.record("s4");
+    // Read straight from disk via a fresh instance: proves persistence,
+    // independent of a's or b's in-memory arrays.
+    const reopened = new TombstoneStore(dir);
+    expect(reopened.has("s1")).toBe(true);
+    expect(reopened.has("s2")).toBe(true);
+    expect(reopened.has("s3")).toBe(true);
+    expect(reopened.has("s4")).toBe(true);
+  });
 });
 
 describe("sweepOrphans", () => {

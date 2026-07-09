@@ -51,14 +51,45 @@ export class TombstoneStore {
     this.flush();
   }
 
+  // Batched sibling of record(): used when many sessions end in the same poll
+  // (e.g. a monitor restart replaying a backlog, or a bulk session_end burst).
+  // record()'s per-call flush() re-reads+merges+rewrites the whole tombstone
+  // file, which is O(n^2) I/O for n sessions ending together; this adds all
+  // ids to memory first and flushes exactly once.
+  recordMany(sessionIds: Iterable<string>): void {
+    let changed = false;
+    for (const sessionId of sessionIds) {
+      const id = sanitizeSessionId(sessionId);
+      if (!this.ids.includes(id)) {
+        this.ids.push(id);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    if (this.ids.length > TOMBSTONE_CAPACITY) {
+      this.ids = this.ids.slice(-TOMBSTONE_CAPACITY);
+    }
+    this.flush();
+  }
+
   private flush(): void {
     try {
       fs.mkdirSync(this.dir, { recursive: true });
+      // Re-read the on-disk tombstones and merge (union) before writing. Two
+      // monitor processes can both call flush() in the narrow hand-off window
+      // between MonitorLock release and re-acquire (SPEC §8.2); a blind write
+      // of only this.ids would clobber (lost update) the tombstone records the
+      // other process just persisted. load() already falls back to [] on a
+      // missing/corrupt file, so the merge stays crash-free. Concatenate
+      // disk-first so this.ids (our freshest records) sit at the end and
+      // survive the TOMBSTONE_CAPACITY trim, matching record()'s slice(-N).
+      const disk = this.load();
+      const merged = [...new Set([...disk, ...this.ids])];
+      this.ids =
+        merged.length > TOMBSTONE_CAPACITY ? merged.slice(-TOMBSTONE_CAPACITY) : merged;
       // Use a PID-unique tmp name to avoid cross-process renameSync ENOENT
-      // races: two monitor processes can both call flush() in the narrow
-      // hand-off window between MonitorLock release and re-acquire (SPEC
-      // §8.2 single-writer invariant for .tmp->rename). Mirrors the same fix
-      // already applied to MonitorLock.write() (lock.ts).
+      // races (SPEC §8.2 single-writer invariant for .tmp->rename). Mirrors the
+      // same fix already applied to MonitorLock.write() (lock.ts).
       const tmp = `${this.filePath}.${this.pid}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(this.ids));
       fs.renameSync(tmp, this.filePath);
