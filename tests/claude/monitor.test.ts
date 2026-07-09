@@ -156,6 +156,11 @@ describe("ClaudeMonitor", () => {
     });
     m.tick();
     expect(lost).toBe(true);
+    // Verify that thief's lock remains valid after m.tick() called shutdown().
+    // This ensures that MonitorLock.release() (called by shutdown) does not
+    // delete a lock it doesn't own, thanks to isMine() pid/startedAt checks.
+    expect(thief.heartbeat()).toBe("ok");
+    expect(thief.isOwned()).toBe(true);
   });
 
   // Regression guard for a single transient heartbeat write failure (disk
