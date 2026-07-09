@@ -1,4 +1,5 @@
 import { buildPingPrompt, type Pinger, type PingContext } from "../pinger";
+import { safeError } from "./safe-error";
 
 export type StdoutWriter = (line: string) => void;
 
@@ -20,9 +21,7 @@ export class ClaudeCodeAdapter implements Pinger {
       this.writeStdout(`${finalMessage.replace(/\r?\n/g, " ")}\n`);
       this.log(`PINGER stdout inject sessionId=${maskedSessionId}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const maskedErr = msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
-      this.log(`PINGER stdout failed sessionId=${maskedSessionId} err=${maskedErr}`);
+      this.log(`PINGER stdout failed sessionId=${maskedSessionId} err=${safeError(err)}`);
     }
   }
 }

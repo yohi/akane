@@ -21,10 +21,10 @@ describe("ClaudeCodeAdapter", () => {
   test("collapses embedded newlines so it stays a single stdout line", async () => {
     const out: string[] = [];
     const adapter = new ClaudeCodeAdapter((line) => out.push(line));
-    await adapter.inject("sess-abc", "ping?", { reason: "unknown" });
+    await adapter.inject("sess-abc", "ping?\nsecond line\r\nthird line");
+    expect(out).toHaveLength(1);
     // Exactly one trailing newline, none in the middle.
-    expect(out[0]!.endsWith("\n")).toBe(true);
-    expect(out[0]!.slice(0, -1).includes("\n")).toBe(false);
+    expect(out[0]).toBe("ping? second line third line\n");
   });
 
   test("stdout discipline: logs go to the log sink, never to stdout", async () => {
@@ -43,5 +43,20 @@ describe("ClaudeCodeAdapter", () => {
       throw new Error("pipe closed");
     });
     await expect(adapter.inject("s", "msg")).resolves.toBeUndefined();
+  });
+
+  test("logs the writer failure via the shared safeError sanitizer (single-line, redacted)", async () => {
+    const logs: string[] = [];
+    const adapter = new ClaudeCodeAdapter(
+      () => {
+        throw new Error(`disk full\nretrying\n${"x".repeat(40)}`);
+      },
+      (m) => logs.push(m),
+    );
+    await adapter.inject("sess-abc", "msg");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("PINGER stdout failed");
+    expect(logs[0]!.includes("\n")).toBe(false);
+    expect(logs[0]).toContain("... (redacted)");
   });
 });

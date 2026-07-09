@@ -5,5 +5,6 @@
  */
 export function safeError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.length > 30 ? `${msg.slice(0, 30)}... (redacted)` : msg;
+  const singleLine = msg.replace(/\r\n|\r|\n/g, " ");
+  return singleLine.length > 30 ? `${singleLine.slice(0, 30)}... (redacted)` : singleLine;
 }
