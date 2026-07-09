@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 export interface LockRecord {
   pid: number;
@@ -89,40 +90,66 @@ export class MonitorLock {
   private acquireGate(): boolean {
     const gate = this.gatePath();
     for (let attempt = 0; attempt < GATE_MAX_ATTEMPTS; attempt++) {
-      try {
-        fs.mkdirSync(gate);
-        const token = `${this.deps.pid}.${this.deps.startedAt}.${Math.random().toString(36).slice(2)}`;
-        try {
-          fs.writeFileSync(this.gateTokenPath(gate), token);
-        } catch {
-          fs.rmSync(gate, { recursive: true, force: true });
-          return false; // couldn't tag ownership; don't hold an unverifiable gate
-        }
-        this.gateToken = token;
-        return true;
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === "ENOENT") {
-          // Cold start: this.deps.dir itself doesn't exist yet. Create it and
-          // retry — write() also mkdirSync's it, but the gate must exist first.
-          try {
-            fs.mkdirSync(this.deps.dir, { recursive: true });
-          } catch {
-            return false; // genuinely unwritable (permissions/disk) — fail closed
-          }
-          continue;
-        }
-        if (code !== "EEXIST") return false;
-        try {
-          if (Date.now() - fs.statSync(gate).mtimeMs > GATE_STALE_MS) {
-            fs.rmSync(gate, { recursive: true, force: true });
-          }
-        } catch {
-          // Gate vanished or stat/rm raced with another holder — retry.
-        }
-      }
+      const result = this.tryClaimGate(gate);
+      if (result === "claimed") return true;
+      if (result === "fatal") return false;
+      // result === "retry": loop again
     }
     return false;
+  }
+
+  // Attempts one mkdirSync-based claim of `gate`. Returns "claimed" on
+  // success, "fatal" if acquireGate must give up immediately, or "retry" if
+  // the caller should loop again (cold-start dir creation or stale-gate
+  // reclamation in progress).
+  private tryClaimGate(gate: string): "claimed" | "fatal" | "retry" {
+    try {
+      fs.mkdirSync(gate);
+    } catch (err) {
+      return this.handleGateMkdirError(gate, err);
+    }
+    return this.claimFreshGate(gate) ? "claimed" : "fatal";
+  }
+
+  // Tags a just-created gate directory with a random owner token so a later
+  // reclaimer can distinguish us from whatever holder comes after us.
+  private claimFreshGate(gate: string): boolean {
+    const token = `${this.deps.pid}.${this.deps.startedAt}.${crypto.randomUUID()}`;
+    try {
+      fs.writeFileSync(this.gateTokenPath(gate), token);
+    } catch {
+      fs.rmSync(gate, { recursive: true, force: true });
+      return false; // couldn't tag ownership; don't hold an unverifiable gate
+    }
+    this.gateToken = token;
+    return true;
+  }
+
+  private handleGateMkdirError(gate: string, err: unknown): "fatal" | "retry" {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      // Cold start: this.deps.dir itself doesn't exist yet. Create it and
+      // retry — write() also mkdirSync's it, but the gate must exist first.
+      try {
+        fs.mkdirSync(this.deps.dir, { recursive: true });
+      } catch {
+        return "fatal"; // genuinely unwritable (permissions/disk) — fail closed
+      }
+      return "retry";
+    }
+    if (code !== "EEXIST") return "fatal";
+    this.reclaimStaleGate(gate);
+    return "retry";
+  }
+
+  private reclaimStaleGate(gate: string): void {
+    try {
+      if (Date.now() - fs.statSync(gate).mtimeMs > GATE_STALE_MS) {
+        fs.rmSync(gate, { recursive: true, force: true });
+      }
+    } catch {
+      // Gate vanished or stat/rm raced with another holder — retry.
+    }
   }
 
   private releaseGate(): void {
