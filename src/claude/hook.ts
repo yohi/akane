@@ -133,8 +133,41 @@ export function runHook(io: HookIO): void {
 
 export async function readStdin(stream: NodeJS.ReadableStream): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-  }
-  return Buffer.concat(chunks).toString("utf8");
+  const TIMEOUT_MS = 500; // Short timeout for testing; production can adjust
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  let timedOut = false;
+
+  return new Promise<string>((resolve) => {
+    // Set up timeout: if EOF doesn't arrive within TIMEOUT_MS, resolve with accumulated chunks
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      // NodeJS.ReadableStream doesn't declare destroy(), but Node's actual
+      // Readable streams (process.stdin) implement it. Guard defensively so
+      // this stays safe for any ReadableStream-compatible mock in tests.
+      (stream as unknown as { destroy?: () => void }).destroy?.();
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    }, TIMEOUT_MS);
+
+    (async () => {
+      try {
+        for await (const chunk of stream) {
+          if (timedOut) break;
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+        }
+      } catch {
+        // Stream destroyed by timeout or other error: safe to ignore
+      }
+
+      // Clear timeout if we reach EOF before timeout
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
+
+      // Resolve with accumulated chunks (either from EOF or timeout)
+      if (!timedOut) {
+        resolve(Buffer.concat(chunks).toString("utf8"));
+      }
+    })();
+  });
 }

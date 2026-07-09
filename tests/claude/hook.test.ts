@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { normalizeEvent, errorReasonFromStop, runHook } from "../../src/claude/hook";
+import { normalizeEvent, errorReasonFromStop, runHook, readStdin } from "../../src/claude/hook";
 import { eventsPathFor } from "../../src/claude/state-dir";
 
 describe("normalizeEvent", () => {
@@ -118,5 +118,50 @@ describe("runHook", () => {
       logError: () => {},
     });
     expect(fs.existsSync(eventsPathFor(stateDir, "s1"))).toBe(false);
+  });
+});
+
+describe("readStdin", () => {
+  test("reads complete stdin when EOF arrives", async () => {
+    const { Readable } = await import("node:stream");
+    const stream = Readable.from(["hello", " ", "world"]);
+    const result = await readStdin(stream);
+    expect(result).toBe("hello world");
+  });
+
+  test("times out and returns accumulated chunks when EOF never arrives", async () => {
+    const { Readable } = await import("node:stream");
+    // Create a stream that never ends (never emits EOF)
+    const stream = new Readable({
+      read() {
+        // Never call push(null), so EOF never arrives
+      },
+    });
+    // Push some data
+    stream.push("partial");
+
+    const startTime = Date.now();
+    const result = await readStdin(stream);
+    const elapsed = Date.now() - startTime;
+
+    // Should resolve with accumulated data
+    expect(result).toBe("partial");
+    // Should timeout around 500ms (allow some margin for test execution)
+    expect(elapsed).toBeGreaterThanOrEqual(450);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  test("handles empty stream", async () => {
+    const { Readable } = await import("node:stream");
+    const stream = Readable.from([]);
+    const result = await readStdin(stream);
+    expect(result).toBe("");
+  });
+
+  test("handles buffer chunks", async () => {
+    const { Readable } = await import("node:stream");
+    const stream = Readable.from([Buffer.from("buf1"), Buffer.from("buf2")]);
+    const result = await readStdin(stream);
+    expect(result).toBe("buf1buf2");
   });
 });
