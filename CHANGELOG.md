@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.6.0](https://github.com/yohi/akane/compare/v1.5.1...v1.6.0) (2026-07-09)
+
+
+### Features
+
+* **claude:** akane を Claude Code プラグインとして動作させる（src/claude/ + マニフェスト + 配布ワークフロー） ([b55e3a0](https://github.com/yohi/akane/commit/b55e3a01c193368e2b0b5d9b6b64d14088a99c00))
+* **claude:** AKANE_* env を resolveConfig へ写像する設定解決を追加 ([280edf3](https://github.com/yohi/akane/commit/280edf37d83046ef9a2e7dd02639fb129779ff2c))
+* **claude:** CC stdin を正規化・追記する akane-hook センサーCLI を追加 ([2fbd0f8](https://github.com/yohi/akane/commit/2fbd0f8af54d043d6cfa45cfc640107d950ca042))
+* **claude:** events.ndjson の追記・tail(EventTailer, read-offset)を追加 ([6446a52](https://github.com/yohi/akane/commit/6446a52eb5350c1db7ec7625cc734379ae3fc821))
+* **claude:** monitor 単一起動ロック(MonitorLock)と stale 奧取を追加 ([8eacf66](https://github.com/yohi/akane/commit/8eacf66f431e80c977d05f29be16d7995be66808))
+* **claude:** plugin.json / monitors.json マニフェストとスモーク検証を追加 ([efa782f](https://github.com/yohi/akane/commit/efa782fbdd28b58a7927a56bc0022c0e01723ad1))
+* **claude:** stateDir 解決と events パス生成・sessionId サニタイズを追加 ([cf5d26e](https://github.com/yohi/akane/commit/cf5d26e9b8332be229b6eb0a0c926113587f0d2c))
+* **claude:** stdout へ Ping を出力する ClaudeCodeAdapter を追加 ([284006a](https://github.com/yohi/akane/commit/284006a71d27c895fd4905a02ca9cbb254899193))
+* **claude:** tombstone 永続化・セッションログ削除・孤児掃除を追加 ([2a78de5](https://github.com/yohi/akane/commit/2a78de50a7de985a3cfb5c92693358d46db6e86e))
+* **claude:** 常駐 monitor(ClaudeMonitor)と lock ガード付き Notifier/Pinger を追加 ([8d4dfac](https://github.com/yohi/akane/commit/8d4dfacaf59c1cc0ab18adc1687211e7868051fc))
+* **claude:** 正規化イベントを Watchdog メソッドへ dispatch する event-map を追加 ([d6fdb87](https://github.com/yohi/akane/commit/d6fdb87c2dbfcb5e5a1e0a6fb9bacc7424d646ac))
+* **claude:** 正規化イベント型 AkaneClaudeEvent と型ガードを追加 ([6389a71](https://github.com/yohi/akane/commit/6389a713a446dd5af3c5e830fedc2130faaf2db6))
+
+
+### Bug Fixes
+
+* **claude:** build.ts の Bun.build に root:"。" を設定し bun test での ../errors 解決失敗を修正 ([3951be4](https://github.com/yohi/akane/commit/3951be41516e4ea61f19dea76db40087572de5ea))
+* **claude:** CCHookStdinのエージェント識別フィールドを公式仕様に修正 ([0c0313d](https://github.com/yohi/akane/commit/0c0313d20e32669ad80a51ed42844e99a7ac7871))
+* **claude:** EventTailerのカーソルを永続化し再起動後のイベント重複ディスパッチを防止 ([0b4b414](https://github.com/yohi/akane/commit/0b4b414b5fb64874ad94f4281af613bf0b7c8d01))
+* **claude:** heartbeat の一時的I/Oエラーで即終了せずリトライを許容 ([986305f](https://github.com/yohi/akane/commit/986305f693e355e1d703e2238e613c06bc053e95))
+* **claude:** lock.tsの疑似乱数トークン生成をcrypto.randomUUID()に置換 ([af96024](https://github.com/yohi/akane/commit/af96024d721d9943ff423d9e72e33c26e5c30ce8))
+* **claude:** manifest未登録の5フックイベントを追加登録 ([15fed49](https://github.com/yohi/akane/commit/15fed494e7b77068bb75d80e2a82092634bd1edb))
+* **claude:** monitor.lock の一時ファイル名を PID 付与で一意化し多重起動時の rename 競合(ENOENT)を回避 ([b4924d8](https://github.com/yohi/akane/commit/b4924d8fb1fc56674daf92c5e7e7bf4b5c315219))
+* **claude:** monitor.lockのクロスプロセス排他制御をアトミックなゲートに変更 ([25aade5](https://github.com/yohi/akane/commit/25aade5bccf63e7a4812268e1348ffe481e08cd4))
+* **claude:** MonitorLock.write を zero-crash 化し tryAcquire/heartbeat の I/O 失敗時 throw を防止 ([5f0aadf](https://github.com/yohi/akane/commit/5f0aadf553419b1176dbb0cfe923bcc060e9ef69))
+* **claude:** pingerの改行正規化をsafe-error.tsと統一しcatch内ログ呼び出しも保護 ([3b57a87](https://github.com/yohi/akane/commit/3b57a87278f9de7dd78571a7810d3ab27a550f1b))
+* **claude:** plugin.json に userConfig title/description と author を追加し claude plugin validate --strict を通過 ([c5f53d0](https://github.com/yohi/akane/commit/c5f53d046d837da317e2a5f4d9e0c36950850bba))
+* **claude:** solid plugin を遅延 import 化し bun test 時の Bun.build グローバルプラグイン干渉(../errors 解決失敗)を修正 ([dbe48d1](https://github.com/yohi/akane/commit/dbe48d16594e388d372fb0cd313622a25a4425ca))
+* **claude:** TombstoneStore の flush tmp ファイル名をPID一意化 ([c29fb61](https://github.com/yohi/akane/commit/c29fb612e8097227575dbd782bd6dac7c3749631))
+* **claude:** TombstoneStore.flush()がディスク上の最新tombstoneをマージするよう修正 ([0cacad0](https://github.com/yohi/akane/commit/0cacad0b053f1457e7aeaa44931735889c579cab))
+* **claude:** エラーログのサニタイズを改行全種対応にし共有ヘルパーに統一 ([1cffb6e](https://github.com/yohi/akane/commit/1cffb6e788fc88999be80c48d790379a72f2c764))
+* **claude:** ロック喪失時のstateStore解放漏れとsession_end処理のO(n^2)I/Oを修正 ([bca7d62](https://github.com/yohi/akane/commit/bca7d62aab15c831d2038d0deae0654a66be400c))
+* **claude:** 配布ワークフローの GitHub コンテキストを env 経由化し run ブロックのスクリプトインジェクション面を除去 ([2399aa0](https://github.com/yohi/akane/commit/2399aa09f3d850e1eafaae54cbe51fe85aca472a))
+
 ## [1.5.1](https://github.com/yohi/akane/compare/v1.5.0...v1.5.1) (2026-07-05)
 
 
