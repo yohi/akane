@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.1](https://github.com/yohi/akane/compare/v1.6.0...v1.6.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **deps:** @opentui/solid を devDependencies から dependencies に移動 ([2e98625](https://github.com/yohi/akane/commit/2e98625816dc7813cafb1c95c4c0b667e0d5a636))
+* **deps:** @opentui/solid を devDependencies から dependencies に移動 ([0d73448](https://github.com/yohi/akane/commit/0d73448bb4f0437e182a347d5231bd26cc63b1ae)), closes [#74](https://github.com/yohi/akane/issues/74)
+* **deps:** plugin.json のバージョンを 1.7.0 に同期 ([1535a4f](https://github.com/yohi/akane/commit/1535a4fab4fa3fca7fe2006d6bd2e1dc384e496d))
+
 ## [1.6.0](https://github.com/yohi/akane/compare/v1.5.1...v1.6.0) (2026-07-09)
 
 
