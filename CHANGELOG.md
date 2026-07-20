@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.2](https://github.com/yohi/akane/compare/v1.6.1...v1.6.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **deps:** plugin.json のバージョンを 1.6.1 に同期 ([e5f45cb](https://github.com/yohi/akane/commit/e5f45cb0479370eda940c1bc9b2cef9b78b1ef34))
+* **deps:** plugin.json のバージョンを1.6.1に同期 ([1d95ae7](https://github.com/yohi/akane/commit/1d95ae7d602d2a35fcbdf4741429540828b798e6))
+* **deps:** TUI プラグインのランタイム依存を dependencies に移動 ([5aee84a](https://github.com/yohi/akane/commit/5aee84a643fe0ecabd70df5e4c38201909ed086c))
+* **deps:** TUI プラグインのランタイム依存を dependencies に移動 ([878d7c6](https://github.com/yohi/akane/commit/878d7c662fec89295724764820ce853755a19b92))
+* package.json と .claude-plugin/plugin.json のバージョンを 1.6.2 に修正 ([44fb17a](https://github.com/yohi/akane/commit/44fb17a6a732b16e34c9b97c690d419d96c83102))
+
 ## [1.6.1](https://github.com/yohi/akane/compare/v1.6.0...v1.6.1) (2026-07-20)
 
 
