@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/yohi/akane/compare/v1.6.2...v1.7.0) (2026-08-29)
+
+
+### Features
+
+* Active subagentsにcategoryを表示 ([0c216c1](https://github.com/yohi/akane/commit/0c216c1f023c2a8dc498ad85dbc03afa31694210))
+* Active subagentsにcategoryを表示 ([b0979e9](https://github.com/yohi/akane/commit/b0979e966173528d8a5312a503b1b1bd0e34d2c5))
+
+
+### Bug Fixes
+
+* task_idでTUIカテゴリを正確に対応付ける ([0e9be89](https://github.com/yohi/akane/commit/0e9be89493b0d37f002a1a6a02f32ec070085156))
+* リリース時のマニフェストとCI設定を同期 ([c00fad3](https://github.com/yohi/akane/commit/c00fad3a4ad1b809270462c4dbf14b948cde4bd2))
+* リリース時のマニフェストとCI設定を同期 ([f0d8b2b](https://github.com/yohi/akane/commit/f0d8b2bd972add3eeff2dfb75c05ed5f55463663))
+
 ## [1.6.2](https://github.com/yohi/akane/compare/v1.6.1...v1.6.2) (2026-07-20)
 
 
