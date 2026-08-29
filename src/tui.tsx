@@ -86,9 +86,24 @@ function Sidebar(props: SidebarProps) {
   onCleanup(unsubPartUpdated);
 
   const unsubToolCalled = props.api.event.on("session.next.tool.called", (event) => {
-    resolver.observeToolCall(event.properties.sessionID, event.properties.tool, event.properties.input);
+    resolver.observeToolCall(
+      event.properties.sessionID,
+      event.properties.tool,
+      event.properties.input,
+      event.properties.callID,
+    );
   });
   onCleanup(unsubToolCalled);
+
+  const unsubToolSucceeded = props.api.event.on("session.next.tool.success", (event) => {
+    resolver.observeToolSettled(event.properties.sessionID, event.properties.callID, "success");
+  });
+  onCleanup(unsubToolSucceeded);
+
+  const unsubToolFailed = props.api.event.on("session.next.tool.failed", (event) => {
+    resolver.observeToolSettled(event.properties.sessionID, event.properties.callID, "failure");
+  });
+  onCleanup(unsubToolFailed);
 
   const updateSession = (info: Session) => {
     setSessions((prev) => ({ ...prev, [info.id]: info }));

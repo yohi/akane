@@ -22,7 +22,8 @@ export type CategoryTheme<TColor> = Readonly<Record<CategoryColorName, TColor>>;
 export interface CategoryResolver {
   readonly refresh: (directories: CategoryDirectories) => void;
   readonly resolve: (session: CategorySession, parentParts?: readonly Part[]) => CategoryResult;
-  readonly observeToolCall: (parentID: string, tool: string, input: Record<string, unknown>) => void;
+  readonly observeToolCall: (parentID: string, tool: string, input: Record<string, unknown>, callID: string) => void;
+  readonly observeToolSettled: (parentID: string, callID: string, outcome: "success" | "failure") => void;
   readonly observeSessionCreated: (session: CategorySession) => void;
   readonly evict: (sessionID: string) => void;
 }
@@ -30,6 +31,11 @@ export interface CategoryResolver {
 const CATEGORY_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const TITLE_CATEGORY_RE = /^\[([A-Za-z0-9][A-Za-z0-9_-]{0,63})\]\s+/;
 const MAX_PENDING_EVENTS = 1_000;
+
+type PendingCategory = {
+  readonly category: string;
+  readonly callID: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -142,7 +148,7 @@ function categoryColorName(category: string): CategoryColorName | undefined {
 export function createCategoryResolver(): CategoryResolver {
   const fileCategories = new Map<string, CategoryResult>();
   const eventCategories = new Map<string, string>();
-  const pendingCategories = new Map<string, string[]>();
+  const pendingCategories = new Map<string, Map<string, PendingCategory>>();
 
   return {
     refresh(directories) {
@@ -160,6 +166,10 @@ export function createCategoryResolver(): CategoryResolver {
       if (fromFile !== undefined) return fromFile;
       const fromParent = categoryFromParentParts(session, parentParts);
       if (fromParent !== undefined) return fromParent;
+      const fromPending = session.parentID === undefined
+        ? undefined
+        : pendingCategories.get(session.parentID)?.get(session.id)?.category;
+      if (fromPending !== undefined) return { kind: "resolved", category: fromPending, source: "event" };
       const fromEvent = eventCategories.get(session.id);
       if (fromEvent !== undefined) return { kind: "resolved", category: fromEvent, source: "event" };
       const fromTitle = titleCategory(session.title);
@@ -167,27 +177,54 @@ export function createCategoryResolver(): CategoryResolver {
       return { kind: "unknown" };
     },
 
-    observeToolCall(parentID, tool, input) {
+    observeToolCall(parentID, tool, input, callID) {
       if (tool !== "task") return;
       const category = parseCategory(input["category"]);
       if (category === undefined) return;
-      const pending = pendingCategories.get(parentID) ?? [];
-      if (pending.length >= MAX_PENDING_EVENTS) pending.shift();
-      pending.push(category);
+      const taskID = input["task_id"];
+      if (typeof taskID !== "string" || taskID.length === 0 || callID.length === 0) return;
+      const pending = pendingCategories.get(parentID) ?? new Map<string, PendingCategory>();
+      if (!pending.has(taskID) && pending.size >= MAX_PENDING_EVENTS) {
+        const oldestTaskID = pending.keys().next().value;
+        if (oldestTaskID !== undefined) pending.delete(oldestTaskID);
+      }
+      pending.set(taskID, { category, callID });
       pendingCategories.set(parentID, pending);
+    },
+
+    observeToolSettled(parentID, callID, outcome) {
+      const pending = pendingCategories.get(parentID);
+      if (pending === undefined) return;
+      const matched = [...pending.entries()].find(([, entry]) => entry.callID === callID);
+      if (matched === undefined) return;
+      const [taskID, entry] = matched;
+      pending.delete(taskID);
+      if (pending.size === 0) pendingCategories.delete(parentID);
+      if (outcome === "success") {
+        eventCategories.set(taskID, entry.category);
+      } else {
+        eventCategories.delete(taskID);
+      }
     },
 
     observeSessionCreated(session) {
       if (session.parentID === undefined) return;
       const pending = pendingCategories.get(session.parentID);
-      const category = pending?.shift();
-      if (category === undefined) return;
-      if (pending?.length === 0) pendingCategories.delete(session.parentID);
-      eventCategories.set(session.id, category);
+      if (pending === undefined) return;
+      const entry = pending.get(session.id);
+      if (entry === undefined) return;
+      pending.delete(session.id);
+      if (pending.size === 0) pendingCategories.delete(session.parentID);
+      eventCategories.set(session.id, entry.category);
     },
 
     evict(sessionID) {
       eventCategories.delete(sessionID);
+      pendingCategories.delete(sessionID);
+      for (const [parentID, pending] of pendingCategories) {
+        pending.delete(sessionID);
+        if (pending.size === 0) pendingCategories.delete(parentID);
+      }
     },
   };
 }

@@ -78,7 +78,7 @@ describe("category resolver", () => {
 
   it("uses a tool event after a matching child session is created", () => {
     const resolver = createCategoryResolver();
-    resolver.observeToolCall("parent", "task", { category: "research" });
+    resolver.observeToolCall("parent", "task", { category: "research", task_id: "child" }, "call-research");
     resolver.observeSessionCreated(session({ id: "child", parentID: "parent" }));
 
     expect(resolver.resolve(session())).toEqual({
@@ -86,6 +86,78 @@ describe("category resolver", () => {
       category: "research",
       source: "event",
     });
+  });
+
+  it("does not assign a category without an exact task ID match", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "research", task_id: "other-child" }, "call-other");
+    resolver.observeSessionCreated(session({ id: "child", parentID: "parent" }));
+
+    expect(resolver.resolve(session())).toEqual({ kind: "unknown" });
+  });
+
+  it("keeps categories attached when child sessions are created in reverse order", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "quick", task_id: "child-a" }, "call-a");
+    resolver.observeToolCall("parent", "task", { category: "deep", task_id: "child-b" }, "call-b");
+    resolver.observeSessionCreated(session({ id: "child-b", parentID: "parent" }));
+    resolver.observeSessionCreated(session({ id: "child-a", parentID: "parent" }));
+
+    expect(resolver.resolve(session({ id: "child-a" }))).toEqual({
+      kind: "resolved",
+      category: "quick",
+      source: "event",
+    });
+    expect(resolver.resolve(session({ id: "child-b" }))).toEqual({
+      kind: "resolved",
+      category: "deep",
+      source: "event",
+    });
+  });
+
+  it("removes a failed task category before another child is created", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "quick", task_id: "failed-child" }, "call-failed");
+    resolver.observeToolSettled("parent", "call-failed", "failure");
+    resolver.observeSessionCreated(session({ id: "new-child", parentID: "parent" }));
+
+    expect(resolver.resolve(session({ id: "new-child" }))).toEqual({ kind: "unknown" });
+  });
+
+  it("resolves a reused child session by task ID without a creation event", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "research", task_id: "existing-child" }, "call-reuse");
+
+    expect(resolver.resolve(session({ id: "existing-child" }))).toEqual({
+      kind: "resolved",
+      category: "research",
+      source: "event",
+    });
+
+    resolver.observeToolSettled("parent", "call-reuse", "success");
+    expect(resolver.resolve(session({ id: "existing-child" }))).toEqual({
+      kind: "resolved",
+      category: "research",
+      source: "event",
+    });
+  });
+
+  it("clears pending categories when the parent session is evicted", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "quick", task_id: "late-child" }, "call-late");
+    resolver.evict("parent");
+    resolver.observeSessionCreated(session({ id: "late-child", parentID: "parent" }));
+
+    expect(resolver.resolve(session({ id: "late-child" }))).toEqual({ kind: "unknown" });
+  });
+
+  it("clears event categories when a child session is evicted", () => {
+    const resolver = createCategoryResolver();
+    resolver.observeToolCall("parent", "task", { category: "quick", task_id: "child" }, "call-child");
+    resolver.observeSessionCreated(session({ id: "child", parentID: "parent" }));
+    resolver.evict("child");
+
+    expect(resolver.resolve(session())).toEqual({ kind: "unknown" });
   });
 
   it("resolves a category from the parent task tool part", () => {
