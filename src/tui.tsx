@@ -1,7 +1,9 @@
 import { RGBA } from "@opentui/core";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { PluginOptions } from "@opencode-ai/plugin";
 import type { TuiPlugin, TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui";
-import type { Session } from "@opencode-ai/sdk/v2";
+import type { Part, Session } from "@opencode-ai/sdk/v2";
 import type { SharedWatchdogState, SharedSessionState } from "./shared-state";
 import {
   type AgentEntry,
@@ -13,6 +15,7 @@ import {
   recordAgent,
   subagentColor,
 } from "./tui-helpers";
+import { categoryColor, createCategoryResolver } from "./tui-category";
 import { colorStyleProps, formatSessionState, formatTimestamp, readSharedState, resolveAgentDisplayColor, stateFilePath } from "./tui-state";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
@@ -29,6 +32,7 @@ function Sidebar(props: SidebarProps) {
   const [agentColors, setAgentColors] = createSignal<Record<string, RGBA | undefined>>({});
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [now, setNow] = createSignal(Date.now());
+  const resolver = createCategoryResolver();
 
   const directory = () => props.api.state.path.worktree;
   const filePath = () => stateFilePath(directory());
@@ -36,6 +40,10 @@ function Sidebar(props: SidebarProps) {
 
   const refresh = () => {
     setState(readSharedState(filePath()));
+    resolver.refresh({
+      taskDirectory: path.join(directory(), ".omo", "senpi-task", "tasks"),
+      teamRuntimeDirectory: path.join(os.homedir(), ".omo", "runtime"),
+    });
   };
 
   const refreshAgentColors = async () => {
@@ -50,6 +58,7 @@ function Sidebar(props: SidebarProps) {
 
   refresh();
   refreshAgentColors().catch(() => setAgentColors({}));
+
   const pollTimer = setInterval(() => {
     refresh();
     refreshAgentColors().catch(() => setAgentColors({}));
@@ -76,6 +85,26 @@ function Sidebar(props: SidebarProps) {
   });
   onCleanup(unsubPartUpdated);
 
+  const unsubToolCalled = props.api.event.on("session.next.tool.called", (event) => {
+    resolver.observeToolCall(
+      event.properties.sessionID,
+      event.properties.tool,
+      event.properties.input,
+      event.properties.callID,
+    );
+  });
+  onCleanup(unsubToolCalled);
+
+  const unsubToolSucceeded = props.api.event.on("session.next.tool.success", (event) => {
+    resolver.observeToolSettled(event.properties.sessionID, event.properties.callID, "success");
+  });
+  onCleanup(unsubToolSucceeded);
+
+  const unsubToolFailed = props.api.event.on("session.next.tool.failed", (event) => {
+    resolver.observeToolSettled(event.properties.sessionID, event.properties.callID, "failure");
+  });
+  onCleanup(unsubToolFailed);
+
   const updateSession = (info: Session) => {
     setSessions((prev) => ({ ...prev, [info.id]: info }));
   };
@@ -89,6 +118,7 @@ function Sidebar(props: SidebarProps) {
 
   const unsubSessionCreated = props.api.event.on("session.created", (event) => {
     updateSession(event.properties.info);
+    resolver.observeSessionCreated(event.properties.info);
   });
   onCleanup(unsubSessionCreated);
 
@@ -99,6 +129,7 @@ function Sidebar(props: SidebarProps) {
 
   const unsubSessionDeleted = props.api.event.on("session.deleted", (event) => {
     removeSession(event.properties.info.id);
+    resolver.evict(event.properties.info.id);
   });
   onCleanup(unsubSessionDeleted);
 
@@ -125,13 +156,20 @@ function Sidebar(props: SidebarProps) {
 
   const activeSubagentNames = (): SubagentEntry[] => {
     const nowTime = now();
-    const fromSessions: SubagentEntry[] = activeSubagentSessions().map((session) => ({
-      key: session.id,
-      name: session.agent!,
-      source: "session",
-      firstSeen: session.time.created ?? nowTime,
-      lastSeen: session.time.updated ?? nowTime,
-    }));
+    const fromSessions: SubagentEntry[] = activeSubagentSessions().map((session) => {
+      const parentParts: readonly Part[] = session.parentID === undefined
+        ? []
+        : props.api.state.session.messages(session.parentID).flatMap((message) => props.api.state.part(message.id));
+      const category = resolver.resolve(session, parentParts);
+      return {
+        key: session.id,
+        name: session.agent ?? "unknown",
+        source: "session",
+        firstSeen: session.time.created ?? nowTime,
+        lastSeen: session.time.updated ?? nowTime,
+        ...(category.kind === "resolved" ? { category: category.category } : {}),
+      };
+    });
     const fromEvents: SubagentEntry[] = activeEventAgents().map((entry) => ({
       key: `event:${entry.name}`,
       name: entry.name,
@@ -215,6 +253,11 @@ function Sidebar(props: SidebarProps) {
               <span>
                 <span {...colorStyleProps(agentColor(entry.name, subagentColor(elapsed(), theme())))}>
                   • {entry.name}
+                  {entry.category && (
+                    <span {...colorStyleProps(categoryColor(entry.category, theme()))}>
+                      {" "}({entry.category})
+                    </span>
+                  )}
                   {suffix} ({formatElapsedSeconds(elapsed())})
                 </span>
                 <br />

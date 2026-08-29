@@ -17,6 +17,7 @@ export interface SubagentEntry {
   source: "session" | "event";
   firstSeen: number;
   lastSeen: number;
+  category?: string;
 }
 
 export function recordAgent(
