@@ -9,6 +9,10 @@ import {
   formatSessionState,
   formatWorktreePath,
   formatTimestamp,
+  formatLiveMetric,
+  sharedStateHealth,
+  newestSharedState,
+  formatCurrentSessionState,
   resolveAgentDisplayColor,
   readSharedState,
   stateFilePath,
@@ -19,6 +23,23 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("distinguishes unavailable/stale shared state from real zero counts", () => {
+    const base = {
+      enabled: true, timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: {},
+    };
+    expect(sharedStateHealth(undefined, 100_000)).toBe("unavailable");
+    expect(sharedStateHealth(base, 100_000)).toBe("ready");
+    expect(sharedStateHealth(base, 200_001)).toBe("stale");
+    expect(formatLiveMetric(0, "ready")).toBe("0");
+    expect(formatLiveMetric(0, "unavailable")).toBe("-");
+    expect(formatCurrentSessionState(undefined, "ready")).toBe("Not tracked");
+    expect(formatCurrentSessionState(undefined, "stale")).toBe("Stale");
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 })?.timestamp).toBe(110_000);
+  });
+
+
   it("normalizes the v1 SDK session.children response and rejects malformed entries", () => {
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } };
     expect(normalizeSessionChildren({ data: [child, {}, null] }).map((item) => item.id)).toEqual(["child"]);
