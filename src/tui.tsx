@@ -15,6 +15,7 @@ import {
   formatElapsedSeconds,
   isActiveChildSession,
   isSessionPartUpdate,
+  isSessionStatusFresh,
   mergeChildSessions,
   normalizeAgentsResponse,
   normalizeSessionChildren,
@@ -40,7 +41,7 @@ function Sidebar(props: SidebarProps) {
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [stoppedSessionIds, setStoppedSessionIds] = createSignal<ReadonlySet<string>>(new Set());
   const [serverStatuses, setServerStatuses] = createSignal<Record<string, "busy" | "retry" | "idle">>({});
-  const [statusLoaded, setStatusLoaded] = createSignal(false);
+  const [serverStatusesLoadedAt, setServerStatusesLoadedAt] = createSignal<number>();
   const deletedSessionIds = new Set<string>();
   let childrenInFlight = false;
   let disposed = false;
@@ -97,9 +98,14 @@ function Sidebar(props: SidebarProps) {
       const statuses = normalizeSessionStatuses(response);
       if (statuses !== undefined) {
         setServerStatuses(statuses);
-        setStatusLoaded(true);
+        setServerStatusesLoadedAt(Date.now());
+      } else {
+        setServerStatuses({});
+        setServerStatusesLoadedAt(undefined);
       }
     } catch {
+      setServerStatuses({});
+      setServerStatusesLoadedAt(undefined);
       // The host's synced status and freshness fallback remain usable offline.
     }
   };
@@ -234,7 +240,9 @@ function Sidebar(props: SidebarProps) {
       isActiveChildSession(
         session, props.sessionId,
         props.api.state.session.status(session.id)?.type ??
-          (statusLoaded() ? (serverStatuses()[session.id] ?? "idle") : undefined),
+          (isSessionStatusFresh(serverStatusesLoadedAt(), now())
+            ? (serverStatuses()[session.id] ?? "idle")
+            : undefined),
         now(), stoppedSessionIds().has(session.id),
       ),
     );

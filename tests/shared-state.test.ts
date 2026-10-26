@@ -34,6 +34,7 @@ describe("WatchdogStateStore", () => {
       expect(restartedFirst.getSnapshot().sessions["session-second"]).toBeUndefined();
       expect(restartedFirst.getSnapshot().global.pingsSent).toBe(3);
       expect(restartedSecond.getSnapshot().sessions["session-second"]?.state).toBe("IDLE");
+      expect(restartedSecond.getSnapshot().sessions["session-first"]).toBeUndefined();
       expect(restartedSecond.getSnapshot().global.pingsSent).toBe(0);
       restartedFirst.dispose();
       restartedSecond.dispose();

@@ -2,6 +2,8 @@ import { RGBA } from "@opentui/core";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import type { Agent, Session } from "@opencode-ai/sdk/v2";
 
+const SERVER_STATUS_TTL_MS = 30_000;
+
 /** OpenCode v1 message.part.updated stores the session ID in properties.part. */
 export function isSessionPartUpdate(
   event: { properties: { part: { sessionID: string } } },
@@ -59,6 +61,10 @@ export function normalizeSessionStatuses(
     }
   }
   return statuses;
+}
+
+export function isSessionStatusFresh(loadedAt: number | undefined, nowMs: number): boolean {
+  return loadedAt !== undefined && nowMs >= loadedAt && nowMs - loadedAt < SERVER_STATUS_TTL_MS;
 }
 
 /** An absent host status is not proof of activity: use a bounded recent-update fallback. */

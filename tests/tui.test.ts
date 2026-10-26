@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { applySessionUpdate, combineSubagentEntries, isActiveChildSession, isSessionPartUpdate, mergeChildSessions, normalizeSessionChildren, normalizeSessionStatuses } from "../src/tui-helpers";
+import { applySessionUpdate, combineSubagentEntries, isActiveChildSession, isSessionPartUpdate, isSessionStatusFresh, mergeChildSessions, normalizeSessionChildren, normalizeSessionStatuses } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -46,6 +46,13 @@ describe("TUI helpers", () => {
     });
     expect(normalizeSessionStatuses({ data: {} })).toEqual({});
     expect(normalizeSessionStatuses({ error: "unavailable", data: null })).toBeUndefined();
+  });
+
+  it("expires server session statuses so activity falls back to session timestamps", () => {
+    expect(isSessionStatusFresh(10_000, 39_999)).toBe(true);
+    expect(isSessionStatusFresh(10_000, 40_000)).toBe(false);
+    expect(isSessionStatusFresh(40_000, 10_000)).toBe(false);
+    expect(isSessionStatusFresh(undefined, 40_000)).toBe(false);
   });
 
 
