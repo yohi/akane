@@ -1,6 +1,6 @@
 import { RGBA } from "@opentui/core";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
-import type { Agent } from "@opencode-ai/sdk/v2";
+import type { Agent, Session } from "@opencode-ai/sdk/v2";
 
 /** OpenCode v1 message.part.updated stores the session ID in properties.part. */
 export function isSessionPartUpdate(
@@ -8,6 +8,52 @@ export function isSessionPartUpdate(
   sessionId: string,
 ): boolean {
   return event.properties.part.sessionID === sessionId;
+}
+
+/** Normalize OpenCode SDK field-style and data-style response formats. */
+export function normalizeSessionChildren(response: unknown): Session[] {
+  let value: unknown;
+  if (Array.isArray(response)) {
+    value = response;
+  } else if (response && typeof response === "object" && "data" in response) {
+    value = (response as { data: unknown }).data;
+  }
+  if (!Array.isArray(value)) return [];
+  return value.filter((session): session is Session =>
+    !!session && typeof session === "object" &&
+    typeof session.id === "string" &&
+    typeof session.parentID === "string" &&
+    typeof session.time?.created === "number",
+  );
+}
+
+/** An absent host status is not proof of activity: use a bounded recent-update fallback. */
+export function isActiveChildSession(
+  session: Session,
+  parentId: string,
+  status: string | undefined,
+  nowMs: number,
+  stopped: boolean,
+): boolean {
+  if (session.parentID !== parentId || !session.agent || session.agent === "user" || session.agent === "system") {
+    return false;
+  }
+  if (stopped || status === "idle") return false;
+  if (status === "busy" || status === "retry") return true;
+  const lastSeen = session.time.updated ?? session.time.created;
+  return lastSeen <= nowMs && nowMs - lastSeen < SUBAGENT_IDLE_MS;
+}
+
+export function applySessionUpdate(
+  sessions: Record<string, Session>,
+  info: Session,
+  deletedSessionIds: Set<string>,
+  eventType: "created" | "updated",
+): Record<string, Session> {
+  if (eventType === "created") deletedSessionIds.delete(info.id);
+  else if (deletedSessionIds.has(info.id)) return sessions;
+
+  return { ...sessions, [info.id]: info };
 }
 
 export const SUBAGENT_IDLE_MS = 60_000;

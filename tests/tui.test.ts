@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { isSessionPartUpdate } from "../src/tui-helpers";
+import { applySessionUpdate, isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren } from "../src/tui-helpers";
+import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -18,6 +19,40 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("normalizes the v1 SDK session.children response and rejects malformed entries", () => {
+    const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } };
+    expect(normalizeSessionChildren({ data: [child, {}, null] }).map((item) => item.id)).toEqual(["child"]);
+    expect(normalizeSessionChildren([child]).map((item) => item.id)).toEqual(["child"]);
+    expect(normalizeSessionChildren({ error: "offline" })).toEqual([]);
+  });
+
+  it("uses update freshness when the child status is unknown", () => {
+    const now = 100_000;
+    const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: now - 10_000 } } as unknown as Session;
+    expect(isActiveChildSession(child, "parent", "busy", now, false)).toBe(true);
+    expect(isActiveChildSession(child, "parent", "retry", now, false)).toBe(true);
+    expect(isActiveChildSession(child, "parent", "idle", now, false)).toBe(false);
+    expect(isActiveChildSession(child, "parent", undefined, now, false)).toBe(true);
+    expect(isActiveChildSession(child, "parent", undefined, now, true)).toBe(false);
+    expect(isActiveChildSession(child, "other", "busy", now, false)).toBe(false);
+    const stale = { ...child, time: { ...child.time, updated: now - 120_000 } };
+    expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(false);
+  });
+
+  it("ignores stale session updates until a new session.created event clears the tombstone", () => {
+    const session = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } } as unknown as Session;
+    const deleted = new Set([session.id]);
+
+    const afterUpdate = applySessionUpdate({}, session, deleted, "updated");
+    expect(afterUpdate).toEqual({});
+    expect(deleted.has(session.id)).toBe(true);
+
+    const afterCreated = applySessionUpdate(afterUpdate, session, deleted, "created");
+    expect(afterCreated[session.id]).toEqual(session);
+    expect(deleted.has(session.id)).toBe(false);
+  });
+
+
   it("correlates part updates via properties.part.sessionID, not the top-level properties", () => {
     const event = { properties: { part: { sessionID: "parent-1" } } };
     expect(isSessionPartUpdate(event, "parent-1")).toBe(true);
