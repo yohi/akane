@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.8.2](https://github.com/yohi/akane/compare/v1.8.1...v1.8.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **opencode-v1:** preserve distinct same-name child sessions (src/tui-helpers.ts) ([c2c2832](https://github.com/yohi/akane/commit/c2c2832941d318ba4a25a62245fce6acee4ad7df))
+* **opencode-v1:** preserve distinct same-name child sessions (src/tui.tsx) ([a22ef25](https://github.com/yohi/akane/commit/a22ef25a4e3b0a0fe71e8cf22f24b73b1aa45a91))
+* **opencode-v1:** preserve distinct same-name child sessions (tests/tui.test.ts) ([8026570](https://github.com/yohi/akane/commit/80265701f2fcb155ce93080aa1e26574acd21be4))
+* **opencode-v1:** R1 correct TUI event routing and user role classification ([7bb9a71](https://github.com/yohi/akane/commit/7bb9a7166d2dfc3fe612b1d5f32d916fff06591b))
+* **opencode-v1:** R1 event contract — src/index.ts ([6a8c2cb](https://github.com/yohi/akane/commit/6a8c2cb61622f23cb897ed2f0dae75ef870c51a2))
+* **opencode-v1:** R1 event contract — src/tui-helpers.ts ([7d55c42](https://github.com/yohi/akane/commit/7d55c4299d75680ab6a4597806878ffd9f86709a))
+* **opencode-v1:** R1 event contract — src/tui.tsx ([4c32435](https://github.com/yohi/akane/commit/4c32435059826486a718165e41b42bf30bafa5cb))
+* **opencode-v1:** R1 event contract — tests/index.smoke.test.ts ([5a99757](https://github.com/yohi/akane/commit/5a9975711d1ea8774070ccc6d5c63261ee95792f))
+* **opencode-v1:** R1 event contract — tests/tui.test.ts ([5b6aa78](https://github.com/yohi/akane/commit/5b6aa7839f99b5e494196f1c02217eefa27fa8cb))
+* **opencode-v1:** R2 reconcile active subagent sessions ([4b47334](https://github.com/yohi/akane/commit/4b4733456b8c5e7a9eb2b03151cade68e2dbdaa2))
+* **opencode-v1:** R2 resolve SDK v2 argument/test typecheck src/tui.tsx ([822c2b8](https://github.com/yohi/akane/commit/822c2b826e28bef3102b4e3662cc9add930da030))
+* **opencode-v1:** R2 resolve SDK v2 argument/test typecheck tests/tui.test.ts ([68e0906](https://github.com/yohi/akane/commit/68e0906043d28d79f58f2c1cc76866c4d872b070))
+* **opencode-v1:** R2 restore and filter subagent sessions (src/tui-helpers.ts) ([e87f297](https://github.com/yohi/akane/commit/e87f2972c0f834644b4d99527119a52b6921601b))
+* **opencode-v1:** R2 restore and filter subagent sessions (src/tui.tsx) ([84c060d](https://github.com/yohi/akane/commit/84c060d099ffaca3b3161489603983a0ac33de92))
+* **opencode-v1:** R2 restore and filter subagent sessions (tests/tui.test.ts) ([fd61df3](https://github.com/yohi/akane/commit/fd61df3df15a449df4f1eae3f3263dceaeabe259))
+* **opencode-v1:** R3 distinguish missing/stale state and preserve telemetry ([4977f04](https://github.com/yohi/akane/commit/4977f04e2ca0f44613adf7a47310450627a52355))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/index.ts) ([b934d73](https://github.com/yohi/akane/commit/b934d7352e514cd01053f560e899274ef412fdca))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/index.ts) ([e4b19a3](https://github.com/yohi/akane/commit/e4b19a3a212805600d755a7e818e70e3da223fdc))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/shared-state.ts) ([0b52694](https://github.com/yohi/akane/commit/0b52694dc56c2eca8ec5c27290316b8e06da1c1b))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/shared-state.ts) ([e2f49ef](https://github.com/yohi/akane/commit/e2f49ef0ce29f72e68d2bc02fbc11cc406e45807))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/telemetry.ts) ([75bbbc3](https://github.com/yohi/akane/commit/75bbbc3ee5b1a33ae51c6a3afcfbd4a3a75364dd))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/telemetry.ts) ([1ce4242](https://github.com/yohi/akane/commit/1ce42427f33c7f51a0f890e8ff257b4b109e43c9))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/tui-state.ts) ([2ec6451](https://github.com/yohi/akane/commit/2ec6451df459aac733633596b21cdd5331d1d36b))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/tui-state.ts) ([76a4040](https://github.com/yohi/akane/commit/76a40401c83bb4c51863623c3ceae7e660e9a6b3))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/tui.tsx) ([4de47b8](https://github.com/yohi/akane/commit/4de47b8a671462e442cc81a34cbbec00e476f585))
+* **opencode-v1:** R3 state liveness and telemetry continuity (src/tui.tsx) ([e0d3f33](https://github.com/yohi/akane/commit/e0d3f333a3e73a3445c9e67adafa1c5d0e42fbe2))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/shared-state.test.ts) ([cfce300](https://github.com/yohi/akane/commit/cfce3008c1049543e62ef82fd5391cadc319f32e))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/shared-state.test.ts) ([466478e](https://github.com/yohi/akane/commit/466478e12fb0fce263c4f1b7e5337cee8c4cd45b))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/telemetry.test.ts) ([287669e](https://github.com/yohi/akane/commit/287669e7f83fa39ee9fe2f9f92a1a6ff550e5d2c))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/telemetry.test.ts) ([8d691e1](https://github.com/yohi/akane/commit/8d691e17e2a0b5c4c55094bceb390c0d9b5cb4fb))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/tui.test.ts) ([881658e](https://github.com/yohi/akane/commit/881658ec5a54ad0a4eafe876c28508bf461e6f4a))
+* **opencode-v1:** R3 state liveness and telemetry continuity (tests/tui.test.ts) ([9d1181c](https://github.com/yohi/akane/commit/9d1181c00b4e558a7e3adee1981681b805767772))
+* SonarCloudの信頼性ゲート指摘を修正 ([f857bca](https://github.com/yohi/akane/commit/f857bca38aefa1cc1004b0587775649be3fade2f))
+* TUIの古い子セッション状態を無効化 ([2f58c7c](https://github.com/yohi/akane/commit/2f58c7c46ba17d8cfd4fb95061d5db0d11614b63))
+* TUI共有状態の未取得値とセッション選択を修正 ([cfcca78](https://github.com/yohi/akane/commit/cfcca78e2e3b1d719a6d50f70169c1079f3e251e))
+* 不明な子セッション状態に鮮度判定を適用 ([c3b835c](https://github.com/yohi/akane/commit/c3b835c29a4b0c0bea3a5df028b315aa518941a9))
+* 子セッションの表示と削除状態を保護 ([99b737c](https://github.com/yohi/akane/commit/99b737cd5909eda93c90c4677c0da3da8c6797da))
+
 ## [1.8.1](https://github.com/yohi/akane/compare/v1.8.0...v1.8.1) (2026-10-26)
 
 
