@@ -12,11 +12,12 @@ export function isSessionPartUpdate(
 
 /** Normalize OpenCode SDK field-style and data-style response formats. */
 export function normalizeSessionChildren(response: unknown): Session[] {
-  const value = Array.isArray(response)
-    ? response
-    : response && typeof response === "object" && "data" in response
-      ? (response as { data: unknown }).data
-      : undefined;
+  let value: unknown;
+  if (Array.isArray(response)) {
+    value = response;
+  } else if (response && typeof response === "object" && "data" in response) {
+    value = (response as { data: unknown }).data;
+  }
   if (!Array.isArray(value)) return [];
   return value.filter((session): session is Session =>
     !!session && typeof session === "object" &&
