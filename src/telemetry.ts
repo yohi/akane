@@ -23,6 +23,14 @@ export class TelemetryCollector implements Telemetry {
   private recoveries = 0;
   private silencedFailures = 0;
 
+  /** Resume cumulative counters from the last valid shared-state snapshot. */
+  constructor(initial?: Partial<TelemetrySnapshot>) {
+    this.hangupsDetected = initial?.hangupsDetected ?? 0;
+    this.pingsSent = initial?.pingsSent ?? 0;
+    this.recoveries = initial?.recoveries ?? 0;
+    this.silencedFailures = initial?.silencedFailures ?? 0;
+  }
+
   recordHangup(): void {
     this.hangupsDetected += 1;
   }
