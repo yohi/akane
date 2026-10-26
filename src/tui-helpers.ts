@@ -40,7 +40,6 @@ export function isActiveChildSession(
   }
   if (stopped || status === "idle") return false;
   if (status === "busy" || status === "retry") return true;
-  if (status === undefined) return true;
   const lastSeen = session.time.updated ?? session.time.created;
   return lastSeen <= nowMs && nowMs - lastSeen < SUBAGENT_IDLE_MS;
 }

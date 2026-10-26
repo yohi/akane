@@ -26,7 +26,7 @@ describe("TUI helpers", () => {
     expect(normalizeSessionChildren({ error: "offline" })).toEqual([]);
   });
 
-  it("keeps an unknown-status child visible even when its update is old", () => {
+  it("uses update freshness when the child status is unknown", () => {
     const now = 100_000;
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: now - 10_000 } } as unknown as Session;
     expect(isActiveChildSession(child, "parent", "busy", now, false)).toBe(true);
@@ -36,7 +36,7 @@ describe("TUI helpers", () => {
     expect(isActiveChildSession(child, "parent", undefined, now, true)).toBe(false);
     expect(isActiveChildSession(child, "other", "busy", now, false)).toBe(false);
     const stale = { ...child, time: { ...child.time, updated: now - 120_000 } };
-    expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(true);
+    expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(false);
   });
 
   it("ignores stale session updates until a new session.created event clears the tombstone", () => {
