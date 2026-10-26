@@ -11,6 +11,7 @@ import {
   SUBAGENT_IDLE_MS,
   agentColorToRgba,
   formatElapsedSeconds,
+  isSessionPartUpdate,
   normalizeAgentsResponse,
   recordAgent,
   subagentColor,
@@ -70,7 +71,7 @@ function Sidebar(props: SidebarProps) {
   });
 
   const unsubPartUpdated = props.api.event.on("message.part.updated", (event) => {
-    if (event.properties.sessionID !== props.sessionId) return;
+    if (!isSessionPartUpdate(event, props.sessionId)) return;
 
     const part = event.properties.part;
     let name: string | undefined;
