@@ -200,6 +200,10 @@ function Sidebar(props: SidebarProps) {
   const health = () => sharedStateHealth(state(), now());
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
   const count = (value: number | undefined) => formatLiveMetric(value, health());
+  const pluginStatus = () => {
+    if (health() !== "ready") return health();
+    return state()?.enabled ? "enabled" : "disabled";
+  };
   const activeSessions = (): number =>
     Object.values(state()?.sessions ?? {}).filter((session) => session.state !== "IDLE").length;
 
@@ -269,7 +273,7 @@ function Sidebar(props: SidebarProps) {
         <br />
         Worktree: <span>{formatWorktreePath(directory())}</span>
         <br />
-        Plugin: <span>{health() === "ready" ? (state()?.enabled ? "enabled" : "disabled") : health()}</span>
+        Plugin: <span>{pluginStatus()}</span>
         <br />
         <br />
         <strong {...colorStyleProps(theme().accent)}>Telemetry</strong>

@@ -13,23 +13,6 @@ function tmpDir(): string {
 }
 
 describe("WatchdogStateStore", () => {
-  it("marks previous-process active sessions IDLE when the store reopens", () => {
-    const dir = tmpDir();
-    const writer = getStateStore(dir);
-    writer.setSession("prior-session", {
-      state: "WATCHING", agentName: "coder", lastActivityAt: 100,
-      runningToolsCount: 2, pendingRequestsCount: 1,
-    });
-    writer.dispose();
-    const restarted = getStateStore(dir);
-    expect(restarted.getSnapshot().sessions["prior-session"]).toMatchObject({
-      state: "IDLE", runningToolsCount: 0, pendingRequestsCount: 0, agentName: "coder",
-    });
-    restarted.dispose();
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-
   let dir: string;
 
   beforeEach(() => {
@@ -43,6 +26,20 @@ describe("WatchdogStateStore", () => {
     } catch {
       // ignore cleanup failures
     }
+  });
+
+  it("marks previous-process active sessions IDLE when the store reopens", () => {
+    const writer = getStateStore(dir);
+    writer.setSession("prior-session", {
+      state: "WATCHING", agentName: "coder", lastActivityAt: 100,
+      runningToolsCount: 2, pendingRequestsCount: 1,
+    });
+    writer.dispose();
+    const restarted = getStateStore(dir);
+    expect(restarted.getSnapshot().sessions["prior-session"]).toMatchObject({
+      state: "IDLE", runningToolsCount: 0, pendingRequestsCount: 0, agentName: "coder",
+    });
+    restarted.dispose();
   });
 
   it("starts with default state when file is missing", () => {

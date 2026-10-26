@@ -48,17 +48,17 @@ export function newestSharedState(
   sessionId: string,
   now: number,
 ): SharedWatchdogState | undefined {
-  const matchingReadyStates = [primary, alternate].filter(
-    (state): state is SharedWatchdogState =>
-      state !== undefined &&
-      state.sessions[sessionId] !== undefined &&
-      sharedStateHealth(state, now) === "ready",
-  );
-  if (matchingReadyStates.length > 0) {
-    return matchingReadyStates.reduce((newest, state) =>
-      state.timestamp > newest.timestamp ? state : newest,
-    );
+  let newestMatchingReadyState: SharedWatchdogState | undefined;
+  for (const state of [primary, alternate]) {
+    if (
+      state?.sessions[sessionId] !== undefined &&
+      sharedStateHealth(state, now) === "ready" &&
+      (newestMatchingReadyState === undefined || state.timestamp > newestMatchingReadyState.timestamp)
+    ) {
+      newestMatchingReadyState = state;
+    }
   }
+  if (newestMatchingReadyState !== undefined) return newestMatchingReadyState;
   if (!primary) return alternate;
   if (!alternate) return primary;
   return alternate.timestamp > primary.timestamp ? alternate : primary;
