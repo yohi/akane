@@ -23,6 +23,11 @@ export function readSharedState(filePath: string): SharedWatchdogState | undefin
   return undefined;
 }
 
+/** Display the OpenCode TUI's worktree root without changing its actual path. */
+export function formatWorktreePath(worktree: string | undefined): string {
+  return worktree?.trim() ? worktree : "-";
+}
+
 export function formatSessionState(state: WatchdogSessionState | undefined): string {
   switch (state) {
     case "WATCHING":

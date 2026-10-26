@@ -5,6 +5,7 @@ import * as os from "node:os";
 import {
   colorStyleProps,
   formatSessionState,
+  formatWorktreePath,
   formatTimestamp,
   resolveAgentDisplayColor,
   readSharedState,
@@ -16,6 +17,18 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("shows the exact OpenCode worktree root, including spaces", () => {
+    expect(formatWorktreePath("/home/user/my project/.worktrees/feature-1")).toBe(
+      "/home/user/my project/.worktrees/feature-1",
+    );
+  });
+
+  it("uses a placeholder if the worktree root is unavailable", () => {
+    expect(formatWorktreePath(undefined)).toBe("-");
+    expect(formatWorktreePath("")).toBe("-");
+    expect(formatWorktreePath("   ")).toBe("-");
+  });
+
   it("formats session states", () => {
     expect(formatSessionState("WATCHING")).toBe("Watching");
     expect(formatSessionState("STAGE1_NOTIFIED")).toBe("Stage 1");

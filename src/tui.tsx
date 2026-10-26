@@ -16,7 +16,7 @@ import {
   subagentColor,
 } from "./tui-helpers";
 import { categoryColor, createCategoryResolver } from "./tui-category";
-import { colorStyleProps, formatSessionState, formatTimestamp, readSharedState, resolveAgentDisplayColor, stateFilePath } from "./tui-state";
+import { colorStyleProps, formatSessionState, formatTimestamp, formatWorktreePath, readSharedState, resolveAgentDisplayColor, stateFilePath } from "./tui-state";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
 const POLL_MS = 1000;
@@ -201,6 +201,8 @@ function Sidebar(props: SidebarProps) {
         <strong {...colorStyleProps(currentAgentColor())}>Akane Watchdog</strong>
         <br />
         Branch: <span>{branch()}</span>
+        <br />
+        Worktree: <span>{formatWorktreePath(directory())}</span>
         <br />
         Plugin: <span>{state()?.enabled ? "enabled" : "disabled"}</span>
         <br />
