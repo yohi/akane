@@ -11,8 +11,10 @@ import {
   SUBAGENT_IDLE_MS,
   agentColorToRgba,
   formatElapsedSeconds,
+  isActiveChildSession,
   isSessionPartUpdate,
   normalizeAgentsResponse,
+  normalizeSessionChildren,
   recordAgent,
   subagentColor,
 } from "./tui-helpers";
@@ -32,6 +34,10 @@ function Sidebar(props: SidebarProps) {
   const [agents, setAgents] = createSignal<Record<string, AgentEntry>>({});
   const [agentColors, setAgentColors] = createSignal<Record<string, RGBA | undefined>>({});
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
+  const [stoppedSessionIds, setStoppedSessionIds] = createSignal<ReadonlySet<string>>(new Set());
+  const deletedSessionIds = new Set<string>();
+  let childrenInFlight = false;
+  let disposed = false;
   const [now, setNow] = createSignal(Date.now());
   const resolver = createCategoryResolver();
 
@@ -57,8 +63,35 @@ function Sidebar(props: SidebarProps) {
     setAgentColors(colors);
   };
 
+  // Subscribe to updates and reconcile existing children from the v1 server API.
+  // An already-running child has no session.created event to replay on sidebar mount.
+  const refreshChildSessions = async () => {
+    if (disposed || childrenInFlight) return;
+    childrenInFlight = true;
+    try {
+      const response = await props.api.client.session.children({ path: { id: props.sessionId } });
+      if (disposed) return;
+      const children = normalizeSessionChildren(response);
+      setSessions((prev) => {
+        const next = { ...prev };
+        for (const child of children) {
+          if (child.parentID !== props.sessionId || deletedSessionIds.has(child.id)) continue;
+          if ((next[child.id]?.time.updated ?? 0) > (child.time.updated ?? 0)) continue;
+          next[child.id] = child;
+        }
+        return next;
+      });
+    } catch {
+      // Offline/temporary SDK errors must not hide event-sourced sessions or crash the sidebar.
+    } finally {
+      childrenInFlight = false;
+    }
+  };
+
   refresh();
   refreshAgentColors().catch(() => setAgentColors({}));
+  void refreshChildSessions();
+  const childrenTimer = setInterval(() => { void refreshChildSessions(); }, 15_000);
 
   const pollTimer = setInterval(() => {
     refresh();
@@ -66,6 +99,8 @@ function Sidebar(props: SidebarProps) {
   }, POLL_MS);
   const nowTimer = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => {
+    disposed = true;
+    clearInterval(childrenTimer);
     clearInterval(pollTimer);
     clearInterval(nowTimer);
   });
@@ -107,7 +142,16 @@ function Sidebar(props: SidebarProps) {
   onCleanup(unsubToolFailed);
 
   const updateSession = (info: Session) => {
+    deletedSessionIds.delete(info.id);
     setSessions((prev) => ({ ...prev, [info.id]: info }));
+  };
+  const markStopped = (sessionID: string, stopped: boolean) => {
+    setStoppedSessionIds((prev) => {
+      const next = new Set(prev);
+      if (stopped) next.add(sessionID);
+      else next.delete(sessionID);
+      return next;
+    });
   };
   const removeSession = (sessionID: string) => {
     setSessions((prev) => {
@@ -119,6 +163,7 @@ function Sidebar(props: SidebarProps) {
 
   const unsubSessionCreated = props.api.event.on("session.created", (event) => {
     updateSession(event.properties.info);
+    markStopped(event.properties.info.id, false);
     resolver.observeSessionCreated(event.properties.info);
   });
   onCleanup(unsubSessionCreated);
@@ -129,10 +174,24 @@ function Sidebar(props: SidebarProps) {
   onCleanup(unsubSessionUpdated);
 
   const unsubSessionDeleted = props.api.event.on("session.deleted", (event) => {
+    deletedSessionIds.add(event.properties.info.id);
+    markStopped(event.properties.info.id, true);
     removeSession(event.properties.info.id);
     resolver.evict(event.properties.info.id);
   });
   onCleanup(unsubSessionDeleted);
+
+  const unsubSessionIdle = props.api.event.on("session.idle", (event) => {
+    markStopped(event.properties.sessionID, true);
+  });
+  onCleanup(unsubSessionIdle);
+
+  const unsubSessionStatus = props.api.event.on("session.status", (event) => {
+    const status = event.properties.status.type;
+    if (status === "idle") markStopped(event.properties.sessionID, true);
+    else if (status === "busy" || status === "retry") markStopped(event.properties.sessionID, false);
+  });
+  onCleanup(unsubSessionStatus);
 
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
   const activeSessions = (): number =>
@@ -145,15 +204,14 @@ function Sidebar(props: SidebarProps) {
       .sort((a, b) => b.lastSeen - a.lastSeen);
   };
 
-  const activeSubagentSessions = (): Session[] => {
-    return Object.values(sessions()).filter(
-      (session) =>
-        session.parentID === props.sessionId &&
-        session.agent &&
-        session.agent !== "user" &&
-        session.agent !== "system",
+  const activeSubagentSessions = (): Session[] =>
+    Object.values(sessions()).filter((session) =>
+      isActiveChildSession(
+        session, props.sessionId,
+        props.api.state.session.status(session.id)?.type,
+        now(), stoppedSessionIds().has(session.id),
+      ),
     );
-  };
 
   const activeSubagentNames = (): SubagentEntry[] => {
     const nowTime = now();
