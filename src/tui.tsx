@@ -13,8 +13,10 @@ import {
   formatElapsedSeconds,
   isActiveChildSession,
   isSessionPartUpdate,
+  mergeChildSessions,
   normalizeAgentsResponse,
   normalizeSessionChildren,
+  normalizeSessionStatuses,
   recordAgent,
   subagentColor,
 } from "./tui-helpers";
@@ -35,6 +37,8 @@ function Sidebar(props: SidebarProps) {
   const [agentColors, setAgentColors] = createSignal<Record<string, RGBA | undefined>>({});
   const [sessions, setSessions] = createSignal<Record<string, Session>>({});
   const [stoppedSessionIds, setStoppedSessionIds] = createSignal<ReadonlySet<string>>(new Set());
+  const [serverStatuses, setServerStatuses] = createSignal<Record<string, "busy" | "retry" | "idle">>({});
+  const [statusLoaded, setStatusLoaded] = createSignal(false);
   const deletedSessionIds = new Set<string>();
   let childrenInFlight = false;
   let disposed = false;
@@ -76,15 +80,7 @@ function Sidebar(props: SidebarProps) {
       const response = await props.api.client.session.children({ sessionID: props.sessionId, directory: directory() });
       if (disposed) return;
       const children = normalizeSessionChildren(response);
-      setSessions((prev) => {
-        const next = { ...prev };
-        for (const child of children) {
-          if (child.parentID !== props.sessionId || deletedSessionIds.has(child.id)) continue;
-          if ((next[child.id]?.time.updated ?? 0) > (child.time.updated ?? 0)) continue;
-          next[child.id] = child;
-        }
-        return next;
-      });
+      setSessions((prev) => mergeChildSessions(prev, children, props.sessionId, deletedSessionIds));
     } catch {
       // Offline/temporary SDK errors must not hide event-sourced sessions or crash the sidebar.
     } finally {
@@ -92,10 +88,28 @@ function Sidebar(props: SidebarProps) {
     }
   };
 
+  const refreshServerStatuses = async () => {
+    try {
+      const response = await props.api.client.session.status({ directory: directory() });
+      if (disposed) return;
+      const statuses = normalizeSessionStatuses(response);
+      if (statuses !== undefined) {
+        setServerStatuses(statuses);
+        setStatusLoaded(true);
+      }
+    } catch {
+      // The host's synced status and freshness fallback remain usable offline.
+    }
+  };
+
   refresh();
   refreshAgentColors().catch(() => setAgentColors({}));
   void refreshChildSessions();
-  const childrenTimer = setInterval(() => { void refreshChildSessions(); }, 15_000);
+  void refreshServerStatuses();
+  const childrenTimer = setInterval(() => {
+    void refreshChildSessions();
+    void refreshServerStatuses();
+  }, 15_000);
 
   const pollTimer = setInterval(() => {
     refresh();
@@ -214,7 +228,8 @@ function Sidebar(props: SidebarProps) {
     Object.values(sessions()).filter((session) =>
       isActiveChildSession(
         session, props.sessionId,
-        props.api.state.session.status(session.id)?.type,
+        props.api.state.session.status(session.id)?.type ??
+          (statusLoaded() ? (serverStatuses()[session.id] ?? "idle") : undefined),
         now(), stoppedSessionIds().has(session.id),
       ),
     );
