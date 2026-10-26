@@ -27,7 +27,7 @@ describe("TUI helpers", () => {
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 10, updated: 10 } } as unknown as Session;
     const newer = { ...child, time: { created: 10, updated: 20 } } as Session;
     const unrelated = { ...child, id: "other", parentID: "different" } as Session;
-    expect(mergeChildSessions({ child: newer }, [child, unrelated], "parent", new Set()).child.time.updated).toBe(20);
+    expect(mergeChildSessions({ child: newer }, [child, unrelated], "parent", new Set()).child?.time.updated).toBe(20);
     expect(mergeChildSessions({}, [child, unrelated], "parent", new Set(["child"]))).toEqual({});
     expect(Object.keys(mergeChildSessions({}, [child, unrelated], "parent", new Set()))).toEqual(["child"]);
   });
