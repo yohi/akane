@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren } from "../src/tui-helpers";
+import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren, mergeChildSessions, normalizeSessionStatuses } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -23,6 +23,24 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("merges fetched child sessions without resurrecting deletions or losing fresher events", () => {
+    const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 10, updated: 10 } } as unknown as Session;
+    const newer = { ...child, time: { created: 10, updated: 20 } } as Session;
+    const unrelated = { ...child, id: "other", parentID: "different" } as Session;
+    expect(mergeChildSessions({ child: newer }, [child, unrelated], "parent", new Set()).child.time.updated).toBe(20);
+    expect(mergeChildSessions({}, [child, unrelated], "parent", new Set(["child"]))).toEqual({});
+    expect(Object.keys(mergeChildSessions({}, [child, unrelated], "parent", new Set()))).toEqual(["child"]);
+  });
+
+  it("normalizes OpenCode v1 session status maps to avoid expiring long-running agents", () => {
+    expect(normalizeSessionStatuses({ data: { child: { type: "busy" }, sibling: { type: "retry" } } })).toEqual({
+      child: "busy", sibling: "retry",
+    });
+    expect(normalizeSessionStatuses({ data: {} })).toEqual({});
+    expect(normalizeSessionStatuses({ error: "unavailable", data: null })).toBeUndefined();
+  });
+
+
   it("distinguishes unavailable/stale shared state from real zero counts", () => {
     const base = {
       enabled: true, timestamp: 100_000,
