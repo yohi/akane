@@ -17,6 +17,11 @@ import { FakeClock } from "../src/clock";
 import { resolveConfig } from "../src/config";
 
 class MockWatchdog extends Watchdog {
+  onUserMessageCalls: Array<{ sessionId: string }> = [];
+  override onUserMessage(sessionId: string, meta: any = {}) {
+    this.onUserMessageCalls.push({ sessionId });
+    super.onUserMessage(sessionId, meta);
+  }
   onActivityCalls: Array<{ sessionId: string; meta: any }> = [];
   onToolRunningCalls: Array<{ sessionId: string; callId: string }> = [];
   onToolSettledCalls: Array<{ sessionId: string; callId: string }> = [];
@@ -663,6 +668,48 @@ describe("tool-part routing (design §5)", () => {
     } finally {
       await instance.dispose();
     }
+  });
+});
+
+describe("OpenCode v1 user message role correlation", () => {
+  test("assistant text without agentName cannot bypass as human input", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      directory: `${process.cwd()}/role-assistant-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      await instance.event({ event: { type: "message.updated", properties: {
+        info: { id: "msg-assistant", sessionID: "role-s1", role: "assistant" },
+      } } });
+      await instance.event({ event: { type: "message.part.updated", properties: {
+        part: { type: "text", messageID: "msg-assistant", sessionID: "role-s1", text: "assistant output" },
+      } } });
+      expect(watchdog.onUserMessageCalls).toHaveLength(0);
+    } finally { await instance.dispose(); }
+  });
+
+  test("user text with confirmed message role bypasses exactly once", async () => {
+    const watchdog = setupMockWatchdog();
+    const ctx = {
+      client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+      directory: `${process.cwd()}/role-user-${Math.random()}`,
+      worktree: process.cwd(),
+    };
+    const instance = await (plugin.server as any)(ctx, { _watchdog: watchdog });
+    try {
+      const part = { type: "text", messageID: "msg-human-confirmed", sessionID: "role-s2", text: "continue" };
+      await instance.event({ event: { type: "message.part.updated", properties: { part } } });
+      expect(watchdog.onUserMessageCalls).toHaveLength(0);
+      await instance.event({ event: { type: "message.updated", properties: {
+        info: { id: "msg-human-confirmed", sessionID: "role-s2", role: "user" },
+      } } });
+      await instance.event({ event: { type: "message.part.updated", properties: { part } } });
+      await instance.event({ event: { type: "message.part.updated", properties: { part } } });
+      expect(watchdog.onUserMessageCalls).toEqual([{ sessionId: "role-s2" }]);
+    } finally { await instance.dispose(); }
   });
 });
 

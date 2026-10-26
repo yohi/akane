@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { isSessionPartUpdate } from "../src/tui-helpers";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -17,6 +18,13 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("correlates part updates via properties.part.sessionID, not the top-level properties", () => {
+    const event = { properties: { part: { sessionID: "parent-1" } } };
+    expect(isSessionPartUpdate(event, "parent-1")).toBe(true);
+    expect(isSessionPartUpdate(event, "other-parent")).toBe(false);
+  });
+
+
   it("shows only the worktree directory name, including spaces", () => {
     expect(formatWorktreePath("/home/user/my project/.worktrees/feature-1")).toBe("feature-1");
     expect(formatWorktreePath("/home/user/my project/.worktrees/feature one/")).toBe("feature one");

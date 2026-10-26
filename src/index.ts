@@ -396,6 +396,10 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
   });
   const telemetry = new TelemetryCollector();
   const stateStore = stateDir ? getStateStore(stateDir) : undefined;
+  // OpenCode v1 emits message roles in message.updated (not in part events).
+  // Keep a bounded, per-plugin-instance correlation table to avoid treating
+  // assistant text parts as trusted user input.
+  const messageRoles = new Map<string, "user" | "assistant">();
   const watchdog = options?._watchdog ?? new Watchdog({
     config,
     clock,
@@ -491,6 +495,17 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           return;
         }
         const messageId = extractMessageId(event);
+        if (event.type === "message.updated" && messageId) {
+          const info = (event.properties as { info?: { role?: string } } | undefined)?.info;
+          if (info?.role === "user" || info?.role === "assistant") {
+            messageRoles.delete(messageId);
+            messageRoles.set(messageId, info.role);
+            if (messageRoles.size > 2048) {
+              const oldest = messageRoles.keys().next().value;
+              if (oldest !== undefined) messageRoles.delete(oldest);
+            }
+          }
+        }
 
         if (messageId && IGNORED_PING_MESSAGE_IDS.has(messageId)) {
           instLog("info", `Event ignored (belongs to IGNORED_PING_MESSAGE_IDS: ${messageId})`);
@@ -509,9 +524,14 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
           event.type === "message.part.updated"
             ? (event.properties as { part?: { text?: string } } | undefined)?.part?.text
             : undefined;
+        // The absence of agentName does NOT mean the author is the user.
+        // Part events carry a messageID, but not a reliable role; only act on
+        // a text part after its message.updated metadata confirms role=user.
         const isUserTyping =
           event.type === "message.part.updated" &&
-          agentName === undefined &&
+          messageId !== undefined &&
+          messageRoles.get(messageId) === "user" &&
+          (event.properties as { part?: { type?: string } } | undefined)?.part?.type === "text" &&
           typeof partText === "string" &&
           partText.length > 0;
 
