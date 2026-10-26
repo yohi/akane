@@ -17,16 +17,17 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
-  it("shows the exact OpenCode worktree root, including spaces", () => {
-    expect(formatWorktreePath("/home/user/my project/.worktrees/feature-1")).toBe(
-      "/home/user/my project/.worktrees/feature-1",
-    );
+  it("shows only the worktree directory name, including spaces", () => {
+    expect(formatWorktreePath("/home/user/my project/.worktrees/feature-1")).toBe("feature-1");
+    expect(formatWorktreePath("/home/user/my project/.worktrees/feature one/")).toBe("feature one");
+    expect(formatWorktreePath("/home/user/projects/akane")).toBe("akane");
   });
 
   it("uses a placeholder if the worktree root is unavailable", () => {
     expect(formatWorktreePath(undefined)).toBe("-");
     expect(formatWorktreePath("")).toBe("-");
     expect(formatWorktreePath("   ")).toBe("-");
+    expect(formatWorktreePath("/")).toBe("-");
   });
 
   it("formats session states", () => {
