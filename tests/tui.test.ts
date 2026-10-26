@@ -9,6 +9,10 @@ import {
   formatSessionState,
   formatWorktreePath,
   formatTimestamp,
+  formatLiveMetric,
+  sharedStateHealth,
+  newestSharedState,
+  formatCurrentSessionState,
   resolveAgentDisplayColor,
   readSharedState,
   stateFilePath,
@@ -19,6 +23,55 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("distinguishes unavailable/stale shared state from real zero counts", () => {
+    const base = {
+      enabled: true, timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: {},
+    };
+    expect(sharedStateHealth(undefined, 100_000)).toBe("unavailable");
+    expect(sharedStateHealth(base, 100_000)).toBe("ready");
+    expect(sharedStateHealth(base, 200_001)).toBe("stale");
+    expect(formatLiveMetric(0, "ready")).toBe("0");
+    expect(formatLiveMetric(undefined, "ready")).toBe("-");
+    expect(formatLiveMetric(null, "ready")).toBe("-");
+    expect(formatLiveMetric(0, "unavailable")).toBe("-");
+    expect(formatCurrentSessionState(undefined, "ready")).toBe("Not tracked");
+    expect(formatCurrentSessionState(undefined, "stale")).toBe("Stale");
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+  });
+
+  it("prefers the newest ready shared state that contains the current session", () => {
+    const primary = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: { "session-1": { state: "WATCHING" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const alternate = {
+      ...primary,
+      timestamp: 110_000,
+      sessions: { "session-1": { state: "PINGED" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const newerWithoutSession = { ...primary, timestamp: 115_000, sessions: {} };
+
+    expect(newestSharedState(newerWithoutSession, primary, "session-1", 110_000)).toBe(primary);
+    expect(newestSharedState(primary, alternate, "session-1", 110_000)).toBe(alternate);
+  });
+
+  it("falls back to timestamp when no ready shared state contains the current session", () => {
+    const base = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: {},
+    };
+
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 200_001)?.timestamp).toBe(110_000);
+  });
+
+
   it("normalizes the v1 SDK session.children response and rejects malformed entries", () => {
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } };
     expect(normalizeSessionChildren({ data: [child, {}, null] }).map((item) => item.id)).toEqual(["child"]);

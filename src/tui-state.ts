@@ -29,6 +29,50 @@ export function formatWorktreePath(worktree: string | undefined): string {
   return path.basename(worktree) || "-";
 }
 
+export type SharedStateHealth = "ready" | "unavailable" | "stale";
+
+export function sharedStateHealth(state: SharedWatchdogState | undefined, now: number): SharedStateHealth {
+  if (state === undefined) return "unavailable";
+  if (state.timestamp > now + 30_000 || now - state.timestamp > 90_000) return "stale";
+  return "ready";
+}
+
+export function formatLiveMetric(value: number | null | undefined, health: SharedStateHealth): string {
+  return health === "ready" && value !== undefined && value !== null ? String(value) : "-";
+}
+
+/** Prefer the freshest valid local state when server/TUI worktree roots differ. */
+export function newestSharedState(
+  primary: SharedWatchdogState | undefined,
+  alternate: SharedWatchdogState | undefined,
+  sessionId: string,
+  now: number,
+): SharedWatchdogState | undefined {
+  let newestMatchingReadyState: SharedWatchdogState | undefined;
+  for (const state of [primary, alternate]) {
+    if (
+      state?.sessions[sessionId] !== undefined &&
+      sharedStateHealth(state, now) === "ready" &&
+      (newestMatchingReadyState === undefined || state.timestamp > newestMatchingReadyState.timestamp)
+    ) {
+      newestMatchingReadyState = state;
+    }
+  }
+  if (newestMatchingReadyState !== undefined) return newestMatchingReadyState;
+  if (!primary) return alternate;
+  if (!alternate) return primary;
+  return alternate.timestamp > primary.timestamp ? alternate : primary;
+}
+
+export function formatCurrentSessionState(
+  state: WatchdogSessionState | undefined,
+  health: SharedStateHealth,
+): string {
+  if (health === "unavailable") return "Unavailable";
+  if (health === "stale") return "Stale";
+  return state === undefined ? "Not tracked" : formatSessionState(state);
+}
+
 export function formatSessionState(state: WatchdogSessionState | undefined): string {
   switch (state) {
     case "WATCHING":

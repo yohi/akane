@@ -2,6 +2,18 @@ import { describe, test, expect } from "bun:test";
 import { TelemetryCollector, NoopTelemetry } from "../src/telemetry";
 
 describe("TelemetryCollector", () => {
+  test("restores persisted global counters before recording new events", () => {
+    const telemetry = new TelemetryCollector({
+      hangupsDetected: 4, pingsSent: 3, recoveries: 2, silencedFailures: 1,
+    });
+    expect(telemetry.snapshot()).toMatchObject({
+      hangupsDetected: 4, pingsSent: 3, recoveries: 2, silencedFailures: 1,
+    });
+    telemetry.recordPing();
+    expect(telemetry.snapshot().pingsSent).toBe(4);
+  });
+
+
   test("counts each event type", () => {
     const t = new TelemetryCollector();
     t.recordHangup();
