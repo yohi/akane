@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { applySessionUpdate, isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren } from "../src/tui-helpers";
+import { applySessionUpdate, combineSubagentEntries, isActiveChildSession, isSessionPartUpdate, isSessionStatusFresh, mergeChildSessions, normalizeSessionChildren, normalizeSessionStatuses } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -23,6 +23,39 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("keeps concurrent subagents with the same agent name but different child IDs", () => {
+    const first = { key: "child-1", name: "coder", source: "session", firstSeen: 10, lastSeen: 20 } as const;
+    const second = { key: "child-2", name: "coder", source: "session", firstSeen: 11, lastSeen: 25 } as const;
+    const fallback = { key: "event:coder", name: "coder", source: "event", firstSeen: 12, lastSeen: 30 } as const;
+    expect(combineSubagentEntries([first, second], [fallback]).map((entry) => entry.key)).toEqual(["child-1", "child-2"]);
+  });
+
+
+  it("merges fetched child sessions without resurrecting deletions or losing fresher events", () => {
+    const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 10, updated: 10 } } as unknown as Session;
+    const newer = { ...child, time: { created: 10, updated: 20 } } as Session;
+    const unrelated = { ...child, id: "other", parentID: "different" } as Session;
+    expect(mergeChildSessions({ child: newer }, [child, unrelated], "parent", new Set()).child?.time.updated).toBe(20);
+    expect(mergeChildSessions({}, [child, unrelated], "parent", new Set(["child"]))).toEqual({});
+    expect(Object.keys(mergeChildSessions({}, [child, unrelated], "parent", new Set()))).toEqual(["child"]);
+  });
+
+  it("normalizes OpenCode v1 session status maps to avoid expiring long-running agents", () => {
+    expect(normalizeSessionStatuses({ data: { child: { type: "busy" }, sibling: { type: "retry" } } })).toEqual({
+      child: "busy", sibling: "retry",
+    });
+    expect(normalizeSessionStatuses({ data: {} })).toEqual({});
+    expect(normalizeSessionStatuses({ error: "unavailable", data: null })).toBeUndefined();
+  });
+
+  it("expires server session statuses so activity falls back to session timestamps", () => {
+    expect(isSessionStatusFresh(10_000, 39_999)).toBe(true);
+    expect(isSessionStatusFresh(10_000, 40_000)).toBe(false);
+    expect(isSessionStatusFresh(40_000, 10_000)).toBe(false);
+    expect(isSessionStatusFresh(undefined, 40_000)).toBe(false);
+  });
+
+
   it("distinguishes unavailable/stale shared state from real zero counts", () => {
     const base = {
       enabled: true, timestamp: 100_000,
@@ -33,11 +66,11 @@ describe("TUI helpers", () => {
     expect(sharedStateHealth(base, 100_000)).toBe("ready");
     expect(sharedStateHealth(base, 200_001)).toBe("stale");
     expect(formatLiveMetric(0, "ready")).toBe("0");
-    expect(formatLiveMetric(undefined, "ready")).toBe("-");
-    expect(formatLiveMetric(null, "ready")).toBe("-");
     expect(formatLiveMetric(0, "unavailable")).toBe("-");
     expect(formatCurrentSessionState(undefined, "ready")).toBe("Not tracked");
     expect(formatCurrentSessionState(undefined, "stale")).toBe("Stale");
+    expect(formatLiveMetric(undefined, "ready")).toBe("-");
+    expect(formatLiveMetric(null, "ready")).toBe("-");
     expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
   });
 

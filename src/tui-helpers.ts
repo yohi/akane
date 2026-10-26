@@ -2,6 +2,8 @@ import { RGBA } from "@opentui/core";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import type { Agent, Session } from "@opencode-ai/sdk/v2";
 
+const SERVER_STATUS_TTL_MS = 30_000;
+
 /** OpenCode v1 message.part.updated stores the session ID in properties.part. */
 export function isSessionPartUpdate(
   event: { properties: { part: { sessionID: string } } },
@@ -25,6 +27,44 @@ export function normalizeSessionChildren(response: unknown): Session[] {
     typeof session.parentID === "string" &&
     typeof session.time?.created === "number",
   );
+}
+
+/** Merge an authoritative child snapshot without overwriting fresher event updates. */
+export function mergeChildSessions(
+  previous: Readonly<Record<string, Session>>,
+  children: readonly Session[],
+  parentId: string,
+  deletedIds: ReadonlySet<string>,
+): Record<string, Session> {
+  const next = { ...previous };
+  for (const child of children) {
+    if (child.parentID !== parentId || deletedIds.has(child.id)) continue;
+    if ((next[child.id]?.time.updated ?? 0) > (child.time.updated ?? 0)) continue;
+    next[child.id] = child;
+  }
+  return next;
+}
+
+/** The status endpoint only lists busy/retrying sessions; missing IDs are idle. */
+export function normalizeSessionStatuses(
+  response: unknown,
+): Record<string, "busy" | "retry" | "idle"> | undefined {
+  const value = response && typeof response === "object" && "data" in response
+    ? (response as { data: unknown }).data
+    : response;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const statuses: Record<string, "busy" | "retry" | "idle"> = {};
+  for (const [id, status] of Object.entries(value)) {
+    if (!status || typeof status !== "object" || !("type" in status)) continue;
+    if (status.type === "busy" || status.type === "retry" || status.type === "idle") {
+      statuses[id] = status.type;
+    }
+  }
+  return statuses;
+}
+
+export function isSessionStatusFresh(loadedAt: number | undefined, nowMs: number): boolean {
+  return loadedAt !== undefined && nowMs >= loadedAt && nowMs - loadedAt < SERVER_STATUS_TTL_MS;
 }
 
 /** An absent host status is not proof of activity: use a bounded recent-update fallback. */
@@ -72,6 +112,18 @@ export interface SubagentEntry {
   firstSeen: number;
   lastSeen: number;
   category?: string;
+}
+
+/** Preserve each child session ID, while suppressing duplicate name-only events. */
+export function combineSubagentEntries(
+  fromSessions: readonly SubagentEntry[],
+  fromEvents: readonly SubagentEntry[],
+): SubagentEntry[] {
+  const sessionNames = new Set(fromSessions.map((entry) => entry.name));
+  return [
+    ...fromSessions,
+    ...fromEvents.filter((entry) => !sessionNames.has(entry.name)),
+  ].sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
 }
 
 export function recordAgent(
