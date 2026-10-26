@@ -394,8 +394,15 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
-  const telemetry = new TelemetryCollector();
   const stateStore = stateDir ? getStateStore(stateDir) : undefined;
+  const telemetry = new TelemetryCollector(stateStore?.getSnapshot().global);
+  // The store is also used when the watchdog implementation is injected in tests.
+  stateStore?.setEnabled(config.enabled);
+  // Do not mistake a quiescent, alive plugin for a stale file on the TUI side.
+  const stateHeartbeat = stateStore
+    ? setInterval(() => stateStore.setEnabled(config.enabled), 30_000)
+    : undefined;
+  stateHeartbeat?.unref?.();
   // OpenCode v1 emits message roles in message.updated (not in part events).
   // Keep a bounded, per-plugin-instance correlation table to avoid treating
   // assistant text parts as trusted user input.
@@ -658,6 +665,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
       }
     },
     dispose: async () => {
+      if (stateHeartbeat !== undefined) clearInterval(stateHeartbeat);
       if (inputDir) {
         ACTIVE_INSTANCES.delete(inputDir);
       }
