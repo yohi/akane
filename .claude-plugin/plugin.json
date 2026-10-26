@@ -1,6 +1,6 @@
 {
   "name": "akane",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Claude Code session hang detector with tmux/OS notification + recovery ping",
   "author": {
     "name": "yohi",
