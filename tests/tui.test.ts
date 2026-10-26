@@ -33,10 +33,42 @@ describe("TUI helpers", () => {
     expect(sharedStateHealth(base, 100_000)).toBe("ready");
     expect(sharedStateHealth(base, 200_001)).toBe("stale");
     expect(formatLiveMetric(0, "ready")).toBe("0");
+    expect(formatLiveMetric(undefined, "ready")).toBe("-");
+    expect(formatLiveMetric(null, "ready")).toBe("-");
     expect(formatLiveMetric(0, "unavailable")).toBe("-");
     expect(formatCurrentSessionState(undefined, "ready")).toBe("Not tracked");
     expect(formatCurrentSessionState(undefined, "stale")).toBe("Stale");
-    expect(newestSharedState(base, { ...base, timestamp: 110_000 })?.timestamp).toBe(110_000);
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+  });
+
+  it("prefers the newest ready shared state that contains the current session", () => {
+    const primary = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: { "session-1": { state: "WATCHING" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const alternate = {
+      ...primary,
+      timestamp: 110_000,
+      sessions: { "session-1": { state: "PINGED" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const newerWithoutSession = { ...primary, timestamp: 115_000, sessions: {} };
+
+    expect(newestSharedState(newerWithoutSession, primary, "session-1", 110_000)).toBe(primary);
+    expect(newestSharedState(primary, alternate, "session-1", 110_000)).toBe(alternate);
+  });
+
+  it("falls back to timestamp when no ready shared state contains the current session", () => {
+    const base = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: {},
+    };
+
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 200_001)?.timestamp).toBe(110_000);
   });
 
 

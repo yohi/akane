@@ -51,7 +51,7 @@ function Sidebar(props: SidebarProps) {
     const primary = primaryDir ? readSharedState(stateFilePath(primaryDir)) : undefined;
     const alternate = alternateDir && alternateDir !== primaryDir
       ? readSharedState(stateFilePath(alternateDir)) : undefined;
-    setState(newestSharedState(primary, alternate));
+    setState(newestSharedState(primary, alternate, props.sessionId, now()));
     resolver.refresh({
       taskDirectory: path.join(directory(), ".omo", "senpi-task", "tasks"),
       teamRuntimeDirectory: path.join(os.homedir(), ".omo", "runtime"),
