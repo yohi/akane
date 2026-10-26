@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren } from "../src/tui-helpers";
+import { applySessionUpdate, isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -26,7 +26,7 @@ describe("TUI helpers", () => {
     expect(normalizeSessionChildren({ error: "offline" })).toEqual([]);
   });
 
-  it("distinguishes active, idle and stale child sessions", () => {
+  it("keeps an unknown-status child visible even when its update is old", () => {
     const now = 100_000;
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: now - 10_000 } } as unknown as Session;
     expect(isActiveChildSession(child, "parent", "busy", now, false)).toBe(true);
@@ -36,7 +36,20 @@ describe("TUI helpers", () => {
     expect(isActiveChildSession(child, "parent", undefined, now, true)).toBe(false);
     expect(isActiveChildSession(child, "other", "busy", now, false)).toBe(false);
     const stale = { ...child, time: { ...child.time, updated: now - 120_000 } };
-    expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(false);
+    expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(true);
+  });
+
+  it("ignores stale session updates until a new session.created event clears the tombstone", () => {
+    const session = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } } as unknown as Session;
+    const deleted = new Set([session.id]);
+
+    const afterUpdate = applySessionUpdate({}, session, deleted, "updated");
+    expect(afterUpdate).toEqual({});
+    expect(deleted.has(session.id)).toBe(true);
+
+    const afterCreated = applySessionUpdate(afterUpdate, session, deleted, "created");
+    expect(afterCreated[session.id]).toEqual(session);
+    expect(deleted.has(session.id)).toBe(false);
   });
 
 

@@ -40,8 +40,21 @@ export function isActiveChildSession(
   }
   if (stopped || status === "idle") return false;
   if (status === "busy" || status === "retry") return true;
+  if (status === undefined) return true;
   const lastSeen = session.time.updated ?? session.time.created;
   return lastSeen <= nowMs && nowMs - lastSeen < SUBAGENT_IDLE_MS;
+}
+
+export function applySessionUpdate(
+  sessions: Record<string, Session>,
+  info: Session,
+  deletedSessionIds: Set<string>,
+  eventType: "created" | "updated",
+): Record<string, Session> {
+  if (eventType === "created") deletedSessionIds.delete(info.id);
+  else if (deletedSessionIds.has(info.id)) return sessions;
+
+  return { ...sessions, [info.id]: info };
 }
 
 export const SUBAGENT_IDLE_MS = 60_000;

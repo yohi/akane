@@ -9,6 +9,7 @@ import {
   type AgentEntry,
   type SubagentEntry,
   SUBAGENT_IDLE_MS,
+  applySessionUpdate,
   agentColorToRgba,
   formatElapsedSeconds,
   isActiveChildSession,
@@ -141,9 +142,8 @@ function Sidebar(props: SidebarProps) {
   });
   onCleanup(unsubToolFailed);
 
-  const updateSession = (info: Session) => {
-    deletedSessionIds.delete(info.id);
-    setSessions((prev) => ({ ...prev, [info.id]: info }));
+  const updateSession = (info: Session, eventType: "created" | "updated") => {
+    setSessions((prev) => applySessionUpdate(prev, info, deletedSessionIds, eventType));
   };
   const markStopped = (sessionID: string, stopped: boolean) => {
     setStoppedSessionIds((prev) => {
@@ -162,14 +162,14 @@ function Sidebar(props: SidebarProps) {
   };
 
   const unsubSessionCreated = props.api.event.on("session.created", (event) => {
-    updateSession(event.properties.info);
+    updateSession(event.properties.info, "created");
     markStopped(event.properties.info.id, false);
     resolver.observeSessionCreated(event.properties.info);
   });
   onCleanup(unsubSessionCreated);
 
   const unsubSessionUpdated = props.api.event.on("session.updated", (event) => {
-    updateSession(event.properties.info);
+    updateSession(event.properties.info, "updated");
   });
   onCleanup(unsubSessionUpdated);
 
