@@ -10,6 +10,7 @@ import {
   type SubagentEntry,
   SUBAGENT_IDLE_MS,
   agentColorToRgba,
+  combineSubagentEntries,
   formatElapsedSeconds,
   isActiveChildSession,
   isSessionPartUpdate,
@@ -257,14 +258,7 @@ function Sidebar(props: SidebarProps) {
       firstSeen: entry.firstSeen,
       lastSeen: entry.lastSeen,
     }));
-    const seen = new Set<string>();
-    const combined: SubagentEntry[] = [];
-    for (const entry of [...fromSessions, ...fromEvents]) {
-      if (seen.has(entry.name)) continue;
-      seen.add(entry.name);
-      combined.push(entry);
-    }
-    return combined.sort((a, b) => a.name.localeCompare(b.name));
+    return combineSubagentEntries(fromSessions, fromEvents);
   };
 
   const branch = () => props.api.state.vcs?.branch ?? "-";
