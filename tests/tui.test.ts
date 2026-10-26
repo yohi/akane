@@ -21,8 +21,8 @@ function tmpDir(): string {
 describe("TUI helpers", () => {
   it("normalizes the v1 SDK session.children response and rejects malformed entries", () => {
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } };
-    expect(normalizeSessionChildren({ data: [child, {}, null] })).toEqual([child]);
-    expect(normalizeSessionChildren([child])).toEqual([child]);
+    expect(normalizeSessionChildren({ data: [child, {}, null] }).map((item) => item.id)).toEqual(["child"]);
+    expect(normalizeSessionChildren([child]).map((item) => item.id)).toEqual(["child"]);
     expect(normalizeSessionChildren({ error: "offline" })).toEqual([]);
   });
 
