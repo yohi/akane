@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren, mergeChildSessions, normalizeSessionStatuses } from "../src/tui-helpers";
+import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren, mergeChildSessions, normalizeSessionStatuses, combineSubagentEntries } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -23,6 +23,14 @@ function tmpDir(): string {
 }
 
 describe("TUI helpers", () => {
+  it("keeps concurrent subagents with the same agent name but different child IDs", () => {
+    const first = { key: "child-1", name: "coder", source: "session", firstSeen: 10, lastSeen: 20 } as const;
+    const second = { key: "child-2", name: "coder", source: "session", firstSeen: 11, lastSeen: 25 } as const;
+    const fallback = { key: "event:coder", name: "coder", source: "event", firstSeen: 12, lastSeen: 30 } as const;
+    expect(combineSubagentEntries([first, second], [fallback]).map((entry) => entry.key)).toEqual(["child-1", "child-2"]);
+  });
+
+
   it("merges fetched child sessions without resurrecting deletions or losing fresher events", () => {
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 10, updated: 10 } } as unknown as Session;
     const newer = { ...child, time: { created: 10, updated: 20 } } as Session;
