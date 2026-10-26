@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.1](https://github.com/yohi/akane/compare/v1.8.0...v1.8.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **tui:** shorten Worktree label to directory name ([92e4973](https://github.com/yohi/akane/commit/92e4973db692709967f707754d3b611ceb3f8a15))
+* **tui:** show compact Worktree directory name ([2ddb392](https://github.com/yohi/akane/commit/2ddb392d3e28a9966c681d49e7da5009c1db8a9c))
+
 ## [1.8.0](https://github.com/yohi/akane/compare/v1.7.0...v1.8.0) (2026-10-26)
 
 
