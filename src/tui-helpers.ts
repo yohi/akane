@@ -2,6 +2,14 @@ import { RGBA } from "@opentui/core";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import type { Agent } from "@opencode-ai/sdk/v2";
 
+/** OpenCode v1 message.part.updated stores the session ID in properties.part. */
+export function isSessionPartUpdate(
+  event: { properties: { part: { sessionID: string } } },
+  sessionId: string,
+): boolean {
+  return event.properties.part.sessionID === sessionId;
+}
+
 export const SUBAGENT_IDLE_MS = 60_000;
 export const SUBAGENT_FRESH_MS = 30_000;
 
