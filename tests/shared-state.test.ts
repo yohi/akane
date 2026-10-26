@@ -13,6 +13,37 @@ function tmpDir(): string {
 }
 
 describe("WatchdogStateStore", () => {
+  it("isolates two worktree state files and retains counters across store recreation", () => {
+    const firstDir = tmpDir();
+    const secondDir = tmpDir();
+    try {
+      const first = getStateStore(firstDir);
+      const second = getStateStore(secondDir);
+      first.setSession("session-first", {
+        state: "WATCHING", runningToolsCount: 1, pendingRequestsCount: 0,
+      });
+      first.setGlobal({ hangupsDetected: 6, pingsSent: 3, recoveries: 2, silencedFailures: 1 });
+      second.setSession("session-second", {
+        state: "WATCHING", runningToolsCount: 0, pendingRequestsCount: 0,
+      });
+      first.dispose();
+      second.dispose();
+      const restartedFirst = getStateStore(firstDir);
+      const restartedSecond = getStateStore(secondDir);
+      expect(restartedFirst.getSnapshot().sessions["session-first"]?.state).toBe("IDLE");
+      expect(restartedFirst.getSnapshot().sessions["session-second"]).toBeUndefined();
+      expect(restartedFirst.getSnapshot().global.pingsSent).toBe(3);
+      expect(restartedSecond.getSnapshot().sessions["session-second"]?.state).toBe("IDLE");
+      expect(restartedSecond.getSnapshot().global.pingsSent).toBe(0);
+      restartedFirst.dispose();
+      restartedSecond.dispose();
+    } finally {
+      fs.rmSync(firstDir, { recursive: true, force: true });
+      fs.rmSync(secondDir, { recursive: true, force: true });
+    }
+  });
+
+
   it("marks previous-process active sessions IDLE when the store reopens", () => {
     const dir = tmpDir();
     const writer = getStateStore(dir);
