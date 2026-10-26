@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.8.0](https://github.com/yohi/akane/compare/v1.7.0...v1.8.0) (2026-10-26)
+
+
+### Features
+
+* **tui:** display worktree in Akane Watchdog sidebar ([620fac0](https://github.com/yohi/akane/commit/620fac0b527c38c8b2436b6543a2d2c2b7246d5f))
+* **tui:** format OpenCode worktree path for sidebar ([1a5b6d3](https://github.com/yohi/akane/commit/1a5b6d363a150f23e8f0a80f04e45019e2a642aa))
+* **tui:** show Worktree in OpenCode v1 Akane Watchdog ([e93eb23](https://github.com/yohi/akane/commit/e93eb231000c5d8a6a650e6637b108ac58ad390e))
+
 ## [1.7.0](https://github.com/yohi/akane/compare/v1.6.2...v1.7.0) (2026-08-29)
 
 
