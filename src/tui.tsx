@@ -19,7 +19,7 @@ import {
   subagentColor,
 } from "./tui-helpers";
 import { categoryColor, createCategoryResolver } from "./tui-category";
-import { colorStyleProps, formatSessionState, formatTimestamp, formatWorktreePath, readSharedState, resolveAgentDisplayColor, stateFilePath } from "./tui-state";
+import { colorStyleProps, formatCurrentSessionState, formatLiveMetric, formatTimestamp, formatWorktreePath, newestSharedState, readSharedState, resolveAgentDisplayColor, sharedStateHealth, stateFilePath } from "./tui-state";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 
 const POLL_MS = 1000;
@@ -41,12 +41,16 @@ function Sidebar(props: SidebarProps) {
   const [now, setNow] = createSignal(Date.now());
   const resolver = createCategoryResolver();
 
-  const directory = () => props.api.state.path.worktree;
-  const filePath = () => stateFilePath(directory());
+  const directory = () => props.api.state.path.worktree || props.api.state.path.directory;
   const theme = () => props.api.theme.current;
 
   const refresh = () => {
-    setState(readSharedState(filePath()));
+    const primaryDir = props.api.state.path.worktree;
+    const alternateDir = props.api.state.path.directory;
+    const primary = primaryDir ? readSharedState(stateFilePath(primaryDir)) : undefined;
+    const alternate = alternateDir && alternateDir !== primaryDir
+      ? readSharedState(stateFilePath(alternateDir)) : undefined;
+    setState(newestSharedState(primary, alternate));
     resolver.refresh({
       taskDirectory: path.join(directory(), ".omo", "senpi-task", "tasks"),
       teamRuntimeDirectory: path.join(os.homedir(), ".omo", "runtime"),
@@ -193,7 +197,9 @@ function Sidebar(props: SidebarProps) {
   });
   onCleanup(unsubSessionStatus);
 
+  const health = () => sharedStateHealth(state(), now());
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
+  const count = (value: number | undefined) => formatLiveMetric(value, health());
   const activeSessions = (): number =>
     Object.values(state()?.sessions ?? {}).filter((session) => session.state !== "IDLE").length;
 
@@ -263,33 +269,33 @@ function Sidebar(props: SidebarProps) {
         <br />
         Worktree: <span>{formatWorktreePath(directory())}</span>
         <br />
-        Plugin: <span>{state()?.enabled ? "enabled" : "disabled"}</span>
+        Plugin: <span>{health() === "ready" ? (state()?.enabled ? "enabled" : "disabled") : health()}</span>
         <br />
         <br />
         <strong {...colorStyleProps(theme().accent)}>Telemetry</strong>
         <br />
-        Active sessions: <span>{activeSessions()}</span>
+        Active sessions: <span>{count(activeSessions())}</span>
         <br />
-        Hangups: <span>{state()?.global.hangupsDetected ?? 0}</span>
+        Hangups: <span>{count(state()?.global.hangupsDetected)}</span>
         <br />
-        Pings: <span>{state()?.global.pingsSent ?? 0}</span>
+        Pings: <span>{count(state()?.global.pingsSent)}</span>
         <br />
-        Recoveries: <span>{state()?.global.recoveries ?? 0}</span>
+        Recoveries: <span>{count(state()?.global.recoveries)}</span>
         <br />
-        Silenced: <span>{state()?.global.silencedFailures ?? 0}</span>
+        Silenced: <span>{count(state()?.global.silencedFailures)}</span>
         <br />
         <br />
         <strong {...colorStyleProps(currentAgentColor())}>This session</strong>
         <br />
-        State: <span>{formatSessionState(sessionState()?.state)}</span>
+        State: <span>{formatCurrentSessionState(sessionState()?.state, health())}</span>
         <br />
         Agent: <span {...colorStyleProps(agentColor(sessionState()?.agentName, theme().text))}>{sessionState()?.agentName ?? "-"}</span>
         <br />
-        Tools running: <span>{sessionState()?.runningToolsCount ?? 0}</span>
+        Tools running: <span>{count(sessionState()?.runningToolsCount)}</span>
         <br />
-        Pending: <span>{sessionState()?.pendingRequestsCount ?? 0}</span>
+        Pending: <span>{count(sessionState()?.pendingRequestsCount)}</span>
         <br />
-        Last activity: <span>{formatTimestamp(sessionState()?.lastActivityAt, now())}</span>
+        Last activity: <span>{health() === "ready" ? formatTimestamp(sessionState()?.lastActivityAt, now()) : "-"}</span>
         <br />
         <Show when={sessionState()?.errorReason}>
           {(reason) => (
