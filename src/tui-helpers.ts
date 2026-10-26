@@ -95,6 +95,18 @@ export interface SubagentEntry {
   category?: string;
 }
 
+/** Preserve each child session ID, while suppressing duplicate name-only events. */
+export function combineSubagentEntries(
+  fromSessions: readonly SubagentEntry[],
+  fromEvents: readonly SubagentEntry[],
+): SubagentEntry[] {
+  const sessionNames = new Set(fromSessions.map((entry) => entry.name));
+  return [
+    ...fromSessions,
+    ...fromEvents.filter((entry) => !sessionNames.has(entry.name)),
+  ].sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+}
+
 export function recordAgent(
   record: Record<string, AgentEntry>,
   name: string,
