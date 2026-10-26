@@ -69,7 +69,7 @@ function Sidebar(props: SidebarProps) {
     if (disposed || childrenInFlight) return;
     childrenInFlight = true;
     try {
-      const response = await props.api.client.session.children({ path: { id: props.sessionId } });
+      const response = await props.api.client.session.children({ sessionID: props.sessionId, directory: directory() });
       if (disposed) return;
       const children = normalizeSessionChildren(response);
       setSessions((prev) => {
