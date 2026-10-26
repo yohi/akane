@@ -26,6 +26,40 @@ export function normalizeSessionChildren(response: unknown): Session[] {
   );
 }
 
+/** Merge an authoritative child snapshot without overwriting fresher event updates. */
+export function mergeChildSessions(
+  previous: Readonly<Record<string, Session>>,
+  children: readonly Session[],
+  parentId: string,
+  deletedIds: ReadonlySet<string>,
+): Record<string, Session> {
+  const next = { ...previous };
+  for (const child of children) {
+    if (child.parentID !== parentId || deletedIds.has(child.id)) continue;
+    if ((next[child.id]?.time.updated ?? 0) > (child.time.updated ?? 0)) continue;
+    next[child.id] = child;
+  }
+  return next;
+}
+
+/** The status endpoint only lists busy/retrying sessions; missing IDs are idle. */
+export function normalizeSessionStatuses(
+  response: unknown,
+): Record<string, "busy" | "retry" | "idle"> | undefined {
+  const value = response && typeof response === "object" && "data" in response
+    ? (response as { data: unknown }).data
+    : response;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const statuses: Record<string, "busy" | "retry" | "idle"> = {};
+  for (const [id, status] of Object.entries(value)) {
+    if (!status || typeof status !== "object" || !("type" in status)) continue;
+    if (status.type === "busy" || status.type === "retry" || status.type === "idle") {
+      statuses[id] = status.type;
+    }
+  }
+  return statuses;
+}
+
 /** An absent host status is not proof of activity: use a bounded recent-update fallback. */
 export function isActiveChildSession(
   session: Session,
