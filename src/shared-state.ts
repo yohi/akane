@@ -62,7 +62,15 @@ export class WatchdogStateStore {
   constructor(directory: string) {
     this.directory = directory;
     this.filePath = path.join(directory, STATE_DIR_NAME, STATE_FILE_NAME);
-    this.state = this.load();
+    const loaded = this.load();
+    // Old session timers do not survive a server restart. Retain history but
+    // never present an unobserved prior-process session as active.
+    this.state = {
+      ...loaded,
+      sessions: Object.fromEntries(Object.entries(loaded.sessions).map(([id, session]) => [
+        id, { ...session, state: "IDLE" as const, runningToolsCount: 0, pendingRequestsCount: 0 },
+      ])),
+    };
   }
 
   private load(): SharedWatchdogState {
