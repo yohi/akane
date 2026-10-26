@@ -9,6 +9,7 @@ import {
   type AgentEntry,
   type SubagentEntry,
   SUBAGENT_IDLE_MS,
+  applySessionUpdate,
   agentColorToRgba,
   combineSubagentEntries,
   formatElapsedSeconds,
@@ -55,7 +56,7 @@ function Sidebar(props: SidebarProps) {
     const primary = primaryDir ? readSharedState(stateFilePath(primaryDir)) : undefined;
     const alternate = alternateDir && alternateDir !== primaryDir
       ? readSharedState(stateFilePath(alternateDir)) : undefined;
-    setState(newestSharedState(primary, alternate));
+    setState(newestSharedState(primary, alternate, props.sessionId, now()));
     resolver.refresh({
       taskDirectory: path.join(directory(), ".omo", "senpi-task", "tasks"),
       teamRuntimeDirectory: path.join(os.homedir(), ".omo", "runtime"),
@@ -160,9 +161,8 @@ function Sidebar(props: SidebarProps) {
   });
   onCleanup(unsubToolFailed);
 
-  const updateSession = (info: Session) => {
-    deletedSessionIds.delete(info.id);
-    setSessions((prev) => ({ ...prev, [info.id]: info }));
+  const updateSession = (info: Session, eventType: "created" | "updated") => {
+    setSessions((prev) => applySessionUpdate(prev, info, deletedSessionIds, eventType));
   };
   const markStopped = (sessionID: string, stopped: boolean) => {
     setStoppedSessionIds((prev) => {
@@ -181,14 +181,14 @@ function Sidebar(props: SidebarProps) {
   };
 
   const unsubSessionCreated = props.api.event.on("session.created", (event) => {
-    updateSession(event.properties.info);
+    updateSession(event.properties.info, "created");
     markStopped(event.properties.info.id, false);
     resolver.observeSessionCreated(event.properties.info);
   });
   onCleanup(unsubSessionCreated);
 
   const unsubSessionUpdated = props.api.event.on("session.updated", (event) => {
-    updateSession(event.properties.info);
+    updateSession(event.properties.info, "updated");
   });
   onCleanup(unsubSessionUpdated);
 
@@ -215,6 +215,10 @@ function Sidebar(props: SidebarProps) {
   const health = () => sharedStateHealth(state(), now());
   const sessionState = (): SharedSessionState | undefined => state()?.sessions[props.sessionId];
   const count = (value: number | undefined) => formatLiveMetric(value, health());
+  const pluginStatus = () => {
+    if (health() !== "ready") return health();
+    return state()?.enabled ? "enabled" : "disabled";
+  };
   const activeSessions = (): number =>
     Object.values(state()?.sessions ?? {}).filter((session) => session.state !== "IDLE").length;
 
@@ -278,7 +282,7 @@ function Sidebar(props: SidebarProps) {
         <br />
         Worktree: <span>{formatWorktreePath(directory())}</span>
         <br />
-        Plugin: <span>{health() === "ready" ? (state()?.enabled ? "enabled" : "disabled") : health()}</span>
+        Plugin: <span>{pluginStatus()}</span>
         <br />
         <br />
         <strong {...colorStyleProps(theme().accent)}>Telemetry</strong>

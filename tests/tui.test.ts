@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isActiveChildSession, isSessionPartUpdate, normalizeSessionChildren, mergeChildSessions, normalizeSessionStatuses, combineSubagentEntries } from "../src/tui-helpers";
+import { applySessionUpdate, combineSubagentEntries, isActiveChildSession, isSessionPartUpdate, mergeChildSessions, normalizeSessionChildren, normalizeSessionStatuses } from "../src/tui-helpers";
 import type { Session } from "@opencode-ai/sdk/v2";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -62,7 +62,39 @@ describe("TUI helpers", () => {
     expect(formatLiveMetric(0, "unavailable")).toBe("-");
     expect(formatCurrentSessionState(undefined, "ready")).toBe("Not tracked");
     expect(formatCurrentSessionState(undefined, "stale")).toBe("Stale");
-    expect(newestSharedState(base, { ...base, timestamp: 110_000 })?.timestamp).toBe(110_000);
+    expect(formatLiveMetric(undefined, "ready")).toBe("-");
+    expect(formatLiveMetric(null, "ready")).toBe("-");
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+  });
+
+  it("prefers the newest ready shared state that contains the current session", () => {
+    const primary = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: { "session-1": { state: "WATCHING" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const alternate = {
+      ...primary,
+      timestamp: 110_000,
+      sessions: { "session-1": { state: "PINGED" as const, runningToolsCount: 0, pendingRequestsCount: 0 } },
+    };
+    const newerWithoutSession = { ...primary, timestamp: 115_000, sessions: {} };
+
+    expect(newestSharedState(newerWithoutSession, primary, "session-1", 110_000)).toBe(primary);
+    expect(newestSharedState(primary, alternate, "session-1", 110_000)).toBe(alternate);
+  });
+
+  it("falls back to timestamp when no ready shared state contains the current session", () => {
+    const base = {
+      enabled: true,
+      timestamp: 100_000,
+      global: { hangupsDetected: 0, pingsSent: 0, recoveries: 0, silencedFailures: 0 },
+      sessions: {},
+    };
+
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 110_000)?.timestamp).toBe(110_000);
+    expect(newestSharedState(base, { ...base, timestamp: 110_000 }, "session-1", 200_001)?.timestamp).toBe(110_000);
   });
 
 
@@ -73,7 +105,7 @@ describe("TUI helpers", () => {
     expect(normalizeSessionChildren({ error: "offline" })).toEqual([]);
   });
 
-  it("distinguishes active, idle and stale child sessions", () => {
+  it("uses update freshness when the child status is unknown", () => {
     const now = 100_000;
     const child = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: now - 10_000 } } as unknown as Session;
     expect(isActiveChildSession(child, "parent", "busy", now, false)).toBe(true);
@@ -84,6 +116,19 @@ describe("TUI helpers", () => {
     expect(isActiveChildSession(child, "other", "busy", now, false)).toBe(false);
     const stale = { ...child, time: { ...child.time, updated: now - 120_000 } };
     expect(isActiveChildSession(stale, "parent", undefined, now, false)).toBe(false);
+  });
+
+  it("ignores stale session updates until a new session.created event clears the tombstone", () => {
+    const session = { id: "child", parentID: "parent", agent: "coder", time: { created: 100, updated: 110 } } as unknown as Session;
+    const deleted = new Set([session.id]);
+
+    const afterUpdate = applySessionUpdate({}, session, deleted, "updated");
+    expect(afterUpdate).toEqual({});
+    expect(deleted.has(session.id)).toBe(true);
+
+    const afterCreated = applySessionUpdate(afterUpdate, session, deleted, "created");
+    expect(afterCreated[session.id]).toEqual(session);
+    expect(deleted.has(session.id)).toBe(false);
   });
 
 

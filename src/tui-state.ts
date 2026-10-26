@@ -37,15 +37,28 @@ export function sharedStateHealth(state: SharedWatchdogState | undefined, now: n
   return "ready";
 }
 
-export function formatLiveMetric(value: number | undefined, health: SharedStateHealth): string {
-  return health === "ready" ? String(value ?? 0) : "-";
+export function formatLiveMetric(value: number | null | undefined, health: SharedStateHealth): string {
+  return health === "ready" && value !== undefined && value !== null ? String(value) : "-";
 }
 
 /** Prefer the freshest valid local state when server/TUI worktree roots differ. */
 export function newestSharedState(
   primary: SharedWatchdogState | undefined,
   alternate: SharedWatchdogState | undefined,
+  sessionId: string,
+  now: number,
 ): SharedWatchdogState | undefined {
+  let newestMatchingReadyState: SharedWatchdogState | undefined;
+  for (const state of [primary, alternate]) {
+    if (
+      state?.sessions[sessionId] !== undefined &&
+      sharedStateHealth(state, now) === "ready" &&
+      (newestMatchingReadyState === undefined || state.timestamp > newestMatchingReadyState.timestamp)
+    ) {
+      newestMatchingReadyState = state;
+    }
+  }
+  if (newestMatchingReadyState !== undefined) return newestMatchingReadyState;
   if (!primary) return alternate;
   if (!alternate) return primary;
   return alternate.timestamp > primary.timestamp ? alternate : primary;
