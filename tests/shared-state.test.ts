@@ -6,6 +6,8 @@ import {
   WatchdogStateStore,
   getStateStore,
   clearStateStoreCache,
+  acquireStateStore,
+  releaseStateStore,
 } from "../src/shared-state";
 
 function tmpDir(): string {
@@ -75,6 +77,32 @@ describe("WatchdogStateStore", () => {
     } catch {
       // ignore cleanup failures
     }
+  });
+
+  it("writes the versioned contract after loading legacy telemetry", () => {
+    const stateDir = path.join(dir, ".akane");
+    fs.mkdirSync(stateDir);
+    fs.writeFileSync(path.join(stateDir, "watchdog-state.json"), JSON.stringify({
+      enabled: true, timestamp: 100, global: { hangupsDetected: 2, pingsSent: 1, recoveries: 0, silencedFailures: 0 }, sessions: {},
+    }));
+    const store = new WatchdogStateStore(dir);
+    store.setEnabled(true);
+    store.dispose();
+    const persisted = JSON.parse(fs.readFileSync(path.join(stateDir, "watchdog-state.json"), "utf8"));
+    expect(persisted.version).toBe(1);
+    expect(persisted.global.pingsSent).toBe(1);
+  });
+
+  it("does not load telemetry from an unsupported version", () => {
+    const stateDir = path.join(dir, ".akane");
+    fs.mkdirSync(stateDir);
+    fs.writeFileSync(path.join(stateDir, "watchdog-state.json"), JSON.stringify({
+      version: 2, enabled: true, timestamp: 100,
+      global: { hangupsDetected: 2, pingsSent: 1, recoveries: 0, silencedFailures: 0 }, sessions: {},
+    }));
+    const store = new WatchdogStateStore(dir);
+    expect(store.getSnapshot().global.pingsSent).toBe(0);
+    store.dispose();
   });
 
   it("marks previous-process active sessions IDLE when the store reopens", () => {
@@ -172,5 +200,28 @@ describe("WatchdogStateStore", () => {
     const a = getStateStore(dir);
     const b = getStateStore(dir);
     expect(a).toBe(b);
+  });
+
+  it("keeps the shared store alive until the last instance releases it", () => {
+    const owner = acquireStateStore(dir);
+    const sibling = acquireStateStore(dir);
+    expect(sibling).toBe(owner);
+
+    // One plugin instance stopped — the other must still be able to write.
+    releaseStateStore(owner);
+    expect(owner.isDisposed).toBe(false);
+    owner.setSession("alive-session", {
+      state: "WATCHING", agentName: "coder", runningToolsCount: 0, pendingRequestsCount: 0,
+    });
+
+    // Last instance stopped — only now the store is invalidated and disposed.
+    releaseStateStore(owner);
+    expect(owner.isDisposed).toBe(true);
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(dir, ".akane", "watchdog-state.json"), "utf8"),
+    );
+    expect(persisted.enabled).toBe(false);
+    expect(persisted.sessions["alive-session"].state).toBe("WATCHING");
+    expect(persisted.sessions["alive-session"].agentName).toBe("coder");
   });
 });

@@ -15,6 +15,9 @@ import { Watchdog } from "../src/watchdog";
 import { MockPinger } from "../src/pinger";
 import { FakeClock } from "../src/clock";
 import { resolveConfig } from "../src/config";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 class MockWatchdog extends Watchdog {
   onUserMessageCalls: Array<{ sessionId: string }> = [];
@@ -62,6 +65,59 @@ function setupMockWatchdog() {
 }
 
 describe("plugin entry smoke", () => {
+  test("marks the shared state unavailable when the server is disposed", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "akane-dispose-"));
+    try {
+      const instance = await (plugin.server as (ctx: unknown) => Promise<{ dispose: () => Promise<void> }>)({
+        client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+        directory, worktree: directory,
+      });
+      await instance.dispose();
+      const state = JSON.parse(readFileSync(join(directory, ".akane", "watchdog-state.json"), "utf8"));
+      expect(state.enabled).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  test("a sibling instance keeps the shared state store alive after one instance disposes", async () => {
+    const worktree = mkdtempSync(join(tmpdir(), "akane-shared-store-"));
+    try {
+      const mkContext = (dir: string) => ({
+        client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+        $: () => undefined,
+        directory: dir,
+        worktree,
+      });
+      const first = await (plugin.server as (c: unknown) => Promise<{
+        event: (e: { event: unknown }) => Promise<void>;
+        dispose: () => Promise<void>;
+      }>)(mkContext(`${worktree}/proj-a`));
+      const second = await (plugin.server as (c: unknown) => Promise<{
+        event: (e: { event: unknown }) => Promise<void>;
+        dispose: () => Promise<void>;
+      }>)(mkContext(`${worktree}/proj-b`));
+
+      await first.dispose();
+
+      // The surviving sibling must still be able to update the shared state.
+      await second.event({
+        event: {
+          type: "message.part.delta",
+          properties: { sessionID: "shared-session", messageID: "m-shared", part: { agent: "coder" } },
+        },
+      });
+
+      // Only the last surviving instance invalidates and disposes the store.
+      await second.dispose();
+      const state = JSON.parse(
+        readFileSync(join(worktree, ".akane", "watchdog-state.json"), "utf8"),
+      );
+      expect(state.enabled).toBe(false);
+      expect(state.sessions["shared-session"]).toBeDefined();
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
   test("default export is a Plugin object containing id and server", () => {
     expect(plugin.id).toBe("opencode-watchdog");
     expect(typeof plugin.server).toBe("function");

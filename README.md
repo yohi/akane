@@ -2,6 +2,8 @@
 
 **OpenCode Agent Watchdog Plugin**
 
+The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane` to use the TUI — the former `@yohi/akane/tui` entry has been removed, so drop any old registration when upgrading.
+
 > 「エージェントの色相はクリアか？ 監視官が介入する。」
 
 `akane` は、[OpenCode](https://github.com/anomalyco/opencode) 環境下で稼働する自律型エージェントのプロセスを監視し、タスクのハングアップを未然に防ぐための Watchdog プラグインです。
@@ -66,13 +68,15 @@ cp -r package.json dist ~/.config/opencode/plugins/akane/
 ```
 
 ### 5. OpenCode への登録と設定
-`~/.config/opencode/opencode.jsonc` の `plugins` セクションにプラグイン（パッケージ名とバージョン）を追加し、必要に応じて設定を記述します。
+`~/.config/opencode/opencode.jsonc` の `plugins` セクションにプラグイン（パッケージ名とバージョン）を追加し、必要に応じて設定を記述します。TUI を利用する場合は `@yohi/sibyl/tui` も同じ `plugins` 配列に登録します（旧 `@yohi/akane/tui` は削除済みのため、古い登録が残っている場合は削除してください）。
 
 ```jsonc
 {
   "plugins": [
-    // GitHub Packages から最新版をインストールする場合
-    "@yohi/akane@latest"
+    // Watchdog 本体
+    "@yohi/akane@latest",
+    // TUI（旧 @yohi/akane/tui は削除済み）
+    "@yohi/sibyl/tui@latest"
   ],
   "experimental": {
     "watchdog": {

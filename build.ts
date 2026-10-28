@@ -1,6 +1,5 @@
 
 const EXTERNALS = ["node:fs", "node:path"];
-const TUI_EXTERNALS = [...EXTERNALS, "solid-js", "@opentui/solid", "@opentui/core"];
 
 /**
  * 共通の Bun.build ハンドリング関数
@@ -27,21 +26,6 @@ export async function buildServer(): Promise<void> {
       naming: { entry: "index.js" },
     },
     "Server plugin build failed"
-  );
-}
-
-export async function buildTui(): Promise<void> {
-  const solidPlugin = (await import("@opentui/solid/bun-plugin")).default;
-  await runBunBuild(
-    {
-      entrypoints: ["./src/tui.tsx"],
-      outdir: "./dist",
-      target: "bun",
-      external: TUI_EXTERNALS,
-      plugins: [solidPlugin],
-      naming: { entry: "tui.js" },
-    },
-    "TUI plugin build failed"
   );
 }
 
@@ -75,8 +59,6 @@ if (import.meta.main) {
   try {
     await buildServer();
     console.log("Built dist/index.js");
-    await buildTui();
-    console.log("Built dist/tui.js");
     await buildClaudeHook();
     console.log("Built dist/claude/hook.js");
     await buildClaudeMonitor();
