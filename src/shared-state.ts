@@ -192,6 +192,7 @@ export class WatchdogStateStore {
 }
 
 const stores = new Map<string, WatchdogStateStore>();
+const storeUsers = new WeakMap<WatchdogStateStore, number>();
 
 export function getStateStore(directory: string): WatchdogStateStore {
   const existing = stores.get(directory);
@@ -201,6 +202,37 @@ export function getStateStore(directory: string): WatchdogStateStore {
   const store = new WatchdogStateStore(directory);
   stores.set(directory, store);
   return store;
+}
+
+/**
+ * Registers a new user of the shared store. Instances that share one directory
+ * must keep the store alive for each other — the store is disposed only after
+ * the last active instance releases it.
+ */
+export function acquireStateStore(directory: string): WatchdogStateStore {
+  const store = getStateStore(directory);
+  storeUsers.set(store, (storeUsers.get(store) ?? 0) + 1);
+  return store;
+}
+
+/**
+ * Drops one user reference taken by acquireStateStore. Only when the last
+ * user has left is the shared store invalidated and disposed (flushing any
+ * pending writes so the TUI still sees the final state).
+ */
+export function releaseStateStore(store: WatchdogStateStore): void {
+  if (store.isDisposed) return;
+  const users = storeUsers.get(store) ?? 0;
+  if (users > 1) {
+    storeUsers.set(store, users - 1);
+    return;
+  }
+  storeUsers.delete(store);
+  try {
+    store.setEnabled(false);
+  } finally {
+    store.dispose();
+  }
 }
 
 export function clearStateStoreCache(): void {

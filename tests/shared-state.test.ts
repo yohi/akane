@@ -6,6 +6,8 @@ import {
   WatchdogStateStore,
   getStateStore,
   clearStateStoreCache,
+  acquireStateStore,
+  releaseStateStore,
 } from "../src/shared-state";
 
 function tmpDir(): string {
@@ -198,5 +200,28 @@ describe("WatchdogStateStore", () => {
     const a = getStateStore(dir);
     const b = getStateStore(dir);
     expect(a).toBe(b);
+  });
+
+  it("keeps the shared store alive until the last instance releases it", () => {
+    const owner = acquireStateStore(dir);
+    const sibling = acquireStateStore(dir);
+    expect(sibling).toBe(owner);
+
+    // One plugin instance stopped — the other must still be able to write.
+    releaseStateStore(owner);
+    expect(owner.isDisposed).toBe(false);
+    owner.setSession("alive-session", {
+      state: "WATCHING", agentName: "coder", runningToolsCount: 0, pendingRequestsCount: 0,
+    });
+
+    // Last instance stopped — only now the store is invalidated and disposed.
+    releaseStateStore(owner);
+    expect(owner.isDisposed).toBe(true);
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(dir, ".akane", "watchdog-state.json"), "utf8"),
+    );
+    expect(persisted.enabled).toBe(false);
+    expect(persisted.sessions["alive-session"].state).toBe("WATCHING");
+    expect(persisted.sessions["alive-session"].agentName).toBe("coder");
   });
 });

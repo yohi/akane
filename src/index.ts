@@ -17,7 +17,7 @@ import { createNotifier, bunSpawn, bunWhich } from "./notifier";
 import { resolveConfig, type WatchdogConfig, type ConfigSources } from "./config";
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
-import { getStateStore } from "./shared-state";
+import { acquireStateStore, releaseStateStore } from "./shared-state";
 
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
@@ -392,7 +392,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
     platform: typeof process !== "undefined" ? process.platform : "linux",
     log: instLog,
   });
-  const stateStore = stateDir ? getStateStore(stateDir) : undefined;
+  const stateStore = stateDir ? acquireStateStore(stateDir) : undefined;
   const telemetry = new TelemetryCollector(stateStore?.getSnapshot().global);
   // The store is also used when the watchdog implementation is injected in tests.
   stateStore?.setEnabled(config.enabled);
@@ -680,8 +680,9 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         instLog("warn", `Error stopping watchdog: ${String(err)}`);
       }
       try {
-        stateStore?.setEnabled(false);
-        stateStore?.dispose();
+        if (stateStore) {
+          releaseStateStore(stateStore);
+        }
       } catch (err) {
         instLog("warn", `Error disposing state store: ${String(err)}`);
       }
