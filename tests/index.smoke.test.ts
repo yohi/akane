@@ -15,6 +15,9 @@ import { Watchdog } from "../src/watchdog";
 import { MockPinger } from "../src/pinger";
 import { FakeClock } from "../src/clock";
 import { resolveConfig } from "../src/config";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 class MockWatchdog extends Watchdog {
   onUserMessageCalls: Array<{ sessionId: string }> = [];
@@ -62,6 +65,20 @@ function setupMockWatchdog() {
 }
 
 describe("plugin entry smoke", () => {
+  test("marks the shared state unavailable when the server is disposed", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "akane-dispose-"));
+    try {
+      const instance = await (plugin.server as (ctx: unknown) => Promise<{ dispose: () => Promise<void> }>)({
+        client: { app: { log: async () => undefined }, session: { prompt: async () => undefined } },
+        directory, worktree: directory,
+      });
+      await instance.dispose();
+      const state = JSON.parse(readFileSync(join(directory, ".akane", "watchdog-state.json"), "utf8"));
+      expect(state.enabled).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   test("default export is a Plugin object containing id and server", () => {
     expect(plugin.id).toBe("opencode-watchdog");
     expect(typeof plugin.server).toBe("function");

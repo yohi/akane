@@ -26,6 +26,7 @@ export interface SharedTelemetry {
 }
 
 export interface SharedWatchdogState {
+  version?: 1;
   enabled: boolean;
   timestamp: number;
   global: SharedTelemetry;
@@ -34,6 +35,7 @@ export interface SharedWatchdogState {
 
 function defaultState(): SharedWatchdogState {
   return {
+    version: 1,
     enabled: true,
     timestamp: 0,
     global: {
@@ -78,7 +80,7 @@ export class WatchdogStateStore {
       const raw = fs.readFileSync(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as unknown;
       if (isSharedWatchdogState(parsed)) {
-        return parsed;
+        return { ...parsed, version: 1 };
       }
     } catch {
       // File missing or corrupt — start fresh.
@@ -246,6 +248,7 @@ export function isSharedWatchdogState(value: unknown): value is SharedWatchdogSt
   if (typeof value !== "object" || value === null) return false;
   const c = value as Partial<SharedWatchdogState>;
   return (
+    (c.version === undefined || c.version === 1) &&
     typeof c.enabled === "boolean" &&
     typeof c.timestamp === "number" &&
     isSharedTelemetry(c.global) &&

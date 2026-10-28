@@ -4,6 +4,11 @@
 - **ランタイム**: Bun 1.3+
 - **配布形態**: `@opencode-ai/plugin` 公式 API に準拠した TypeScript プラグイン
 
+The server runs independently of the TUI. It publishes version `1` of
+`.akane/watchdog-state.json` using an atomic rename, refreshes it every 30
+seconds, and marks it disabled on normal shutdown. `@yohi/sibyl/tui` is the
+consumer; the former `@yohi/akane/tui` entry is removed.
+
 ---
 
 ## 1. 背景と目的
@@ -271,7 +276,7 @@ export interface WatchdogConfig {
 | `正常終了 / 復帰` | `tmux set-window-option window-status-current-style 'default'` | `default` (通常色) | （OS通知なし/Tmux色クリア） |
 
 ### 5.3 カラーコード検証
-- TUI描画およびエージェントのカラーコード検証では、厳格なCSS互換の16進カラーコード検証（3桁、4桁、6桁、または8桁の正規表現: `/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/`）を行い、無効なカラー表現やインジェクションになり得る不正な値のパースを防止します。
+- TUI rendering is owned by Sibyl; any color parsing must validate CSS hex colors strictly.
 
 ---
 

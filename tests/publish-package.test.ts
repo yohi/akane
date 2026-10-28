@@ -25,7 +25,7 @@ function run(command: string[], cwd: string): string {
 }
 
 describe("published package contents", () => {
-  it("includes the built TUI entry and OpenCode plugin wrapper after build", () => {
+  it("publishes the server without a TUI entry or wrapper", () => {
     const cwd = process.cwd();
 
     run(["bun", "run", "build"], cwd);
@@ -39,7 +39,8 @@ describe("published package contents", () => {
     }
     const filePaths = new Set(pack.files.map((file) => file.path));
 
-    expect(filePaths.has("dist/tui.js")).toBe(true);
-    expect(filePaths.has(".opencode/plugins/akane.tui.js")).toBe(true);
+    expect(filePaths.has("dist/index.js")).toBe(true);
+    expect(filePaths.has("dist/tui.js")).toBe(false);
+    expect(filePaths.has(".opencode/plugins/akane.tui.js")).toBe(false);
   }, { timeout: 30000 });
 });

@@ -5,7 +5,7 @@
 ---
 
 ## 1. Project Map & Purpose (WHY, WHAT, & WHERE)
-- **Goal**: Minimize false recovery pings during user-waiting states (`PAUSED`) and active tool executions, steer recovery pings via interrupts, and prevent disk bloat by summarizing high-frequency stream events.
+- **Goal**: Minimize false recovery pings during user-waiting states (`PAUSED`) and active tool executions, steer recovery pings via interrupts, and prevent disk bloat by summarizing high-frequency stream events. The TUI is maintained in `yohi/sibyl` and reads the versioned state file.
 - **Architecture**: Implements a 5-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`, plus `PAUSED` for input requests).
 - **Authoritative Docs**: For detailed state transitions, edge cases, invariants, and SDK signatures, refer to [SPEC.md](SPEC.md) and [README.md](README.md) via progressive disclosure.
 

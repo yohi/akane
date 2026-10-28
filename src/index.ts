@@ -18,7 +18,6 @@ import { resolveConfig, type WatchdogConfig, type ConfigSources } from "./config
 import { classifyError, type HangReason } from "./errors";
 import { TelemetryCollector, type Telemetry, startTelemetryReporter } from "./telemetry";
 import { getStateStore } from "./shared-state";
-import { ensureTuiPluginEntryDefault } from "./tui-registration";
 
 
 // Loose, structural Event type. We do NOT import the full @opencode-ai/sdk
@@ -335,7 +334,6 @@ function parseReportMs(
 
 
 const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _watchdog?: Watchdog }) => {
-  ensureTuiPluginEntryDefault();
   const instanceId = Math.random().toString(36).substring(2, 8);
   const instLog = (level: "info" | "warn", message: string) => {
     writeLog(level, `[Inst:${instanceId}] ${message}`);
@@ -682,6 +680,7 @@ const plugin = async (input: PluginInputLike, options?: PluginOptionsLike & { _w
         instLog("warn", `Error stopping watchdog: ${String(err)}`);
       }
       try {
+        stateStore?.setEnabled(false);
         stateStore?.dispose();
       } catch (err) {
         instLog("warn", `Error disposing state store: ${String(err)}`);

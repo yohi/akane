@@ -77,6 +77,32 @@ describe("WatchdogStateStore", () => {
     }
   });
 
+  it("writes the versioned contract after loading legacy telemetry", () => {
+    const stateDir = path.join(dir, ".akane");
+    fs.mkdirSync(stateDir);
+    fs.writeFileSync(path.join(stateDir, "watchdog-state.json"), JSON.stringify({
+      enabled: true, timestamp: 100, global: { hangupsDetected: 2, pingsSent: 1, recoveries: 0, silencedFailures: 0 }, sessions: {},
+    }));
+    const store = new WatchdogStateStore(dir);
+    store.setEnabled(true);
+    store.dispose();
+    const persisted = JSON.parse(fs.readFileSync(path.join(stateDir, "watchdog-state.json"), "utf8"));
+    expect(persisted.version).toBe(1);
+    expect(persisted.global.pingsSent).toBe(1);
+  });
+
+  it("does not load telemetry from an unsupported version", () => {
+    const stateDir = path.join(dir, ".akane");
+    fs.mkdirSync(stateDir);
+    fs.writeFileSync(path.join(stateDir, "watchdog-state.json"), JSON.stringify({
+      version: 2, enabled: true, timestamp: 100,
+      global: { hangupsDetected: 2, pingsSent: 1, recoveries: 0, silencedFailures: 0 }, sessions: {},
+    }));
+    const store = new WatchdogStateStore(dir);
+    expect(store.getSnapshot().global.pingsSent).toBe(0);
+    store.dispose();
+  });
+
   it("marks previous-process active sessions IDLE when the store reopens", () => {
     const writer = getStateStore(dir);
     writer.setSession("prior-session", {
