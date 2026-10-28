@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0](https://github.com/yohi/akane/compare/v1.8.2...v2.0.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* TUIを分離して共有状態を公開
+
+### Features
+
+* TUIを分離して共有状態を公開 ([6742427](https://github.com/yohi/akane/commit/6742427101f8aa7ea8f07c638007608ed686a13a))
+
+
+### Bug Fixes
+
+* 共有stateStoreの参照カウントによる寿命管理 ([9ab648a](https://github.com/yohi/akane/commit/9ab648a355169e0fdecb0491e75e7469e983e421))
+
 ## [1.8.2](https://github.com/yohi/akane/compare/v1.8.1...v1.8.2) (2026-10-26)
 
 
