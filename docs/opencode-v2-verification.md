@@ -10,7 +10,7 @@
 - Source commit: release tag `v3.0.0`
 - GitHub asset SHA-256: `d42dff2386c6dda2ca91e801e5b63d0228b3f7ee163a303fc31ec57f2742f61e`
 - npm integrity: `sha512-DzJWboErpucisXaSgodQuU6wqSJW3Vp7A21cdZJfp5zzH4erq+f5oJS34Q7iaS1T4gTomVboWGc48wJhcXoUmQ==`
-- GPR dist-tags: `alpha=3.0.0-alpha.2`, `latest=3.0.0`
+- GPR dist-tags: `latest=3.0.0`
 - Bun implementation/test image: `1.4.4`
 - Branch: `feat/opencode-v2-migration`
 - Sibyl package: `@yohi/sibyl@3.0.0-alpha.1`
