@@ -60,7 +60,8 @@ been run in Bun `1.4.4`.
 
 The isolated OpenCode `2.1.4` host activates the local V2 plugin, runs a
 controlled stalled model, observes a successful recovery prompt admission and
-interrupt, and verifies a second model request in the same session. Sibyl
-consumer integration remains **NOT_RUN** until the parallel migration supplies
-its tested package, revision, and verifier. Do not claim complete consumer
-compatibility before that gate passes.
+interrupt, and verifies a second model request in the same session. Akane's
+version-1 state writer has also been verified against the
+`@yohi/sibyl@3.0.0-alpha.1` parser at revision
+`2c81d141e9fed59e54ce950ea26fb53190cb9308`. A combined TUI host run with direct
+child activity and selection changes remains outstanding.

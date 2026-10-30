@@ -3,8 +3,9 @@
 ## [3.0.0-alpha.1](https://github.com/yohi/akane/compare/v2.0.0...v3.0.0-alpha.1) (2026-10-30)
 
 > Experimental OpenCode 2.1.4 V2-only prerelease. The V1 implementation
-> remains on `master`. Sibyl consumer integration remains unverified; see
-> `docs/opencode-v2-verification.md`.
+> remains on `master`. The state-file parser contract is verified against
+> Sibyl 3.0.0-alpha.1; combined-host visual/runtime acceptance remains open.
+> See `docs/opencode-v2-verification.md`.
 
 ### ⚠ BREAKING CHANGES
 

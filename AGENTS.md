@@ -64,14 +64,23 @@ This branch has released `@yohi/akane@3.0.0-alpha.1` for OpenCode `2.1.4`:
 It is an experimental V2-only prerelease; do not describe it as stable or as
 fully sibyl-compatible. The V1 implementation remains on `master`.
 
-Outstanding release gates:
+Completed release gates:
 
-- [ ] Verify the consumer in `yohi/sibyl` against the V1 shared-state schema,
-  including all states, counters, heartbeat, and shutdown behavior. Record the
-  exact consumer package/revision and verifier result.
+- [x] Verify the consumer in `yohi/sibyl` against the version-1 shared-state
+  schema, including all states, counters, heartbeat, shutdown, and restart.
+  Evidence: `@yohi/sibyl@3.0.0-alpha.1`, source revision
+  `2c81d141e9fed59e54ce950ea26fb53190cb9308`, verifier
+  `tests/integration/opencode-v2-sibyl.test.ts`.
+
+Remaining follow-up:
+
+- [ ] Run a combined OpenCode `2.1.4` host with the published Akane and Sibyl
+  packages and complete Sibyl's visual/runtime acceptance, including direct
+  child activity and selection changes. This is broader than the state-file
+  parser contract verifier.
 
 The current evidence and gate classifications are maintained in
 [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). Unit
-tests do not close the sibyl consumer gate.
+tests alone do not close the combined-host visual/runtime follow-up.
 Prerelease publication must use the `alpha` package dist-tag and must not move
 `latest`.
