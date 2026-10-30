@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/yohi/akane/compare/v3.0.0...v3.0.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* V2レビュー指摘に対応 ([601e855](https://github.com/yohi/akane/commit/601e855fc1c0d1a924d36b813004735367a3beea))
+
 ## [3.0.0](https://github.com/yohi/akane/compare/v3.0.0-alpha.2...v3.0.0) (2026-10-30)
 
 > Stable OpenCode 2.1.4 V2-only release. Runtime implementation is unchanged
