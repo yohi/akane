@@ -57,31 +57,28 @@ This project supports `CLAUDE.md` via a symbolic link. Ensure `CLAUDE.md` links 
 ln -sf AGENTS.md CLAUDE.md
 ```
 
-## 5. OpenCode V2 Alpha Status and TODO
+## 5. OpenCode V2 Alpha Status
 
 This branch has released `@yohi/akane@3.0.0-alpha.2` for OpenCode `2.1.4`:
 [GitHub prerelease](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.2).
 It is an experimental V2-only prerelease; do not describe it as stable or as
 fully sibyl-compatible. The V1 implementation remains on `master`.
 
-Completed release gates:
+Verified release evidence:
 
-- [x] Verify the consumer in `yohi/sibyl` against the version-1 shared-state
-  schema, including all states, counters, heartbeat, shutdown, and restart.
-  Evidence: `@yohi/sibyl@3.0.0-alpha.1`, source revision
-  `2c81d141e9fed59e54ce950ea26fb53190cb9308`, verifier
+- Sibyl's version-1 shared-state consumer was verified for every state and
+  counter, heartbeat, shutdown, and restart. Evidence: `@yohi/sibyl@3.0.0-alpha.1`,
+  revision `2c81d141e9fed59e54ce950ea26fb53190cb9308`, and
   `tests/integration/opencode-v2-sibyl.test.ts`.
+- The combined OpenCode `2.1.4` host verified direct-child activity and parent
+  selection. Both parents showed `WATCHING` with distinct `BUSY` child cards;
+  switching parents changed the displayed category. Three xterm.js captures
+  passed the 42x120 layout check, and two independent visual reviews returned
+  PASS. The runtime assertion confirms distinct child ownership but does not
+  retain literal child session IDs.
 
-Completed follow-up:
-
-- [x] Run a combined OpenCode `2.1.4` host with the published Akane and Sibyl
-  packages and complete Sibyl's visual/runtime acceptance, including direct
-  child activity and selection changes. The isolated host showed `WATCHING`
-  parents with distinct `BUSY` direct-child cards, and switching parents changed
-  the displayed child category. Three xterm.js captures passed the 42x120 TUI
-  layout check; two independent visual reviews returned PASS. The runtime
-  assertion records distinct child ownership but does not retain literal child
-  session IDs. See [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md).
+See [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md) for
+the verification scope and evidence.
 
 The current evidence and gate classifications are maintained in
 [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). This

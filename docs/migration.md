@@ -58,10 +58,15 @@ Unit tests cover event routing, identity, options, recovery phases, and duplicat
 setup. `bun run typecheck`, `bun run build`, and the default Bun test suite have
 been run in Bun `1.4.4`.
 
-The isolated OpenCode `2.1.4` host activates the local V2 plugin, runs a
-controlled stalled model, observes a successful recovery prompt admission and
-interrupt, and verifies a second model request in the same session. Akane's
-version-1 state writer has also been verified against the
+The isolated OpenCode `2.1.4` host activates the V2 plugin, runs a controlled
+stalled model, observes successful recovery prompt admission and interruption,
+and verifies a second model request in the same session. Akane's version-1
+state writer has also been verified against the
 `@yohi/sibyl@3.0.0-alpha.1` parser at revision
-`2c81d141e9fed59e54ce950ea26fb53190cb9308`. A combined TUI host run with direct
-child activity and selection changes remains outstanding.
+`2c81d141e9fed59e54ce950ea26fb53190cb9308`. Combined-host TUI verification
+confirmed direct-child activity and parent selection: both parents showed
+`WATCHING` with distinct `BUSY` children, and selection changed the displayed
+child category. Three xterm.js captures passed the 42x120 layout check, and two
+independent visual reviews returned PASS. The runtime assertion confirms
+distinct child ownership but does not retain literal child session IDs. See
+[`opencode-v2-verification.md`](opencode-v2-verification.md) for scope and details.

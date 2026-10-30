@@ -16,7 +16,8 @@
 
 > Experimental OpenCode 2.1.4 V2-only prerelease. The V1 implementation
 > remains on `master`. The state-file parser contract is verified against
-> Sibyl 3.0.0-alpha.1; combined-host visual/runtime acceptance remains open.
+> Sibyl 3.0.0-alpha.1. Combined-host visual/runtime verification had not yet
+> been performed when alpha.1 was published.
 > See `docs/opencode-v2-verification.md`.
 
 ### ⚠ BREAKING CHANGES
@@ -315,7 +316,7 @@
 * **test:** resolve 'Object is possibly undefined' error in smoke test ([7b2a0c6](https://github.com/yohi/akane/commit/7b2a0c6c7cdc3d6b9819240273b919fa6bd3bf74))
 * **watchdog:** message.part.delta における agentName チェックの追加とテストの強化 ([344329c](https://github.com/yohi/akane/commit/344329c87e5d9db36ddefe1f05a9b5b01526c40f))
 * **watchdog:** onToolSettled のファントムセッション生成とツールゲート通知フラグ流用を修正 ([aac476d](https://github.com/yohi/akane/commit/aac476da2dd12cc47d4d903a95bbb59da502aaf1))
-* **watchdog:** pauseOnInputRequest=false 時の誤タイマーリセットを修正し delivery TODO を追記 ([3a8d917](https://github.com/yohi/akane/commit/3a8d91754c630c487267b1c1a6cffb7c0282f122))
+* **watchdog:** pauseOnInputRequest=false 時の誤タイマーリセットを修正し delivery 設定の課題を記録 ([3a8d917](https://github.com/yohi/akane/commit/3a8d91754c630c487267b1c1a6cffb7c0282f122))
 * **watchdog:** retry抑止中のタイマー再起動とSILENCEDの不正解除を修正 ([401bade](https://github.com/yohi/akane/commit/401bade35cda46bd1fa96d5e14cf2ce826ef4126))
 * **watchdog:** SILENCED セッションへのツールイベントによる不正リセットを修正 ([69741b0](https://github.com/yohi/akane/commit/69741b0a1e6aabc23070c49917b4a341e3ccd529))
 * **watchdog:** SILENCED 状態のセッションが入力要求によって遷移する問題を修正 ([58ffc3d](https://github.com/yohi/akane/commit/58ffc3d6a0e93518d9f77e4220a323134e2a30bf))
