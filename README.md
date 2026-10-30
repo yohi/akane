@@ -6,7 +6,9 @@ This branch targets OpenCode **2.1.4** using its V2 plugin API. It does not supp
 
 The V2 branch is published as an experimental alpha. Install with the `alpha` dist-tag (`@yohi/akane@alpha`) for evaluation; sibyl consumer integration remains an open verification gate.
 
-The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane` to use the TUI — the former `@yohi/akane/tui` entry has been removed, so drop any old registration when upgrading.
+The server runs independently. Register `@yohi/sibyl/tui` alongside
+`@yohi/akane@alpha` to use the TUI — the former `@yohi/akane/tui` entry has been
+removed, so drop any old registration when upgrading.
 
 > 「エージェントの色相はクリアか？ 監視官が介入する。」
 
