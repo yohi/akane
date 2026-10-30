@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createEventRouter } from "../../src/opencode/events";
 import { createRecoveryTracker } from "../../src/opencode/recovery";
 import type { WatchdogPort, HostEvent } from "../../src/opencode/types";
+import type { SessionRegistry } from "../../src/opencode/sessions";
 
 const session = {
   id: "ses_1", projectID: "prj_1", location: { directory: "/fixture" }, cost: 0,
@@ -9,8 +10,11 @@ const session = {
   time: { created: 0, updated: 0 },
 };
 
-function sessions(resolve: () => Promise<typeof session | undefined> = async () => session) {
-  return { directory: "/fixture", resolve, invalidate() {}, dispose() {} };
+function sessions(resolve: () => Promise<typeof session | undefined> = async () => session): SessionRegistry {
+  return { directory: "/fixture", resolve: async (id: string) => {
+    const result = await resolve();
+    return result ? { kind: "owned" as const, session: result } : { kind: "foreign" as const };
+  }, invalidate() {}, dispose() {} };
 }
 
 test("successful execution stops monitoring its owned session", async () => {
@@ -82,4 +86,38 @@ test("one owned recovery interruption is consumed but a later user interruption 
   expect(recovery.phase("ses_1")).toBe("settled");
   await router.handle({ ...event, id: "evt_16", durable: { ...event.durable, seq: 6 }, data: { ...event.data, reason: "user" } });
   expect(stops).toBe(1);
+});
+
+test("an interruption during recovery settles the current generation", async () => {
+  const recovery = createRecoveryTracker();
+  const generation = recovery.register("ses_1", "msg_ping");
+  recovery.transition("ses_1", generation, "interrupting");
+  const watchdog: WatchdogPort = {
+    onUserMessage() {}, onActivity() {}, onToolRunning() {}, onToolSettled() {}, onInputRequested() {},
+    onInputResolved() {}, onStatusRetry() {}, onStatusActive() {}, noteError() {}, stop() {}, getLastPingTime: () => 0,
+  };
+  const router = createEventRouter({ watchdog, recovery, sessions: sessions() });
+  const event = { id: "evt_interrupting", created: 0, type: "session.execution.interrupted",
+    durable: { aggregateID: "ses_1", seq: 7, version: 1 },
+    data: { sessionID: "ses_1", reason: "inactivity" } } satisfies HostEvent;
+  await router.handle(event);
+  expect(recovery.phase("ses_1")).toBe("settled");
+});
+
+test("a failed session lookup does not mark an event as seen", async () => {
+  let lookups = 0;
+  let activities = 0;
+  const watchdog: WatchdogPort = {
+    onUserMessage() {}, onActivity() { activities++; }, onToolRunning() {}, onToolSettled() {}, onInputRequested() {},
+    onInputResolved() {}, onStatusRetry() {}, onStatusActive() {}, noteError() {}, stop() {}, getLastPingTime: () => 0,
+  };
+  const registry = { ...sessions(), resolve: async () => ++lookups === 1
+    ? { kind: "error" as const, error: new Error("temporary") }
+    : { kind: "owned" as const, session } };
+  const router = createEventRouter({ watchdog, recovery: createRecoveryTracker(), sessions: registry });
+  const event = { id: "evt_retry_lookup", created: 0, type: "session.text.delta",
+    data: { sessionID: "ses_1", assistantMessageID: "msg_1", ordinal: 0, delta: "x" } } satisfies HostEvent;
+  await router.handle(event);
+  await router.handle(event);
+  expect(activities).toBe(1);
 });

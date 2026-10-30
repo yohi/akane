@@ -16,7 +16,7 @@ export function createV2Pinger(deps: Dependencies): Pinger & { dispose(): Promis
   const pending = new Set<Promise<void>>();
   let disposed = false;
   async function inject(sessionID: string, message: string, context?: Parameters<Pinger["inject"]>[2]): Promise<void> {
-    if (disposed || !(await deps.sessions.resolve(sessionID)) || disposed) return;
+    if (disposed || (await deps.sessions.resolve(sessionID)).kind !== "owned" || disposed) return;
     const id = `msg_${crypto.randomUUID()}`;
     const maskedSessionID = `${sessionID.slice(0, 4)}***`;
     const generation = deps.recovery.register(sessionID, id);
@@ -26,12 +26,15 @@ export function createV2Pinger(deps: Dependencies): Pinger & { dispose(): Promis
           delivery: deps.delivery, resume: deps.delivery === "queue" });
         deps.log(`[watchdog] Recovery prompt admitted sessionId=${maskedSessionID}`);
         if (disposed || !deps.recovery.isCurrent(sessionID, generation) || deps.delivery === "queue") return;
-        if (!(await deps.sessions.resolve(sessionID)) || disposed || !deps.recovery.isCurrent(sessionID, generation)) return;
+        if ((await deps.sessions.resolve(sessionID)).kind !== "owned" || disposed || !deps.recovery.isCurrent(sessionID, generation)) return;
         deps.recovery.transition(sessionID, generation, "interrupting");
         const result = await deps.session.interrupt({ sessionID, resume: true });
-        deps.recovery.transition(sessionID, generation, result.interrupted ? "resumed" : "settled");
+        if (deps.recovery.phase(sessionID) !== "settled") {
+          deps.recovery.transition(sessionID, generation, result.interrupted ? "resumed" : "settled");
+        }
         deps.log(`[watchdog] Recovery interrupt ${result.interrupted ? "accepted" : "rejected"} sessionId=${maskedSessionID}`);
       } catch (error) {
+        deps.recovery.transition(sessionID, generation, "settled");
         const errorType = error instanceof Error ? error.name : typeof error;
         deps.log(`[watchdog] Recovery operation failed type=${errorType} sessionId=${maskedSessionID}`);
       }

@@ -35,6 +35,11 @@ export function createEventRouter(deps: RouterDependencies): {
       if (disposed) return;
       if (seen.has(event.id)) return;
       seen.add(event.id);
+      const resolveSession = async (sessionID: string) => {
+        const resolution = await deps.sessions.resolve(sessionID);
+        if (resolution.kind === "error") seen.delete(event.id);
+        return resolution.kind === "owned" ? resolution.session : undefined;
+      };
       if (seen.size > 10000) {
         const oldest = seen.values().next().value;
         if (oldest !== undefined) seen.delete(oldest);
@@ -58,7 +63,11 @@ export function createEventRouter(deps: RouterDependencies): {
         case "session.execution.interrupted": {
           const { sessionID } = event.data;
           const recoveryPhase = deps.recovery.phase(sessionID);
-          if (recoveryPhase === "interrupting") return;
+          if (recoveryPhase === "interrupting") {
+            const generation = deps.recovery.generation(sessionID);
+            if (generation !== undefined) deps.recovery.transition(sessionID, generation, "settled");
+            return;
+          }
           if (recoveryPhase === "resumed") {
             const generation = deps.recovery.generation(sessionID);
             if (generation !== undefined) deps.recovery.transition(sessionID, generation, "settled");
@@ -71,7 +80,7 @@ export function createEventRouter(deps: RouterDependencies): {
         }
         case "session.status": {
           const { sessionID, status } = event.data;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (!(await resolveSession(sessionID)) || disposed) return;
           if (armLocked(sessionID)) return;
           if (status.type === "retry") deps.watchdog.onStatusRetry(sessionID);
           else if (status.type === "busy") deps.watchdog.onStatusActive(sessionID);
@@ -79,7 +88,7 @@ export function createEventRouter(deps: RouterDependencies): {
         }
         case "session.execution.started": {
           const { sessionID } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (session && !disposed && agentAllowed(session.agent) && !armLocked(sessionID)) {
             deps.watchdog.onActivity(sessionID, { agentName: session.agent });
           }
@@ -87,13 +96,13 @@ export function createEventRouter(deps: RouterDependencies): {
         }
         case "session.step.started": {
           const { sessionID, agent } = event.data;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed || !agentAllowed(agent) || armLocked(sessionID)) return;
+          if (!(await resolveSession(sessionID)) || disposed || !agentAllowed(agent) || armLocked(sessionID)) return;
           deps.watchdog.onActivity(sessionID, { agentName: agent });
           return;
         }
         case "session.agent.selected": {
           const { sessionID } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (session && !disposed && agentAllowed(session.agent) && !armLocked(sessionID)) {
             deps.watchdog.onActivity(sessionID, { agentName: session.agent });
           }
@@ -102,7 +111,7 @@ export function createEventRouter(deps: RouterDependencies): {
         case "session.execution.failed":
         case "session.step.failed": {
           const { sessionID, error } = event.data;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (!(await resolveSession(sessionID)) || disposed) return;
           const reason = classifyError(error);
           if (reason === "rate_limit" || reason === "provider_timeout") deps.watchdog.noteError(sessionID, reason);
           else deps.watchdog.stop(sessionID);
@@ -110,7 +119,7 @@ export function createEventRouter(deps: RouterDependencies): {
         }
         case "session.execution.succeeded": {
           const { sessionID } = event.data;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (!(await resolveSession(sessionID)) || disposed) return;
           deps.recovery.supersede(sessionID);
           deps.watchdog.stop(sessionID);
           return;
@@ -118,14 +127,14 @@ export function createEventRouter(deps: RouterDependencies): {
         case "session.tool.success":
         case "session.tool.failed": {
           const { sessionID, assistantMessageID, id } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (!session || disposed || !agentAllowed(session.agent) || armLocked(sessionID)) return;
           deps.watchdog.onToolSettled(sessionID, `${assistantMessageID}:${id}`);
           return;
         }
         case "session.tool.called": {
           const { sessionID, assistantMessageID, id } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (!session || disposed || !agentAllowed(session.agent) || armLocked(sessionID)) return;
           deps.watchdog.onToolRunning(sessionID, `${assistantMessageID}:${id}`);
           return;
@@ -135,7 +144,7 @@ export function createEventRouter(deps: RouterDependencies): {
           if (item.type !== "user" || deps.recovery.isOwnMessage(sessionID, inboxID)) return;
           const { text, files, agents, skills } = item.payload;
           if (!text.trim() && !files?.length && !agents?.length && !skills?.length) return;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (!session || disposed || !agentAllowed(session.agent)) return;
           deps.recovery.supersede(sessionID);
           deps.watchdog.onUserMessage(sessionID, { agentName: session.agent });
@@ -144,7 +153,7 @@ export function createEventRouter(deps: RouterDependencies): {
         case "session.text.delta":
         case "session.reasoning.delta": {
           const { sessionID } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (!session || disposed || !agentAllowed(session.agent)) return;
           if (armLocked(sessionID)) return;
           deps.watchdog.onActivity(sessionID);
@@ -162,7 +171,7 @@ export function createEventRouter(deps: RouterDependencies): {
         case "session.compaction.delta":
         case "session.compaction.ended": {
           const { sessionID } = event.data;
-          const session = await deps.sessions.resolve(sessionID);
+          const session = await resolveSession(sessionID);
           if (session && !disposed && agentAllowed(session.agent) && !armLocked(sessionID)) {
             deps.watchdog.onActivity(sessionID, { agentName: session.agent });
           }
@@ -171,27 +180,27 @@ export function createEventRouter(deps: RouterDependencies): {
         case "permission.asked": {
           const { sessionID, id } = event.data;
           if (deps.pauseOnInputRequest === false) return;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (!(await resolveSession(sessionID)) || disposed) return;
           deps.watchdog.onInputRequested(sessionID, `permission:${id}`);
           return;
         }
         case "permission.replied": {
           const { sessionID, requestID } = event.data;
-          if (!(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (!(await resolveSession(sessionID)) || disposed) return;
           deps.watchdog.onInputResolved(sessionID, `permission:${requestID}`);
           return;
         }
         case "form.created": {
           const { sessionID, id } = event.data.form;
           if (deps.pauseOnInputRequest === false) return;
-          if (sessionID === "global" || !(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (sessionID === "global" || !(await resolveSession(sessionID)) || disposed) return;
           deps.watchdog.onInputRequested(sessionID, `form:${id}`);
           return;
         }
         case "form.cancelled":
         case "form.replied": {
           const { sessionID, id } = event.data;
-          if (sessionID === "global" || !(await deps.sessions.resolve(sessionID)) || disposed) return;
+          if (sessionID === "global" || !(await resolveSession(sessionID)) || disposed) return;
           deps.watchdog.onInputResolved(sessionID, `form:${id}`);
           return;
         }

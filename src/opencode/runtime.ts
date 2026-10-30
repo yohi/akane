@@ -32,7 +32,8 @@ export async function setupWatchdog(context: RuntimeContext): Promise<() => Prom
     const store = acquireStateStore(directory);
     rollback.push(() => releaseStateStore(store));
     const telemetry = new TelemetryCollector(store.getSnapshot().global);
-    const sessions = createSessionRegistry(context.session, directory);
+    const sessions = createSessionRegistry(context.session, directory,
+      (message) => console.warn(`[watchdog] ${message}`));
     const recovery = createRecoveryTracker();
     const pinger = createV2Pinger({ session: context.session, sessions, recovery, delivery: config.delivery,
       log: (message) => console.warn(message) });
@@ -66,7 +67,9 @@ export async function setupWatchdog(context: RuntimeContext): Promise<() => Prom
       }
     })();
     return release;
-  } catch {
+  } catch (error) {
+    const errorType = error instanceof Error ? error.name : typeof error;
+    console.warn(`[watchdog] Setup failed type=${errorType}`);
     if (release) await release();
     else {
       for (const dispose of rollback.reverse()) await dispose();

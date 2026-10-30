@@ -10,7 +10,7 @@ read.
 {
   "plugins": [
     {
-      "package": "@yohi/akane@alpha",
+  "package": "@yohi/akane@3.0.0",
       "options": {
         "enabled": true,
         "stage1Ms": 180000,

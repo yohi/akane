@@ -14,10 +14,21 @@ test("invalidation fences an in-flight ownership lookup", async () => {
   const pending = registry.resolve("ses_1");
   registry.invalidate("ses_1");
   complete(session);
-  expect(await pending).toBeUndefined();
+  expect(await pending).toEqual({ kind: "foreign" });
 });
 
 test("a session belonging to another directory is ignored", async () => {
   const registry = createSessionRegistry({ get: async () => session }, "/other");
-  expect(await registry.resolve("ses_1")).toBeUndefined();
+  expect(await registry.resolve("ses_1")).toEqual({ kind: "foreign" });
+});
+
+test("session lookup errors are distinguishable from sessions in another directory", async () => {
+  const failures: string[] = [];
+  const rejected = createSessionRegistry({ get: async () => { throw new Error("temporary"); } }, "/fixture",
+    (message) => failures.push(message));
+  const foreign = createSessionRegistry({ get: async () => ({ ...session, location: { directory: "/other" } }) }, "/fixture");
+  expect((await rejected.resolve("ses_1")).kind).toBe("error");
+  expect((await foreign.resolve("ses_1")).kind).toBe("foreign");
+  expect(failures).toHaveLength(1);
+  expect(failures[0]).not.toContain("temporary");
 });

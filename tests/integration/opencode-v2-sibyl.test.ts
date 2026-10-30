@@ -83,9 +83,13 @@ test.skipIf(!sibylRoot || !sibylRevision)("Akane writer contract is accepted by 
     if (!isRecord(nextRun) || !isRecord(nextRun.sessions) || !isRecord(nextRun.global)) {
       throw new Error("Sibyl rejected restarted state");
     }
+    const nextRunSessions = nextRun.sessions;
     expect(loaded.akaneStateReady(nextRun, Date.now())).toBe(true);
-    expect(Object.values(nextRun.sessions).every((session) => isRecord(session) && session.state === "IDLE"))
-      .toBe(true);
+    expect(Object.keys(nextRunSessions).sort()).toEqual(statuses.map((_, index) => `session-${index}`).sort());
+    expect(statuses.every((_, index) => {
+      const session = nextRunSessions[`session-${index}`];
+      return isRecord(session) && session.state === "IDLE";
+    })).toBe(true);
     expect(nextRun.global.pingsSent).toBe(5);
     releaseStateStore(restartStore);
     restarted = undefined;

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createEventRouter } from "../../src/opencode/events";
 import { createRecoveryTracker } from "../../src/opencode/recovery";
 import type { WatchdogPort, HostEvent } from "../../src/opencode/types";
+import type { SessionRegistry } from "../../src/opencode/sessions";
 
 const session = {
   id: "ses_1", projectID: "prj_1", location: { directory: "/fixture" }, cost: 0,
@@ -9,8 +10,8 @@ const session = {
   time: { created: 0, updated: 0 },
 };
 
-function sessions() {
-  return { directory: "/fixture", resolve: async () => session, invalidate() {}, dispose() {} };
+function sessions(): SessionRegistry {
+  return { directory: "/fixture", resolve: async () => ({ kind: "owned" as const, session }), invalidate() {}, dispose() {} };
 }
 
 test("owned assistant text activity reaches the watchdog", async () => {

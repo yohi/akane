@@ -1,5 +1,9 @@
 import { describe, test, expect } from "bun:test";
-import { MockPinger, type Pinger } from "../src/pinger";
+import { buildPingPrompt, MockPinger, type Pinger } from "../src/pinger";
+
+test("buildPingPrompt includes a contextual recovery reason", () => {
+  expect(buildPingPrompt("Continue", "rate_limit")).toContain("APIレート制限に到達しました");
+});
 
 describe("MockPinger", () => {
   test("records each inject call", async () => {

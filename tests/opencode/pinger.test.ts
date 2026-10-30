@@ -16,7 +16,7 @@ test("steer admits a single identified prompt before interrupting", async () => 
     },
     interrupt: async (input) => { calls.push(`interrupt:${input.resume}`); return { interrupted: true }; },
   };
-  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => owned, invalidate() {}, dispose() {} },
+  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
     recovery: createRecoveryTracker(), delivery: "steer", log: () => {} });
   await pinger.inject("ses_1", "test");
   expect(calls).toEqual(["prompt:steer:false", "interrupt:true"]);
@@ -32,7 +32,7 @@ test("queue delivery does not interrupt an active session", async () => {
     },
     interrupt: async () => { calls.push("interrupt"); return { interrupted: true }; },
   };
-  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => owned, invalidate() {}, dispose() {} },
+  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
     recovery: createRecoveryTracker(), delivery: "queue", log: () => {} });
   await pinger.inject("ses_1", "test");
   expect(calls).toEqual(["prompt:queue:true"]);
@@ -46,10 +46,43 @@ test("a rejected interrupt does not leave recovery marked resumed", async () => 
     interrupt: async () => ({ interrupted: false }),
   };
   const pinger = createV2Pinger({ session,
-    sessions: { directory: "/fixture", resolve: async () => owned, invalidate() {}, dispose() {} },
+    sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
     recovery, delivery: "steer", log: () => {} });
   await pinger.inject("ses_1", "test");
   expect(recovery.phase("ses_1")).toBe("settled");
+});
+
+test("an interrupted response does not overwrite an event-settled recovery", async () => {
+  const recovery = createRecoveryTracker();
+  const session: Pick<SessionPort, "prompt" | "interrupt"> = {
+    prompt: async (input) => ({ id: input.id ?? "msg_fallback", sessionID: input.sessionID,
+      type: "user", payload: { text: input.text }, delivery: "steer", time: { created: 0 } }),
+    interrupt: async () => {
+      const generation = recovery.generation("ses_1");
+      if (generation !== undefined) recovery.transition("ses_1", generation, "settled");
+      return { interrupted: true };
+    },
+  };
+  const pinger = createV2Pinger({ session,
+    sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
+    recovery, delivery: "steer", log: () => {} });
+  await pinger.inject("ses_1", "test");
+  expect(recovery.phase("ses_1")).toBe("settled");
+});
+
+test("a failed recovery operation settles its current generation", async () => {
+  const recovery = createRecoveryTracker();
+  const session: Pick<SessionPort, "prompt" | "interrupt"> = {
+    prompt: async () => { throw new Error("private details"); },
+    interrupt: async () => ({ interrupted: true }),
+  };
+  const logs: string[] = [];
+  const pinger = createV2Pinger({ session,
+    sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
+    recovery, delivery: "steer", log: (message) => logs.push(message) });
+  await pinger.inject("ses_1", "test");
+  expect(recovery.phase("ses_1")).toBe("settled");
+  expect(logs.join(" ")).not.toContain("private details");
 });
 
 test("disposal during admission prevents a subsequent interrupt", async () => {
@@ -67,7 +100,7 @@ test("disposal during admission prevents a subsequent interrupt", async () => {
     },
     interrupt: async () => { interrupts++; return { interrupted: true }; },
   };
-  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => owned, invalidate() {}, dispose() {} },
+  const pinger = createV2Pinger({ session, sessions: { directory: "/fixture", resolve: async () => ({ kind: "owned", session: owned }), invalidate() {}, dispose() {} },
     recovery: createRecoveryTracker(), delivery: "steer", log: () => {} });
   const inject = pinger.inject("ses_1", "test");
   await started;
