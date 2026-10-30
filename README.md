@@ -2,6 +2,10 @@
 
 **OpenCode Agent Watchdog Plugin**
 
+This branch targets OpenCode **2.1.4** using its V2 plugin API. It does not support OpenCode V1 plugin hooks or legacy configuration aliases. The V1 implementation remains on `master`.
+
+The V2 branch is published as an experimental alpha. Install with the `alpha` dist-tag (`@yohi/akane@alpha`) for evaluation; sibyl consumer integration remains an open verification gate.
+
 The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane` to use the TUI — the former `@yohi/akane/tui` entry has been removed, so drop any old registration when upgrading.
 
 > 「エージェントの色相はクリアか？ 監視官が介入する。」
@@ -14,9 +18,9 @@ The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane
 
 - 👁️ **Event Bus Monitoring**: OpenCode内部のストリーム受信イベントを直接フックし、メッセージだけでなくストリーム delta やツール動作を含む「色相」を監視。
 - 🚨 **Multi-Backend Notification**: 沈黙（Stage1）を検知すると、Tmuxのステータスラインを警告色（Yellow/Red）にするか、OSデスクトップ通知（Linuxの `notify-send` または macOSの `osascript`）を通じて即座に警告を通知。
-- 🚦 **Watchdog Gating**: ユーザー入力待ち（Asked 状態）のときは自動的に監視を一時停止（`PAUSED` 遷移）し、ツール実行中（Tool Running 状態）は Ping 注入を行わず完了を待つことで、正常な処理に対する誤作動を徹底的に防止。
+- 🚦 **Watchdog Gating**: V2 のフォーム・権限入力待ちでは監視を一時停止（`PAUSED` 遷移）し、実行中ツールへの誤った Ping を抑制。
 - 📊 **Telemetry & Reporting**: ハングアップ回数、Ping送信、自己回復率などを自動収集し、定期的に（デフォルト1分間隔）およびプロセス終了時に稼働状況をレポート。
-- 🔫 **Auto-Intervention**: サイレンス（Stage 2）に達した場合、進行中のターンに割り込む `steer` デリバリー形式で自動Pingを即座に注入し、エージェントのハングアップを解消（非対応時は legacy queue 形式へグレースフルフォールバック）。
+- 🔫 **Auto-Intervention**: Stage 2 到達時、設定された `steer` または `queue` 配信で回復 Ping を送信。V1 API へのフォールバックは行いません。
 - 📉 **Log Bloat Prevention**: 高頻度のストリーム delta やツール更新に対して完全な JSON 出力を控え、1行の要約ログのみを出力することでディスク容量の圧迫（ログ肥大）を回避。
 - 🔍 **Error Auto-Analysis & Contextual Ping**: `session.error` 受信時に API レート制限やタイムアウトなどの一時的なエラー（recoverable）を自動解析。監視を継続したままハング発生時にエラー理由をエージェントに通知し自己復旧を支援。
 - 🛡️ **Zero-Crash Fallback**: 通知の失敗や外部プロセスのエラーが発生した場合も安全にフォールバック。絶対にプロセスを落とさない堅牢な設計。
@@ -25,7 +29,7 @@ The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane
 
 ## ⚙️ Configuration
 
-環境変数または `opencode.jsonc` の設定から、動作設定やタイムアウト時間をミリ秒単位でカスタマイズできます。
+環境変数または V2 の `plugins[].options` から設定します。優先順位は環境変数、検証済みプラグインオプション、既定値です。従来の `experimental.watchdog` と `watchdog` 別名は受け付けません。
 
 | 環境変数 | 用途 | デフォルト値 |
 |---|---|---|
@@ -41,6 +45,7 @@ The server runs independently. Register `@yohi/sibyl/tui` alongside `@yohi/akane
 | `OPENCODE_WATCHDOG_PAUSE_ON_INPUT` | ユーザーへの質問・承認要求（Asked）時に監視を一時停止するか | `true` |
 | `OPENCODE_WATCHDOG_NOTIFY_WAITING` | 監視一時停止（入力待ち）の際に通知を送るか | `true` |
 | `OPENCODE_WATCHDOG_VERBOSE` | 受信イベントの完全な JSON をログ出力するか（デバッグ用） | `false` |
+| `OPENCODE_WATCHDOG_REPORT_MS` | テレメトリレポート間隔（ミリ秒） | `60000` |
 | `AKANE_DEBUG` | デバッグ用詳細ログファイル（`watchdog-debug.log`）の出力を有効にするか | `false` |
 
 ## 🚀 Build & Deployment
@@ -68,33 +73,31 @@ cp -r package.json dist ~/.config/opencode/plugins/akane/
 ```
 
 ### 5. OpenCode への登録と設定
-`~/.config/opencode/opencode.jsonc` の `plugins` セクションにプラグイン（パッケージ名とバージョン）を追加し、必要に応じて設定を記述します。TUI を利用する場合は `@yohi/sibyl/tui` も同じ `plugins` 配列に登録します（旧 `@yohi/akane/tui` は削除済みのため、古い登録が残っている場合は削除してください）。
+`opencode.json` または `opencode.jsonc` の `plugins` 配列で、V2 の `package` / `options` 形式を使います。TUI は並行移行中の `@yohi/sibyl/tui` を登録します。
 
 ```jsonc
 {
   "plugins": [
-    // Watchdog 本体
-    "@yohi/akane@latest",
-    // TUI（旧 @yohi/akane/tui は削除済み）
-    "@yohi/sibyl/tui@latest"
-  ],
-  "experimental": {
-    "watchdog": {
-      "enabled": true,
-      "stage1Ms": 180000,
-      "stage2Ms": 180000,
-      "maxPings": 1,
-      "maxToolGateCycles": 1,
-      "delivery": "steer",
-      "suppressPingWhileToolRunning": true,
-      "pauseOnInputRequest": true,
-      "notifyWaiting": true,
-      "verboseLog": false,
-      "tmux": {
-        "highlightWindow": true
+    {
+      "package": "@yohi/akane@alpha",
+      "options": {
+        "enabled": true,
+        "stage1Ms": 180000,
+        "stage2Ms": 180000,
+        "maxPings": 1,
+        "maxToolGateCycles": 1,
+        "delivery": "steer",
+        "suppressPingWhileToolRunning": true,
+        "pauseOnInputRequest": true,
+        "notifyWaiting": true,
+        "verboseLog": false,
+        "tmux": {
+          "highlightWindow": true
+        }
       }
-    }
-  }
+    },
+    "@yohi/sibyl/tui@latest"
+  ]
 }
 ```
 

@@ -1,5 +1,14 @@
 # OpenCode Watchdog プラグイン設計仕様 (SPEC)
 
+> **OpenCode V2 migration status:** This branch targets OpenCode `2.1.4` through
+> `Plugin.define({ id, setup })` and the typed Promise API. It does not expose a
+> V1 server hook or support V1 configuration aliases. The historical V1-specific
+> event names and adapter descriptions below are retained as migration history;
+> the current V2 implementation contract is in
+> [`docs/migration.md`](docs/migration.md) and
+> [`docs/configuration.md`](docs/configuration.md). OpenCode V1 remains on
+> `master`.
+
 - **対象プロダクト**: OpenCode (sst/opencode, ホスト: anomalyco/opencode)
 - **ランタイム**: Bun 1.3+
 - **配布形態**: `@opencode-ai/plugin` 公式 API に準拠した TypeScript プラグイン

@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.0.0-alpha.1](https://github.com/yohi/akane/compare/v2.0.0...v3.0.0-alpha.1) (2026-10-30)
+
+> Experimental OpenCode 2.1.4 V2-only prerelease. The V1 implementation
+> remains on `master`. Sibyl consumer integration remains unverified; see
+> `docs/opencode-v2-verification.md`.
+
+### ⚠ BREAKING CHANGES
+
+- OpenCode V1 plugin hooks and configuration aliases are not supported.
+- The package entrypoint uses the OpenCode V2 `Plugin.define` API.
+
+### Features
+
+- Add typed OpenCode V2 event monitoring and session ownership.
+- Add V2 steer/queue recovery prompt delivery.
+- Preserve the version-1 shared-state producer contract for sibyl.
+
 ## [2.0.0](https://github.com/yohi/akane/compare/v1.8.2...v2.0.0) (2026-10-28)
 
 
