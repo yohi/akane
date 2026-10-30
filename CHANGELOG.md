@@ -1,5 +1,47 @@
 # Changelog
 
+## [3.0.0](https://github.com/yohi/akane/compare/v3.0.0-alpha.2...v3.0.0) (2026-10-30)
+
+> Stable OpenCode 2.1.4 V2-only release. Runtime implementation is unchanged
+> from alpha.2. Verification covers the documented Sibyl scenarios and does not
+> establish general or complete Sibyl compatibility. See `docs/opencode-v2-verification.md`.
+
+### Verification
+
+- Promote the OpenCode V2-only package from prerelease to stable.
+- Publish the stable package on the `latest` dist-tag.
+
+## [3.0.0-alpha.2](https://github.com/yohi/akane/compare/v3.0.0-alpha.1...v3.0.0-alpha.2) (2026-10-30)
+
+> Experimental OpenCode 2.1.4 V2-only prerelease. The combined-host visual/runtime
+> acceptance passed for the documented Sibyl scenarios; this does not establish
+> general or complete Sibyl compatibility. Runtime implementation is unchanged
+> from alpha.1. See `docs/opencode-v2-verification.md`.
+
+### Verification
+
+- Record combined-host acceptance performed with the published Akane and Sibyl alpha.1 artifacts.
+- Keep prerelease packages on the `alpha` dist-tag and stable packages on `latest`.
+
+## [3.0.0-alpha.1](https://github.com/yohi/akane/compare/v2.0.0...v3.0.0-alpha.1) (2026-10-30)
+
+> Experimental OpenCode 2.1.4 V2-only prerelease. The V1 implementation
+> remains on `master`. The state-file parser contract is verified against
+> Sibyl 3.0.0-alpha.1. Combined-host visual/runtime verification had not yet
+> been performed when alpha.1 was published.
+> See `docs/opencode-v2-verification.md`.
+
+### ⚠ BREAKING CHANGES
+
+- OpenCode V1 plugin hooks and configuration aliases are not supported.
+- The package entrypoint uses the OpenCode V2 `Plugin.define` API.
+
+### Features
+
+- Add typed OpenCode V2 event monitoring and session ownership.
+- Add V2 steer/queue recovery prompt delivery.
+- Preserve the version-1 shared-state producer contract for sibyl.
+
 ## [2.0.0](https://github.com/yohi/akane/compare/v1.8.2...v2.0.0) (2026-10-28)
 
 
@@ -285,7 +327,7 @@
 * **test:** resolve 'Object is possibly undefined' error in smoke test ([7b2a0c6](https://github.com/yohi/akane/commit/7b2a0c6c7cdc3d6b9819240273b919fa6bd3bf74))
 * **watchdog:** message.part.delta における agentName チェックの追加とテストの強化 ([344329c](https://github.com/yohi/akane/commit/344329c87e5d9db36ddefe1f05a9b5b01526c40f))
 * **watchdog:** onToolSettled のファントムセッション生成とツールゲート通知フラグ流用を修正 ([aac476d](https://github.com/yohi/akane/commit/aac476da2dd12cc47d4d903a95bbb59da502aaf1))
-* **watchdog:** pauseOnInputRequest=false 時の誤タイマーリセットを修正し delivery TODO を追記 ([3a8d917](https://github.com/yohi/akane/commit/3a8d91754c630c487267b1c1a6cffb7c0282f122))
+* **watchdog:** pauseOnInputRequest=false 時の誤タイマーリセットを修正し delivery 設定の課題を記録 ([3a8d917](https://github.com/yohi/akane/commit/3a8d91754c630c487267b1c1a6cffb7c0282f122))
 * **watchdog:** retry抑止中のタイマー再起動とSILENCEDの不正解除を修正 ([401bade](https://github.com/yohi/akane/commit/401bade35cda46bd1fa96d5e14cf2ce826ef4126))
 * **watchdog:** SILENCED セッションへのツールイベントによる不正リセットを修正 ([69741b0](https://github.com/yohi/akane/commit/69741b0a1e6aabc23070c49917b4a341e3ccd529))
 * **watchdog:** SILENCED 状態のセッションが入力要求によって遷移する問題を修正 ([58ffc3d](https://github.com/yohi/akane/commit/58ffc3d6a0e93518d9f77e4220a323134e2a30bf))

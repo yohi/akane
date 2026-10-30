@@ -88,6 +88,57 @@ describe("release-please configuration", () => {
     expect(withValues["release-type"]).not.toBe("node");
   });
 
+  test("keeps prereleases on alpha and stable releases on latest", () => {
+    if (!isYamlRecord(parsedReleaseWorkflow)) {
+      throw new Error("Release workflow must be a YAML mapping");
+    }
+
+    const jobs = parsedReleaseWorkflow["jobs"];
+    if (!isYamlRecord(jobs)) {
+      throw new Error("Release workflow must define jobs");
+    }
+
+    const publishJob = jobs["publish-gpr"];
+    if (!isYamlRecord(publishJob) || !Array.isArray(publishJob["steps"])) {
+      throw new Error("GitHub Packages job must define steps");
+    }
+
+    const steps = publishJob["steps"];
+    const publishStep = steps.find(
+      (step) => isYamlRecord(step) && step["name"] === "Publish to GitHub Packages",
+    );
+    const alphaStep = steps.find(
+      (step) => isYamlRecord(step) && step["name"] === "Tag prereleases as alpha",
+    );
+    const latestStep = steps.find(
+      (step) => isYamlRecord(step) && step["name"] === "Tag stable releases as latest",
+    );
+
+    expect(publishStep).toBeDefined();
+    expect(alphaStep).toBeDefined();
+    expect(latestStep).toBeDefined();
+    if (
+      !isYamlRecord(publishStep) ||
+      !isYamlRecord(alphaStep) ||
+      !isYamlRecord(latestStep)
+    ) {
+      throw new Error("GitHub Packages job must define publish and both dist-tag steps");
+    }
+
+    expect(publishStep["run"]).toContain("--tag");
+    expect(publishStep["run"]).toContain(
+      "contains(needs.release-please.outputs.tag_name, '-') && 'alpha' || 'latest'",
+    );
+    expect(alphaStep["if"]).toBe(
+      "${{ contains(needs.release-please.outputs.tag_name, '-') }}",
+    );
+    expect(alphaStep["run"]).toContain(" alpha");
+    expect(latestStep["if"]).toBe(
+      "${{ !contains(needs.release-please.outputs.tag_name, '-') }}",
+    );
+    expect(latestStep["run"]).toContain(" latest");
+  });
+
   test("tracks the current package version in the release manifest", () => {
     expect(manifest["."]).toBe(packageJson.version);
   });

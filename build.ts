@@ -1,5 +1,5 @@
 
-const EXTERNALS = ["node:fs", "node:path"];
+const EXTERNALS = ["node:fs", "node:path", "@opencode/plugin", "@opencode/plugin/*", "effect", "effect/*"];
 
 /**
  * 共通の Bun.build ハンドリング関数

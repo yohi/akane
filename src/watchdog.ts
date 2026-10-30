@@ -166,7 +166,6 @@ export class Watchdog {
   /** permission/question asked → pause (design §4/§6.1). */
   onInputRequested(sessionId: string, requestId: string): void {
     if (!this.config.pauseOnInputRequest) return;
-    // TODO: this.config.delivery ("steer" | "queue") is parsed and stored but not yet consumed here.
     if (this.stoppedSessions.has(sessionId)) {
       this.log("info", `[Watchdog] onInputRequested ignored: session ${sessionId} tombstoned`);
       return;

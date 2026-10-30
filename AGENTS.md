@@ -1,22 +1,22 @@
 # AGENTS.md — Developer & AI Agent Guide for `akane`
 
-`akane` is a lightweight, zero-crash watchdog plugin for OpenCode sessions that monitors agent activity, colors Tmux/OS indicators, and injects recovery pings via interrupts.
+`akane` on this migration branch is an OpenCode **2.1.4 V2-only** watchdog plugin. The `master` branch remains the V1 implementation. This branch exports `Plugin.define({ id, setup })`; it has no V1 server-hook or configuration compatibility layer.
 
 ---
 
 ## 1. Project Map & Purpose (WHY, WHAT, & WHERE)
 - **Goal**: Minimize false recovery pings during user-waiting states (`PAUSED`) and active tool executions, steer recovery pings via interrupts, and prevent disk bloat by summarizing high-frequency stream events. The TUI is maintained in `yohi/sibyl` and reads the versioned state file.
-- **Architecture**: Implements a 5-state state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`, plus `PAUSED` for input requests).
+- **Architecture**: A typed V2 adapter maps V2 event discriminants and session ownership into the host-independent state machine (`WATCHING` ➔ `STAGE1_NOTIFIED` ➔ `PINGED` ➔ `SILENCED`, plus `PAUSED` for input requests).
 - **Authoritative Docs**: For detailed state transitions, edge cases, invariants, and SDK signatures, refer to [SPEC.md](SPEC.md) and [README.md](README.md) via progressive disclosure.
 
 ---
 
 ## 2. Tech Stack & Verification (HOW)
-Built on **Bun 1.3+** and **TypeScript** (strict mode). All executions and tests must run inside the devcontainer environment.
+Built on **Bun 1.4.4** and **TypeScript 6** (strict mode). All executions and tests must run inside the devcontainer environment.
 
 - **Build**: `bun run build` (bundles TypeScript source into `./dist/index.js` using Bun's bundler)
 - **Type Check**: `bun run typecheck` (`tsc --noEmit` validation)
-- **Test**: `bun test` (runs all unit, integration, and stress tests. Expecting **202 tests to pass** under 2500ms)
+- **Test**: `bun test` (runs unit, integration-gated, and stress tests; use actual output for test counts)
 - **Local Install**: `mkdir -p ~/.config/opencode/plugins/akane && cp -r package.json dist ~/.config/opencode/plugins/akane/`
 
 ---
@@ -26,13 +26,13 @@ Built on **Bun 1.3+** and **TypeScript** (strict mode). All executions and tests
 When modifying code, you MUST respect these strict architectural safety guidelines:
 
 ### 3.1 Duplication Protection
-OpenCode may initialize plugins multiple times. Track active directories using the global `ACTIVE_INSTANCES` (`Set<string>`) at the file level. If already initialized, return a no-op hook `{ event: async () => {}, dispose: async () => {} }` and remove it upon disposal.
+OpenCode may initialize plugins multiple times. Track active project directories with the module-level `ACTIVE_INSTANCES` set. A duplicate setup owns no resources and returns a no-op cleanup. Remove the directory guard only after the owning runtime has stopped and released its resources.
 
 ### 3.2 Arm Lock & Manual Bypass
-After injecting a ping, enforce an arm lock duration (`Math.max(stage2Ms * 2, 30000)`) to ignore late stale assistant events. However, any manual user message (`isUserMessage` or non-empty typing with no agent name) must bypass the lock immediately to trigger recovery and return the session to the `WATCHING` state.
+After injecting a ping, enforce an arm lock duration (`Math.max(stage2Ms * 2, 30000)`) to ignore late stale assistant events. Manual user input is recognized from V2 `session.inbox.enqueued` user items and bypasses the lock. Exclude self-injected input by its registered inbox/message ID, never by matching prompt text.
 
 ### 3.3 Late Event Tombstoning
-To prevent delayed streaming chunks from re-arming stopped sessions (idle/error/deleted), store ended session IDs in a bounded FIFO Set (`stoppedSessions` with a limit of 10,000). Discard any activity matching these tombstones.
+To prevent delayed streaming chunks from re-arming stopped sessions (execution completion/interruption, errors, deletion, or move), store ended session IDs in the bounded FIFO Set (`stoppedSessions`, limit 10,000). Discard activity matching these tombstones until genuine user input starts a new execution.
 
 ### 3.4 Zero-Crash & Secure Logging
 - **Containment**: Wrap all external command calls (`Bun.spawn` for tmux/notify-send/osascript) in try/catch to avoid crashing OpenCode.
@@ -56,3 +56,32 @@ This project supports `CLAUDE.md` via a symbolic link. Ensure `CLAUDE.md` links 
 ```bash
 ln -sf AGENTS.md CLAUDE.md
 ```
+
+## 5. OpenCode V2 Release Status
+
+This branch has released stable `@yohi/akane@3.0.0` for OpenCode `2.1.4`:
+[GitHub Release](https://github.com/yohi/akane/releases/tag/v3.0.0).
+It is V2-only; the V1 implementation remains on `master`. Verification covers
+the documented scenarios and does not establish full Sibyl compatibility.
+
+Verified release evidence:
+
+- Sibyl's version-1 shared-state consumer was verified for every state and
+  counter, heartbeat, shutdown, and restart. Evidence: `@yohi/sibyl@3.0.0-alpha.1`,
+  revision `2c81d141e9fed59e54ce950ea26fb53190cb9308`, and
+  `tests/integration/opencode-v2-sibyl.test.ts`.
+- The combined OpenCode `2.1.4` host verified direct-child activity and parent
+  selection. Both parents showed `WATCHING` with distinct `BUSY` child cards;
+  switching parents changed the displayed category. Three xterm.js captures
+  passed the 42x120 layout check, and two independent visual reviews returned
+  PASS. The runtime assertion confirms distinct child ownership but does not
+  retain literal child session IDs.
+
+See [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md) for
+the verification scope and evidence.
+
+The current evidence and gate classifications are maintained in
+[`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). This
+acceptance covers the documented combined-host scenarios and does not establish
+general or complete Sibyl compatibility. Future prereleases must use the `alpha`
+package dist-tag; stable releases use `latest`.
