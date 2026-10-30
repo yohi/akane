@@ -33,8 +33,19 @@
   writer output for all six states, four counters, heartbeat freshness,
   disabled shutdown, and restart-to-`IDLE`; verifier 1/1 with 12 assertions.
 - Sibyl's own `tests/akane-state.test.ts`: **PASS** — 5 tests, 14 assertions.
-- Combined host UI/runtime: **NOT_RUN** — the published Sibyl TUI has not yet
-  been run alongside the published Akane alpha in one real host.
+- Combined host UI/runtime: **PASS** — an isolated OpenCode `2.1.4` host loaded
+  published `@yohi/akane@3.0.0-alpha.1` and `@yohi/sibyl@3.0.0-alpha.1`.
+  Both selected parent sessions showed Akane `WATCHING` and one `BUSY` direct
+  child; the displayed child category changed from `visual` to `review` when
+  switching parents. The session picker showed both parent titles and a selected
+  row. Three real xterm.js screenshots were 960x800 RGB PNGs; their matching
+  terminal captures were 42x120 and each passed `tui-check` with no overflow,
+  border misalignment, or wide-character column drift. Two independent visual
+  QA reviews returned **PASS** with high confidence.
+- Runtime evidence: both parents had their own direct child, the child records
+  were distinct, and their categories were `visual` and `review`. The retained
+  runtime assertion does not include literal child session IDs, so this gate
+  records the ownership/distinctness assertions rather than an ID-string audit.
 
 The host test is gated behind `AKANE_V2_HOST_TEST=1`. It starts the installed
 OpenCode CLI with a temporary project configuration/workspace and a loopback-only
@@ -51,6 +62,9 @@ bun test tests/integration/opencode-v2-sibyl.test.ts
 
 ## Interpretation
 
-Unit behavior, package loading, local configuration, and active-model recovery
-are verified against OpenCode `2.1.4`. The Sibyl parser contract is verified at
-the revision above; combined-host visual/runtime acceptance remains outstanding.
+Unit behavior, package loading, local configuration, active-model recovery, and
+the documented combined-host visual/runtime scenarios are verified against
+OpenCode `2.1.4` and the Sibyl revision above. The combined-host gate confirms
+only the tested scenarios; it does not establish general or complete Sibyl
+compatibility for this experimental prerelease. Visual evidence was captured in
+the isolated QA workspace and was not committed to the repository.

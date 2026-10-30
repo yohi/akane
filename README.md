@@ -6,8 +6,9 @@ This branch targets OpenCode **2.1.4** using its V2 plugin API. It does not supp
 
 The V2 branch is published as an experimental alpha. Install with the `alpha`
 dist-tag (`@yohi/akane@alpha`) for evaluation. The shared-state parser contract
-is verified against Sibyl 3.0.0-alpha.1; combined-host visual/runtime acceptance
-remains open.
+and documented combined-host visual/runtime scenarios are verified against
+Sibyl 3.0.0-alpha.1; this does not establish general Sibyl compatibility. See
+the [OpenCode V2 verification record](docs/opencode-v2-verification.md).
 
 The server runs independently. Register `@yohi/sibyl/tui` alongside
 `@yohi/akane@alpha` to use the TUI — the former `@yohi/akane/tui` entry has been

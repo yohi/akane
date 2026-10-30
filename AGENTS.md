@@ -72,15 +72,20 @@ Completed release gates:
   `2c81d141e9fed59e54ce950ea26fb53190cb9308`, verifier
   `tests/integration/opencode-v2-sibyl.test.ts`.
 
-Remaining follow-up:
+Completed follow-up:
 
-- [ ] Run a combined OpenCode `2.1.4` host with the published Akane and Sibyl
+- [x] Run a combined OpenCode `2.1.4` host with the published Akane and Sibyl
   packages and complete Sibyl's visual/runtime acceptance, including direct
-  child activity and selection changes. This is broader than the state-file
-  parser contract verifier.
+  child activity and selection changes. The isolated host showed `WATCHING`
+  parents with distinct `BUSY` direct-child cards, and switching parents changed
+  the displayed child category. Three xterm.js captures passed the 42x120 TUI
+  layout check; two independent visual reviews returned PASS. The runtime
+  assertion records distinct child ownership but does not retain literal child
+  session IDs. See [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md).
 
 The current evidence and gate classifications are maintained in
-[`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). Unit
-tests alone do not close the combined-host visual/runtime follow-up.
+[`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). This
+acceptance covers the documented combined-host scenarios and does not establish
+general or complete Sibyl compatibility for the experimental prerelease.
 Prerelease publication must use the `alpha` package dist-tag and must not move
 `latest`.
