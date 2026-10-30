@@ -4,13 +4,13 @@
 
 - OpenCode: `2.1.4`
 - `@opencode/plugin`: `2.1.4`
-- Package: `@yohi/akane@3.0.0-alpha.1`
+- Package: `@yohi/akane@3.0.0-alpha.2`
 - GitHub Release:
-  [v3.0.0-alpha.1](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.1)
-- Source commit: `449ae7b42cf060b33bd19a1b746aa4d677c7eb81`
-- GitHub asset SHA-256: `b66d56e340dd84cb1cdf555e73980e2efaeed916b445247cef36013f2d48e46d`
-- npm integrity: `sha512-F74VYM33/D/ZCgggwwJcCYlKXVma3uH/W7Do1ydzwUN/d4JBDFDhuiYmvqkNFQJczJPm9QkpErq9etCtk4x/uQ==`
-- GPR dist-tags: `alpha=3.0.0-alpha.1`, `latest=2.0.0`
+  [v3.0.0-alpha.2](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.2)
+- Source commit: release tag `v3.0.0-alpha.2`
+- GitHub asset SHA-256: `3ced661908d1e8bfe0aa8684d69169aac6d312fd67195ed5500a30b74e678ec4`
+- npm integrity: `sha512-MTeGXBBlZHx9ljo09Q+61qlvXmuVi03o88gyRXwdbgnEpRLAeB9YBVMdp8qVlzC60Cw52lBAhhciu2YqaYu/4Q==`
+- GPR dist-tags: `alpha=3.0.0-alpha.2`, `latest=2.0.0`
 - Bun implementation/test image: `1.4.4`
 - Branch: `feat/opencode-v2-migration`
 - Sibyl package: `@yohi/sibyl@3.0.0-alpha.1`
@@ -19,7 +19,7 @@
 ## Results
 
 - TypeScript: **PASS** — `bun run typecheck` in Bun 1.4.4 image.
-- Unit/integration/stress: **PASS** — `bun test`: 300 passed, two gated skips.
+- Unit/integration/stress: **PASS** — `bun test`: 301 passed, two gated skips.
 - Build: **PASS** — server and both Claude artifacts emitted by `bun run build`.
 - Package/root import: **PASS** — dry-run package and built V2 root checked.
 - OpenCode version: **PASS** — installed CLI reports `opencode v2.1.4`.
@@ -42,6 +42,9 @@
   terminal captures were 42x120 and each passed `tui-check` with no overflow,
   border misalignment, or wide-character column drift. Two independent visual
   QA reviews returned **PASS** with high confidence.
+- Alpha.2 package: **REPACKAGED** — the package version and release metadata are
+  updated; server/TUI runtime code is unchanged from alpha.1. The combined-host
+  acceptance above was performed against the alpha.1 artifacts.
 - Runtime evidence: both parents had their own direct child, the child records
   were distinct, and their categories were `visual` and `review`. The retained
   runtime assertion does not include literal child session IDs, so this gate

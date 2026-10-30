@@ -9,7 +9,7 @@
 
 ### Verification
 
-- Record the combined OpenCode 2.1.4 host acceptance with published Akane and Sibyl alpha packages.
+- Record combined-host acceptance performed with the published Akane and Sibyl alpha.1 artifacts.
 - Keep prerelease packages on the `alpha` dist-tag and stable packages on `latest`.
 
 ## [3.0.0-alpha.1](https://github.com/yohi/akane/compare/v2.0.0...v3.0.0-alpha.1) (2026-10-30)
