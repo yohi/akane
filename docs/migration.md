@@ -2,8 +2,8 @@
 
 ## Supported host
 
-This branch's experimental prerelease is `@yohi/akane@3.0.0-alpha.1`
-([GitHub Release](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.1)).
+This branch's stable V2 release is `@yohi/akane@3.0.0`
+([GitHub Release](https://github.com/yohi/akane/releases/tag/v3.0.0)).
 It targets OpenCode `2.1.4` at upstream commit
 `68bc26b7da1990ce10ffecfbc1e09eb13aa5d824`, using exact dependency
 `@opencode/plugin@2.1.4`. This is a V2-only branch. The V1 implementation remains

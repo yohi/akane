@@ -4,13 +4,13 @@
 
 - OpenCode: `2.1.4`
 - `@opencode/plugin`: `2.1.4`
-- Package: `@yohi/akane@3.0.0-alpha.2`
+- Package: `@yohi/akane@3.0.0`
 - GitHub Release:
-  [v3.0.0-alpha.2](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.2)
-- Source commit: release tag `v3.0.0-alpha.2`
-- GitHub asset SHA-256: `3ced661908d1e8bfe0aa8684d69169aac6d312fd67195ed5500a30b74e678ec4`
-- npm integrity: `sha512-MTeGXBBlZHx9ljo09Q+61qlvXmuVi03o88gyRXwdbgnEpRLAeB9YBVMdp8qVlzC60Cw52lBAhhciu2YqaYu/4Q==`
-- GPR dist-tags: `alpha=3.0.0-alpha.2`, `latest=2.0.0`
+  [v3.0.0](https://github.com/yohi/akane/releases/tag/v3.0.0)
+- Source commit: release tag `v3.0.0`
+- GitHub asset SHA-256: `d42dff2386c6dda2ca91e801e5b63d0228b3f7ee163a303fc31ec57f2742f61e`
+- npm integrity: `sha512-DzJWboErpucisXaSgodQuU6wqSJW3Vp7A21cdZJfp5zzH4erq+f5oJS34Q7iaS1T4gTomVboWGc48wJhcXoUmQ==`
+- GPR dist-tags: `alpha=3.0.0-alpha.2`, `latest=3.0.0`
 - Bun implementation/test image: `1.4.4`
 - Branch: `feat/opencode-v2-migration`
 - Sibyl package: `@yohi/sibyl@3.0.0-alpha.1`
@@ -42,9 +42,9 @@
   terminal captures were 42x120 and each passed `tui-check` with no overflow,
   border misalignment, or wide-character column drift. Two independent visual
   QA reviews returned **PASS** with high confidence.
-- Alpha.2 package: **REPACKAGED** — the package version and release metadata are
-  updated; server/TUI runtime code is unchanged from alpha.1. The combined-host
-  acceptance above was performed against the alpha.1 artifacts.
+- Stable 3.0.0 package: **PROMOTED** — the server/TUI runtime code is unchanged
+  from alpha.2. The combined-host acceptance above was performed against the
+  alpha.1 artifacts.
 - Runtime evidence: both parents had their own direct child, the child records
   were distinct, and their categories were `visual` and `review`. The retained
   runtime assertion does not include literal child session IDs, so this gate
@@ -69,5 +69,5 @@ Unit behavior, package loading, local configuration, active-model recovery, and
 the documented combined-host visual/runtime scenarios are verified against
 OpenCode `2.1.4` and the Sibyl revision above. The combined-host gate confirms
 only the tested scenarios; it does not establish general or complete Sibyl
-compatibility for this experimental prerelease. Visual evidence was captured in
+compatibility. Visual evidence was captured in
 the isolated QA workspace and was not committed to the repository.

@@ -57,12 +57,12 @@ This project supports `CLAUDE.md` via a symbolic link. Ensure `CLAUDE.md` links 
 ln -sf AGENTS.md CLAUDE.md
 ```
 
-## 5. OpenCode V2 Alpha Status
+## 5. OpenCode V2 Release Status
 
-This branch has released `@yohi/akane@3.0.0-alpha.2` for OpenCode `2.1.4`:
-[GitHub prerelease](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.2).
-It is an experimental V2-only prerelease; do not describe it as stable or as
-fully sibyl-compatible. The V1 implementation remains on `master`.
+This branch has released stable `@yohi/akane@3.0.0` for OpenCode `2.1.4`:
+[GitHub Release](https://github.com/yohi/akane/releases/tag/v3.0.0).
+It is V2-only; the V1 implementation remains on `master`. Verification covers
+the documented scenarios and does not establish full Sibyl compatibility.
 
 Verified release evidence:
 
@@ -83,6 +83,5 @@ the verification scope and evidence.
 The current evidence and gate classifications are maintained in
 [`docs/opencode-v2-verification.md`](docs/opencode-v2-verification.md). This
 acceptance covers the documented combined-host scenarios and does not establish
-general or complete Sibyl compatibility for the experimental prerelease.
-Prerelease publication must use the `alpha` package dist-tag and must not move
-`latest`.
+general or complete Sibyl compatibility. Future prereleases must use the `alpha`
+package dist-tag; stable releases use `latest`.
