@@ -50,11 +50,18 @@ jobs:
           scope: '@yohi'
 
       - name: Publish to GitHub Packages
-        run: npm publish --ignore-scripts
+        run: npm publish --ignore-scripts --tag "${{ contains(needs.release-please.outputs.tag_name, '-') && 'alpha' || 'latest' }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag latest
+      - name: Tag prereleases as alpha
+        if: ${{ contains(needs.release-please.outputs.tag_name, '-') }}
+        run: npm dist-tag add @yohi/akane@$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//') alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag stable releases as latest
+        if: ${{ !contains(needs.release-please.outputs.tag_name, '-') }}
         run: npm dist-tag add @yohi/akane@$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//') latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

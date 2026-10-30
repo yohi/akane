@@ -59,8 +59,8 @@ ln -sf AGENTS.md CLAUDE.md
 
 ## 5. OpenCode V2 Alpha Status and TODO
 
-This branch has released `@yohi/akane@3.0.0-alpha.1` for OpenCode `2.1.4`:
-[GitHub prerelease](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.1).
+This branch has released `@yohi/akane@3.0.0-alpha.2` for OpenCode `2.1.4`:
+[GitHub prerelease](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.2).
 It is an experimental V2-only prerelease; do not describe it as stable or as
 fully sibyl-compatible. The V1 implementation remains on `master`.
 

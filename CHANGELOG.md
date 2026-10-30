@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-alpha.2](https://github.com/yohi/akane/compare/v3.0.0-alpha.1...v3.0.0-alpha.2) (2026-10-30)
+
+> Experimental OpenCode 2.1.4 V2-only prerelease. The combined-host visual/runtime
+> acceptance passed for the documented Sibyl scenarios; this does not establish
+> general or complete Sibyl compatibility. Runtime implementation is unchanged
+> from alpha.1. See `docs/opencode-v2-verification.md`.
+
+### Verification
+
+- Record the combined OpenCode 2.1.4 host acceptance with published Akane and Sibyl alpha packages.
+- Keep prerelease packages on the `alpha` dist-tag and stable packages on `latest`.
+
 ## [3.0.0-alpha.1](https://github.com/yohi/akane/compare/v2.0.0...v3.0.0-alpha.1) (2026-10-30)
 
 > Experimental OpenCode 2.1.4 V2-only prerelease. The V1 implementation
