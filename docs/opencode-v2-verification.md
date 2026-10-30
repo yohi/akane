@@ -4,6 +4,13 @@
 
 - OpenCode: `2.1.4`
 - `@opencode/plugin`: `2.1.4`
+- Package: `@yohi/akane@3.0.0-alpha.1`
+- GitHub Release:
+  [v3.0.0-alpha.1](https://github.com/yohi/akane/releases/tag/v3.0.0-alpha.1)
+- Source commit: `449ae7b42cf060b33bd19a1b746aa4d677c7eb81`
+- GitHub asset SHA-256: `b66d56e340dd84cb1cdf555e73980e2efaeed916b445247cef36013f2d48e46d`
+- npm integrity: `sha512-F74VYM33/D/ZCgggwwJcCYlKXVma3uH/W7Do1ydzwUN/d4JBDFDhuiYmvqkNFQJczJPm9QkpErq9etCtk4x/uQ==`
+- GPR dist-tags: `alpha=3.0.0-alpha.1`, `latest=2.0.0`
 - Bun implementation/test image: `1.4.4`
 - Branch: `feat/opencode-v2-migration`
 - Sibyl revision: not supplied; consumer integration is `NOT_RUN`.
