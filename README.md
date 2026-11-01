@@ -70,15 +70,15 @@ bun run build
 このプロジェクトは Conventional Commits に基づき、GitHub Actions によって自動的にリリースされます。
 `master` ブランチにプッシュされると、`release-please` がリリース PR を作成します。PR がマージされると、GitHub Packages への公開と GitHub Release の作成が行われます。
 
-### 4. インストール・デプロイ (ローカル)
-開発中にローカルビルドをテストする場合は、`dist/index.js` と `package.json` を OpenCode のプラグインディレクトリに配置します。
+### 4. ローカルディレクトリPluginとして配置（開発用）
+ローカルビルドをOpenCode v2.1.4のディレクトリPluginとして試す場合は、`package.json`、ルートエントリーポイントの`server.js`、およびビルド成果物の`dist/`をローカルPluginディレクトリに配置します。
 ```bash
 mkdir -p ~/.config/opencode/plugins/akane
-cp -r package.json dist ~/.config/opencode/plugins/akane/
+cp -r package.json server.js dist ~/.config/opencode/plugins/akane/
 ```
 
-### 5. OpenCode への登録と設定
-`opencode.json` または `opencode.jsonc` の `plugins` 配列で、V2 の `package` / `options` 形式を使います。TUI は並行移行中の `@yohi/sibyl/tui` を登録します。
+### 5. 公開済みパッケージの利用（`@yohi/akane@3.0.0`）
+公開済み安定版をパッケージとして利用する場合は、`opencode.json` または `opencode.jsonc` の`plugins`配列に`@yohi/akane@3.0.0`を指定します。以下の設定例は公開済みの`3.0.0`を対象とします。リポジトリの`package.json`にある`3.0.1`は修正候補のソース版であり、この設定例や公開済みバージョンを変更するものではありません。TUIは並行移行中の`@yohi/sibyl/tui`を登録します。
 
 ```jsonc
 {
