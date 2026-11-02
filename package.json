@@ -16,6 +16,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "files": [
+    "server.js",
     "dist/index.js",
     "dist/claude"
   ],
